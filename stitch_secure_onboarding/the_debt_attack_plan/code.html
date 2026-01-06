@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Debt Attack Plan - Colourful</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#6366f1", // Indigo 500
+                        "primary-dark": "#4338ca", // Indigo 700
+                        "secondary": "#ec4899", // Pink 500
+                        "accent-gold": "#fbbf24", // Amber 400
+                        "accent-green": "#34d399", // Emerald 400
+                        "accent-cyan": "#22d3ee", // Cyan 400
+                        "background-dark": "#0f172a", // Slate 900
+                        "surface-card": "#1e293b", // Slate 800
+                        "surface-glass": "rgba(30, 41, 59, 0.7)",
+                    },
+                    fontFamily: {
+                        "display": ["Outfit", "sans-serif"],
+                        "body": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"xl": "1rem", "2xl": "1.5rem", "3xl": "2rem"},
+                    boxShadow: {
+                        "neon": "0 0 20px rgba(99, 102, 241, 0.4)",
+                        "card": "0 10px 30px -10px rgba(0, 0, 0, 0.5)",
+                    }
+                },
+            },
+        }
+    </script>
+<style>.glass-effect {
+        background: rgba(30, 41, 59, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .gradient-text {
+        background: linear-gradient(135deg, #a5b4fc, #e879f9);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }input[type=range] {
+        -webkit-appearance: none; 
+        background: transparent; 
+    }
+    input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 28px;
+        width: 28px;
+        border-radius: 50%;
+        background: #ffffff;
+        cursor: pointer;
+        margin-top: -12px; 
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.6);
+        border: 4px solid #6366f1;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 6px;
+        cursor: pointer;
+        background: #334155;
+        border-radius: 9999px;
+    }
+</style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+</style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-dark font-body text-white overflow-x-hidden selection:bg-secondary selection:text-white">
+<div class="relative flex h-full min-h-screen w-full flex-col max-w-md mx-auto shadow-2xl bg-background-dark overflow-hidden">
+<div class="fixed top-[-20%] left-[-20%] w-[500px] h-[500px] bg-primary/20 rounded-full blur-[100px] pointer-events-none"></div>
+<div class="fixed bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-secondary/20 rounded-full blur-[100px] pointer-events-none"></div>
+<div class="flex items-center px-6 pt-6 pb-4 justify-between sticky top-0 z-30 bg-background-dark/80 backdrop-blur-md">
+<button class="text-white/80 hover:text-white flex size-10 items-center justify-center rounded-full hover:bg-white/10 transition-colors">
+<span class="material-symbols-outlined text-2xl">arrow_back</span>
+</button>
+<h2 class="text-white text-xl font-display font-bold leading-tight tracking-wide flex-1 text-center pr-10">Debt Attack</h2>
+</div>
+<div class="flex-1 overflow-y-auto pb-32 relative z-10">
+<div class="px-6 py-2 mb-4">
+<div class="flex h-14 w-full items-center justify-center rounded-2xl bg-surface-card/80 p-1.5 border border-white/5 relative">
+<label class="flex-1 h-full relative cursor-pointer group">
+<input checked="" class="peer sr-only" name="strategy" type="radio" value="Snowball"/>
+<div class="absolute inset-0 rounded-xl bg-gradient-to-r from-primary to-primary-dark opacity-0 peer-checked:opacity-100 transition-opacity duration-300 shadow-lg"></div>
+<div class="relative flex h-full items-center justify-center z-10">
+<span class="text-xs sm:text-sm font-semibold text-gray-400 peer-checked:text-white transition-colors font-display">Snowball</span>
+</div>
+</label>
+<label class="flex-1 h-full relative cursor-pointer group">
+<input class="peer sr-only" name="strategy" type="radio" value="Avalanche"/>
+<div class="absolute inset-0 rounded-xl bg-gradient-to-r from-secondary to-purple-600 opacity-0 peer-checked:opacity-100 transition-opacity duration-300 shadow-lg"></div>
+<div class="relative flex h-full items-center justify-center z-10">
+<span class="text-xs sm:text-sm font-semibold text-gray-400 peer-checked:text-white transition-colors font-display">Avalanche</span>
+</div>
+</label>
+</div>
+<div class="flex justify-between px-2 mt-2">
+<span class="text-[10px] uppercase tracking-wider font-bold text-primary/80 pl-4">Quick Wins</span>
+<span class="text-[10px] uppercase tracking-wider font-bold text-gray-500 pr-4">Save Interest</span>
+</div>
+</div>
+<div class="px-6 pb-6">
+<div class="relative w-full overflow-hidden rounded-[2rem] bg-surface-card border border-white/10 shadow-card group">
+<div class="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 opacity-90"></div>
+<div class="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-soft-light" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBAV2q10CEhmscgsVHOVXF4DlVecjD5AGD--RuGMIkBm9USnIJEdCmdjFhXTOSlueX34Fd-VNIpqki14FC8II62DSqwYFmaw-VK_ChMa1s54YgnD1QP5y1SYnxpY53nHsCy9_yrqKqzfzXEXaPjERujTOlOPqaBGIIrCl7-XfdeDJGDuP1p2lgZ73yHEGoBpB5K-QpuOvAPwFQmurpFsQzgcnqduxvkAXVMj-360MaX4Nlvjva8-oNu1qzuVXZy2YGZC6SKOt12NDY");'></div>
+<div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+<div class="absolute bottom-0 left-0 w-32 h-32 bg-black/20 rounded-full blur-xl -ml-10 -mb-10"></div>
+<div class="relative flex flex-col items-center justify-center py-10 px-6 text-center space-y-4">
+<p class="text-white/80 text-sm font-medium tracking-wide uppercase font-display">Debt-Free Date</p>
+<div class="flex flex-col items-center">
+<h1 class="text-5xl font-extrabold text-white tracking-tight drop-shadow-sm font-display">Oct 2026</h1>
+</div>
+<div class="inline-flex items-center gap-2 rounded-full bg-black/20 px-5 py-2 border border-white/20 backdrop-blur-sm shadow-inner">
+<span class="material-symbols-outlined text-accent-gold text-lg">verified</span>
+<p class="text-white text-sm font-medium">Save <span class="text-accent-gold font-bold text-base">$2,450</span> in interest</p>
+</div>
+</div>
+</div>
+</div>
+<div class="px-6 pb-8">
+<div class="glass-effect rounded-[1.5rem] p-6 relative overflow-hidden">
+<div class="absolute top-0 right-0 w-20 h-20 bg-accent-cyan/10 rounded-full blur-xl"></div>
+<div class="flex items-center justify-between mb-6 relative z-10">
+<div class="flex flex-col">
+<span class="text-white font-display font-bold text-lg">Monthly Boost</span>
+<span class="text-gray-400 text-xs font-medium mt-1">Add extra to crush debt faster</span>
+</div>
+<div class="flex items-center justify-center bg-white/5 border border-white/10 rounded-xl px-4 py-2 min-w-[90px] backdrop-blur-md">
+<span class="text-accent-cyan font-display font-bold text-xl">+$200</span>
+</div>
+</div>
+<div class="relative h-8 w-full flex items-center mb-2 z-10">
+<div class="absolute w-full h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-accent-cyan to-primary w-[32%]"></div>
+</div>
+<input class="absolute w-full h-8 opacity-0 z-20 cursor-pointer" max="1000" min="0" type="range" value="200"/>
+<div class="absolute h-7 w-7 bg-white rounded-full shadow-[0_0_15px_rgba(34,211,238,0.5)] left-[32%] -ml-3.5 z-0 pointer-events-none flex items-center justify-center">
+<div class="w-2 h-2 bg-accent-cyan rounded-full"></div>
+</div>
+</div>
+<div class="flex justify-between text-xs text-gray-400 font-semibold font-display relative z-10 px-1">
+<span>$0</span>
+<span>$1,000+</span>
+</div>
+</div>
+</div>
+<div class="px-6">
+<div class="flex items-center justify-between mb-5 px-1">
+<h3 class="text-white text-xl font-display font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">sort</span>
+                    Payoff Order
+                </h3>
+<span class="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">3 Debts</span>
+</div>
+<div class="space-y-4">
+<div class="group relative overflow-hidden rounded-2xl bg-surface-card border border-primary/30 p-5 transition-all hover:bg-surface-card/80 hover:scale-[1.01] hover:shadow-neon duration-300">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-accent-cyan to-primary"></div>
+<div class="flex items-center gap-4 relative z-10">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20 shadow-sm">
+<span class="material-symbols-outlined text-2xl">credit_card</span>
+</div>
+<div class="flex flex-1 flex-col">
+<div class="flex justify-between items-start mb-1">
+<h4 class="text-white font-display font-bold text-lg">Visa Gold</h4>
+<span class="text-lg font-bold text-white tracking-tight">$450</span>
+</div>
+<div class="flex justify-between items-center">
+<p class="text-xs text-gray-400 font-medium">Balance</p>
+<div class="flex items-center gap-1.5 bg-accent-green/10 px-2 py-0.5 rounded-md border border-accent-green/20">
+<span class="material-symbols-outlined text-accent-green text-[14px]">check_circle</span>
+<p class="text-[10px] font-bold text-accent-green uppercase tracking-wide">Nov 2024</p>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-4 h-1.5 w-full bg-slate-700/50 rounded-full overflow-hidden">
+<div class="h-full w-[85%] bg-gradient-to-r from-accent-cyan to-primary rounded-full relative">
+<div class="absolute right-0 top-0 bottom-0 w-4 bg-white/20 blur-[2px]"></div>
+</div>
+</div>
+</div>
+<div class="group relative overflow-hidden rounded-2xl bg-surface-card/60 border border-white/5 p-5 transition-all hover:bg-surface-card hover:border-white/10">
+<div class="flex items-center gap-4">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-secondary/10 text-secondary border border-secondary/10">
+<span class="material-symbols-outlined text-2xl">school</span>
+</div>
+<div class="flex flex-1 flex-col">
+<div class="flex justify-between items-start mb-1">
+<h4 class="text-gray-200 font-display font-semibold text-lg">Student Line</h4>
+<span class="text-lg font-bold text-gray-300">$5,200</span>
+</div>
+<div class="flex justify-between items-center">
+<p class="text-xs text-gray-500 font-medium">Balance</p>
+<p class="text-xs font-bold text-gray-400 bg-white/5 px-2 py-1 rounded-md">Aug 2025</p>
+</div>
+</div>
+</div>
+</div>
+<div class="group relative overflow-hidden rounded-2xl bg-surface-card/40 border border-white/5 p-5 transition-all hover:bg-surface-card hover:border-white/10 opacity-80 hover:opacity-100">
+<div class="flex items-center gap-4">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400 border border-orange-500/10">
+<span class="material-symbols-outlined text-2xl">directions_car</span>
+</div>
+<div class="flex flex-1 flex-col">
+<div class="flex justify-between items-start mb-1">
+<h4 class="text-gray-200 font-display font-semibold text-lg">Auto Loan</h4>
+<span class="text-lg font-bold text-gray-300">$12,000</span>
+</div>
+<div class="flex justify-between items-center">
+<p class="text-xs text-gray-500 font-medium">Balance</p>
+<p class="text-xs font-bold text-gray-400 bg-white/5 px-2 py-1 rounded-md">Oct 2026</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="h-6"></div>
+</div>
+<div class="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-background-dark via-background-dark/95 to-transparent pt-12 z-40">
+<button class="w-full rounded-2xl bg-gradient-to-r from-primary to-secondary hover:from-primary-dark hover:to-pink-600 text-white font-display font-bold py-4 text-lg shadow-lg shadow-primary/30 transition-all active:scale-[0.98] flex items-center justify-center gap-3 ring-1 ring-white/20">
+<span>Launch Attack Plan</span>
+<span class="material-symbols-outlined animate-pulse">rocket_launch</span>
+</button>
+</div>
+</div>
+
+</body></html>

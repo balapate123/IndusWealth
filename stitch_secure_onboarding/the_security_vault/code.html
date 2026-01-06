@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Security Vault - IndusWealth</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        "indus-indigo": "#4F46E5",
+                        "indus-indigo-dark": "#4338ca",
+                        "prosperity-gold": "#FFD700",
+                        "prosperity-gold-text": "#B45309",
+                        "growth-green": "#10B981",
+                        "growth-green-light": "#D1FAE5",
+                        "surface-light": "#F8FAFC",
+                        "surface-card": "#FFFFFF",
+                        "destructive": "#EF4444",
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+                        'glow': '0 0 20px rgba(79, 70, 229, 0.25)',
+                        'card': '0 2px 8px rgba(0, 0, 0, 0.04)',
+                    },
+                    borderRadius: {
+                        'xl': '1rem',
+                        '2xl': '1.25rem',
+                        '3xl': '1.5rem',
+                        'custom': '12px',
+                    }
+                },
+            },
+        }
+    </script>
+<style>.no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface-light text-slate-800 font-sans antialiased h-screen w-full flex justify-center items-center overflow-hidden">
+<div class="relative w-full max-w-md h-full max-h-[900px] bg-surface-light flex flex-col shadow-2xl overflow-hidden sm:rounded-[40px] sm:h-[85vh] sm:border-8 sm:border-slate-900">
+<div class="absolute top-[-10%] left-[-10%] w-[70%] h-[40%] bg-indigo-100/60 rounded-full blur-3xl pointer-events-none mix-blend-multiply"></div>
+<div class="absolute top-[5%] right-[-10%] w-[60%] h-[40%] bg-purple-100/60 rounded-full blur-3xl pointer-events-none mix-blend-multiply"></div>
+<header class="relative z-10 px-5 pt-8 pb-4 flex items-center justify-between bg-surface-light/80 backdrop-blur-sm sticky top-0">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-800">
+<span class="material-symbols-outlined">arrow_back_ios_new</span>
+</button>
+<h1 class="text-[17px] font-bold text-slate-900 tracking-tight">The Security Vault</h1>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-800">
+<span class="material-symbols-outlined text-[22px]">info</span>
+</button>
+</header>
+<main class="flex-1 overflow-y-auto px-5 pb-36 no-scrollbar relative z-10">
+<div class="mt-2 mb-8 relative overflow-hidden rounded-3xl bg-gradient-to-br from-indus-indigo via-[#6366f1] to-[#7C3AED] p-6 shadow-glow text-white group">
+<div class="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:scale-110 transition-transform duration-700"></div>
+<div class="relative flex items-center justify-between">
+<div class="flex-1 pr-4">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 backdrop-blur-md border border-white/10 mb-3">
+<span class="w-1.5 h-1.5 rounded-full bg-growth-green shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+<span class="text-[11px] font-bold uppercase tracking-wider text-white/90">Encrypted</span>
+</div>
+<h2 class="text-xl font-bold mb-1.5 leading-tight">Data Sharing Active</h2>
+<p class="text-indigo-50 text-[13px] font-medium opacity-90 leading-normal">
+                            256-bit SSL secured connection established with all partners.
+                        </p>
+</div>
+<div class="shrink-0 w-14 h-14 bg-gradient-to-b from-white/20 to-white/5 backdrop-blur-lg rounded-2xl border border-white/20 shadow-inner flex items-center justify-center">
+<span class="material-symbols-outlined text-prosperity-gold text-[32px] drop-shadow-md" style="font-variation-settings: 'FILL' 1, 'wght' 400;">shield_lock</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mb-4 px-1">
+<h3 class="text-slate-900 text-lg font-bold tracking-tight">Connected Institutions</h3>
+<button class="text-indus-indigo text-xs font-bold hover:bg-indigo-50 px-2 py-1 rounded-lg transition-colors">
+                    View History
+                </button>
+</div>
+<div class="space-y-3">
+<div class="bg-white rounded-2xl p-4 shadow-card border border-slate-100/60 hover:border-indigo-100 hover:shadow-soft transition-all duration-300">
+<div class="flex items-center gap-4">
+<div class="relative shrink-0">
+<div class="w-[52px] h-[52px] rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden">
+<div class="w-full h-full bg-center bg-cover" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAGUddH3Sne6eJLt9zkoTrMSPBKE_f1_0z9mYfSjaw_Bv6F5yezEumW8U4T42wAH58ncyeB1_qyYq6vwVz-MlGYvkqwlh_OTxC_9vBRhi4ne-XUxJ4d0-tahgFi7ms7mVasVLT7pPXa57TV5x-gZ-jhRX2121XhBqCgG1kdUMInzMJPROZgCWSxRqiOpFuXju8jm2NB_eMDrZHwhLmuUSEz7wzFb0mvtqPCK58l2wG_f-cUCOlZOUKSHBK9OlUvlTZ6fiL7fB8apQ8');"></div>
+</div>
+<div class="absolute -bottom-1.5 -right-1.5 bg-white p-[2px] rounded-full shadow-sm z-10">
+<span class="material-symbols-outlined text-growth-green text-[16px] bg-white rounded-full">check_circle</span>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="text-slate-900 font-bold text-[15px] truncate">Royal Bank of Canada</h4>
+<div class="flex items-center gap-1.5 mt-0.5 text-slate-500">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+<p class="text-[11px] font-medium truncate">Last synced: Today, 10:42 AM</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indus-indigo shadow-inner"></div>
+</label>
+</div>
+</div>
+<div class="bg-white rounded-2xl p-4 shadow-card border border-slate-100/60 hover:border-indigo-100 hover:shadow-soft transition-all duration-300">
+<div class="flex items-center gap-4">
+<div class="relative shrink-0">
+<div class="w-[52px] h-[52px] rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden">
+<div class="w-full h-full bg-center bg-cover" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuByWn0mqEm5HWNrZqip2LzSL5McAObMnrYfGLcp6QT6UGuTaE19Rf5-m3OKuaHymEnDHlXhIHLCkVQNGNekN-QiDYK_xZldDrmX1ONCgX4_q4ux1vjRgvoas7htwhjf4gaX-B9xp6F3EqpIWPvoiz3jGSEsO0okKTjOUOd2XYm9ILa9PnSL7YyYU_XOQY4z-STw2KXbpCWUEOJStImwaJsINFSjeT6w1fwQWeV69qgtlCRNZUJj9u3R_jyV4hqGQQq304QMifV9sIw');"></div>
+</div>
+<div class="absolute -bottom-1.5 -right-1.5 bg-white p-[2px] rounded-full shadow-sm z-10">
+<span class="material-symbols-outlined text-growth-green text-[16px] bg-white rounded-full">check_circle</span>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="text-slate-900 font-bold text-[15px] truncate">TD Canada Trust</h4>
+<div class="flex items-center gap-1.5 mt-0.5 text-slate-500">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+<p class="text-[11px] font-medium truncate">Last synced: Yesterday, 4:15 PM</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indus-indigo shadow-inner"></div>
+</label>
+</div>
+</div>
+<div class="bg-red-50/50 rounded-2xl p-4 border border-red-100 relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-[4px] bg-red-400"></div>
+<div class="flex items-center gap-4">
+<div class="relative shrink-0 grayscale opacity-90">
+<div class="w-[52px] h-[52px] rounded-xl bg-white border border-red-100 flex items-center justify-center overflow-hidden">
+<div class="w-full h-full bg-center bg-cover" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDtFYA_TnXCt8QV7QDUi58_eIm3SiOUNZ78NH6UBCRC87mtA4-OVPRrLzwR7gMn193rZklZ-bs8TwVCV126x7msMPB3Zji63PO3UiMLYYgNO18_rc0uvmR6egZdnY5DZUYEl7y9q5Dus6fH6oFI4ZL6vXIcUjrqM12XoFc5kRpl3JS7U2gBE7tQdznPWRNt2OANhrLtPnv7oyrc4up8m_IsrjBq8vSdJthQ-RXcqAVR9ZALKmyxwj_ZWW_UFmdDqMaikH-dZ1ylW8g');"></div>
+</div>
+<div class="absolute -bottom-1.5 -right-1.5 bg-white p-[2px] rounded-full shadow-sm z-10">
+<span class="material-symbols-outlined text-destructive text-[16px] bg-white rounded-full">error</span>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="text-slate-900 font-bold text-[15px] truncate">Scotiabank</h4>
+<div class="flex items-center gap-1.5 mt-0.5 text-destructive">
+<span class="material-symbols-outlined text-[14px]">info</span>
+<p class="text-[11px] font-bold truncate">Sync paused: Action required</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer shrink-0 opacity-60">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indus-indigo shadow-inner"></div>
+</label>
+</div>
+</div>
+<div class="bg-white rounded-2xl p-4 shadow-card border border-slate-100/60 hover:border-indigo-100 hover:shadow-soft transition-all duration-300">
+<div class="flex items-center gap-4">
+<div class="relative shrink-0">
+<div class="w-[52px] h-[52px] rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden">
+<div class="w-full h-full bg-center bg-cover" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuClBFWWr56ti4GSUiUVY7_4ElDYNhhoiwfQVIaDTT-gWW5NjqKiph7-llZsqM7eUpBymkmkmXwkYIoLQiM0z0tAqTugy1ahoX_s-Cx2XU0LdZBkSccXl4j-AbE3qngX5ArIubTwXpIl04_kkOFrxmw9mAQ628rMZLid5iSK8thGPiiAjjKWRnpYi0PsM6STAuM7GsaB6bEuedsrd8DftEG4WDaYZBdh0QPYrfwYocdomxiqSZzBLKf7kYWjljUm7BISkl6ZudC9PXw');"></div>
+</div>
+<div class="absolute -bottom-1.5 -right-1.5 bg-white p-[2px] rounded-full shadow-sm z-10">
+<span class="material-symbols-outlined text-growth-green text-[16px] bg-white rounded-full">check_circle</span>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="text-slate-900 font-bold text-[15px] truncate">BMO Bank of Montreal</h4>
+<div class="flex items-center gap-1.5 mt-0.5 text-slate-500">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+<p class="text-[11px] font-medium truncate">Last synced: 2 days ago</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indus-indigo shadow-inner"></div>
+</label>
+</div>
+</div>
+</div>
+<div class="mt-8 px-4 text-center">
+<p class="text-[11px] text-slate-400 font-medium leading-relaxed">
+                    IndusWealth uses bank-grade security to protect your information. 
+                    <a class="text-indus-indigo font-bold hover:text-indus-indigo-dark decoration-indus-indigo/30 underline underline-offset-2" href="#">Read our Privacy Policy</a>.
+                </p>
+</div>
+</main>
+<div class="absolute bottom-0 w-full bg-white/80 backdrop-blur-xl border-t border-slate-100 p-4 z-20 pb-8">
+<button class="w-full flex items-center justify-center gap-2 bg-destructive/5 hover:bg-destructive/10 active:bg-destructive/15 text-destructive border border-destructive/20 rounded-xl p-4 transition-all group shadow-[0_2px_10px_rgba(239,68,68,0.1)]">
+<span class="material-symbols-outlined text-[20px] group-hover:rotate-12 transition-transform">link_off</span>
+<span class="font-bold text-[15px]">Revoke All Access</span>
+</button>
+<p class="mt-3 text-center text-[10px] text-slate-400 font-medium">
+                This will disconnect all accounts immediately.
+            </p>
+</div>
+</div>
+
+</body></html>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Secure Onboarding - IndusWealth</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "indus-indigo": "#4338CA",   // Rich Indigo
+                        "indus-accent": "#6366F1",   // Vibrant Indigo
+                        "prosperity-gold": "#F59E0B", // Warm Gold
+                        "growth-green": "#10B981",    // Vibrant Green
+                        "surface-light": "#F0F4F8",   // Cool grey-blue white
+                        "surface-card": "#FFFFFF",
+                    },
+                    fontFamily: {
+                        "display": ["Outfit", "sans-serif"],
+                        "body": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "2xl": "1.25rem",
+                        "3xl": "1.5rem",
+                        "4xl": "2rem",
+                    },
+                    backgroundImage: {
+                        'vibrant-gradient': 'linear-gradient(135deg, #4338CA 0%, #6366F1 100%)',
+                        'subtle-mesh': 'radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 50%), radial-gradient(circle at 100% 100%, rgba(245, 158, 11, 0.08) 0%, transparent 50%)',
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px rgba(99, 102, 241, 0.15)',
+                        'card-depth': '0 10px 40px -10px rgba(0,0,0,0.08)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface-light font-body antialiased text-slate-800">
+<div class="relative flex h-full min-h-screen w-full flex-col overflow-x-hidden max-w-md mx-auto bg-subtle-mesh shadow-2xl border-x border-slate-200/50">
+<div class="h-4 w-full bg-transparent"></div>
+<header class="flex items-center justify-between p-5 pb-2 z-10">
+<button class="text-slate-700 flex size-10 shrink-0 items-center justify-center rounded-full bg-white shadow-sm border border-slate-100 hover:bg-slate-50 transition-colors">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+</button>
+<div class="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white shadow-sm border border-indus-indigo/10">
+<span class="material-symbols-outlined text-[18px] text-indus-accent" style="font-variation-settings: 'FILL' 1;">lock</span>
+<span class="text-xs font-bold text-indus-indigo uppercase tracking-wide font-display">Secure Onboarding</span>
+</div>
+<button class="text-slate-400 flex size-10 shrink-0 items-center justify-center rounded-full transition-colors opacity-0 pointer-events-none">
+<span class="material-symbols-outlined">help</span>
+</button>
+</header>
+<main class="flex-1 flex flex-col px-6 pt-6 relative z-0">
+<div class="flex flex-col gap-3 mb-8 text-center">
+<h1 class="text-slate-900 font-display text-[32px] font-bold leading-tight tracking-tight">
+                    Link your <span class="text-transparent bg-clip-text bg-gradient-to-r from-indus-indigo to-indus-accent">Canadian bank</span>
+</h1>
+<p class="text-slate-500 text-[15px] font-medium leading-relaxed max-w-[95%] mx-auto">
+                    Securely connect with major institutions to kickstart your personalized portfolio with IndusWealth.
+                </p>
+</div>
+<div class="w-full relative rounded-3xl p-6 bg-white shadow-card-depth border border-slate-100 mb-6">
+<div class="grid grid-cols-3 gap-y-6 gap-x-4">
+<div class="flex flex-col gap-3 items-center group cursor-pointer">
+<div class="w-full aspect-square bg-slate-50 rounded-2xl flex items-center justify-center shadow-sm border border-slate-100 group-hover:shadow-md group-hover:border-indus-indigo/30 group-hover:scale-105 transition-all duration-300 relative overflow-hidden">
+<div class="absolute inset-0 bg-indus-accent/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="w-full h-full bg-center bg-no-repeat bg-cover m-2" data-alt="RBC Bank Logo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB7rFspkCLTepR-dfbKkXmFGBNBVsO_gyQRtpMTGFwZ9LTFUlNuTnypE8iOfBK9q4knSBAGZinhln368Bav7b-ZV0jNojEQ_zYxLC4ymsIe2ZjwLAe-QBqzDDXrnBV-VTPdk7enQb4sswxs_pJl7TGlbG1FLfz8DQ4HBaeVJokTae-MZA_VIzi1Ace3FLtCig7zlSbOCylada1C5cpum4_uC5ADsErXm_c8uay1PhyecrAydMFe0vGq-rIpLEt9okcaHPFUmlxv2cc'); background-size: 80%;"></div>
+</div>
+<span class="text-xs font-bold font-display text-slate-600 group-hover:text-indus-indigo transition-colors">RBC</span>
+</div>
+<div class="flex flex-col gap-3 items-center group cursor-pointer">
+<div class="w-full aspect-square bg-slate-50 rounded-2xl flex items-center justify-center shadow-sm border border-slate-100 group-hover:shadow-md group-hover:border-indus-indigo/30 group-hover:scale-105 transition-all duration-300 relative overflow-hidden">
+<div class="absolute inset-0 bg-indus-accent/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="w-full h-full bg-center bg-no-repeat bg-cover m-2" data-alt="TD Bank Logo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCBqJp504G6xxKnWo71r_gH_8KYi_q5Mu8MoGJxbQBHOcJwZhJa_Pz36eTOWohpJSAMCiypSj948GLq3_rh8SE3FBfBGEye9y3VmPq3jxAGJFaNz3UKuSHZLXMzefC9XewgCea5Yhaw0kz9fdlV2fBI4pFaf5V06FnJBSKAwGZrawGOgTjrkeR6z3vw5Sg3JDl4KOoMFfiP1UsOd6t4KYEvKH9_hm2QAReT9rZnpa5Y1jmCNJAxQKq4aQg9Fug6FR3eizK53biFfBY'); background-size: 80%;"></div>
+</div>
+<span class="text-xs font-bold font-display text-slate-600 group-hover:text-indus-indigo transition-colors">TD</span>
+</div>
+<div class="flex flex-col gap-3 items-center group cursor-pointer">
+<div class="w-full aspect-square bg-slate-50 rounded-2xl flex items-center justify-center shadow-sm border border-slate-100 group-hover:shadow-md group-hover:border-indus-indigo/30 group-hover:scale-105 transition-all duration-300 relative overflow-hidden">
+<div class="absolute inset-0 bg-indus-accent/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="w-full h-full bg-center bg-no-repeat bg-cover m-2" data-alt="CIBC Bank Logo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCNJlNRoxhoDedM4EKw3uzcTRccx9c5tcrY8Qwch2vQtiwjkOmhG4ziVupHMokLZj7LWN8pZ0ZA29G4fgese5J6OviiLtlabzfyJ1o6HqmWct3CMFKjv3KsJ4wgD29mmjv7DH1XKA8Yulca7e2vsVXuPf7lDH6s2O8Mnubv7PEFWRkD6-krq7D14oOJRUpmMt-tSgUjiTd52NcBNYjQKhDnG9OpSWPYzjQQX3ymtlUtsaxJT0uY7T30pTt-hd4Rvs5LxX_4JkBUwEQ'); background-size: 80%;"></div>
+</div>
+<span class="text-xs font-bold font-display text-slate-600 group-hover:text-indus-indigo transition-colors">CIBC</span>
+</div>
+<div class="flex flex-col gap-3 items-center group cursor-pointer">
+<div class="w-full aspect-square bg-slate-50 rounded-2xl flex items-center justify-center shadow-sm border border-slate-100 group-hover:shadow-md group-hover:border-indus-indigo/30 group-hover:scale-105 transition-all duration-300 relative overflow-hidden">
+<div class="absolute inset-0 bg-indus-accent/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="w-full h-full bg-center bg-no-repeat bg-cover m-2" data-alt="Scotiabank Logo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCEglvm7qO0i74NAmegMFpyd-s3-nnICYkkh0DR6-vLSH5NNsDjNKvKVW3AJClcSURopVOPQbo8vd2TkVf9E_Vu7sdcgU29aZyx6kxJsR6_BRRjO9R4Ghw6BMp72KWkcIPniD6qc53JClv2OGZG153h0Fv1zjVVgi7BF3eMl6NexyTTzPIl-JHOxgVeRp3xgd4YCzKwDo4Vqrmbrb8M81lVUkUulnRjIq722nf8Y7K9DOhg5Xo_7Zl7y0KM9WNCu0vo5-Ism7qLZFo'); background-size: 80%;"></div>
+</div>
+<span class="text-xs font-bold font-display text-slate-600 group-hover:text-indus-indigo transition-colors">Scotia</span>
+</div>
+<div class="flex flex-col gap-3 items-center group cursor-pointer">
+<div class="w-full aspect-square bg-slate-50 rounded-2xl flex items-center justify-center shadow-sm border border-slate-100 group-hover:shadow-md group-hover:border-indus-indigo/30 group-hover:scale-105 transition-all duration-300 relative overflow-hidden">
+<div class="absolute inset-0 bg-indus-accent/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="w-full h-full bg-center bg-no-repeat bg-cover m-2" data-alt="BMO Bank Logo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA561Jtaso_Ir_TjHiQ1YX-mDmjM-F0MA7ec8KPJLIihBEO4vpBjSeOYaLcW_DEvMEPmsrACBxVjT9dTtj9ad4MnZ6ezma9fKqOK1Maj2Hr8N0CtynsaDA5W2Zuo24U4dxCYBHYJKfcdNavj9P26LgTgBSJva62d-xwL_zzVin0KN60R95w2RAy7DNJDhf83KbTil3d0tkKC7i8DZK6S66ebIw6OH132VxghpL9saJWtac_nTJ9DbolHNoGqYKVl-vJ7TvGJm2Vgnc'); background-size: 80%;"></div>
+</div>
+<span class="text-xs font-bold font-display text-slate-600 group-hover:text-indus-indigo transition-colors">BMO</span>
+</div>
+<div class="flex flex-col gap-3 items-center group cursor-pointer">
+<div class="w-full aspect-square bg-indus-indigo/5 rounded-2xl flex items-center justify-center border border-transparent group-hover:bg-indus-indigo/10 group-hover:scale-105 transition-all duration-300">
+<span class="material-symbols-outlined text-indus-indigo text-3xl">grid_view</span>
+</div>
+<span class="text-xs font-bold font-display text-slate-600 group-hover:text-indus-indigo transition-colors">Others</span>
+</div>
+</div>
+</div>
+<div class="flex items-start gap-4 p-5 bg-gradient-to-br from-white to-slate-50 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
+<div class="absolute top-0 right-0 w-16 h-16 bg-prosperity-gold/10 rounded-full blur-xl -mr-8 -mt-8"></div>
+<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-growth-green/10 text-growth-green">
+<span class="material-symbols-outlined" style="font-size: 22px;">shield_lock</span>
+</div>
+<div class="flex flex-col z-10">
+<h3 class="text-sm font-bold text-slate-900 font-display">Bank-level Security</h3>
+<p class="text-xs text-slate-500 leading-relaxed mt-1">
+                        We use 256-bit encryption and never store your login credentials. <span class="font-medium text-slate-700">IndusWealth is FINTRAC regulated.</span>
+</p>
+</div>
+</div>
+</main>
+<footer class="mt-auto p-6 pb-8 flex flex-col gap-5 bg-surface-light relative z-20">
+<div class="absolute -top-12 left-0 w-full h-12 bg-gradient-to-t from-surface-light to-transparent pointer-events-none"></div>
+<button class="flex w-full items-center justify-center gap-2 rounded-2xl h-14 px-6 bg-vibrant-gradient hover:shadow-lg hover:shadow-indus-indigo/30 active:scale-[0.98] transition-all text-white shadow-glow">
+<span class="material-symbols-outlined text-[20px]">link</span>
+<span class="text-[16px] font-bold tracking-wide font-display">Link Bank Account</span>
+</button>
+<div class="flex justify-center items-center gap-5">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-growth-green text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-[12px] font-semibold text-slate-600">Encrypted</span>
+</div>
+<div class="h-4 w-px bg-slate-300"></div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-growth-green text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-[12px] font-semibold text-slate-600">Private</span>
+</div>
+<div class="h-4 w-px bg-slate-300"></div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-growth-green text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-[12px] font-semibold text-slate-600">Verified</span>
+</div>
+</div>
+<button class="w-full py-1 text-center text-sm font-semibold text-slate-400 hover:text-indus-indigo transition-colors">
+                I'll do this later
+            </button>
+</footer>
+</div>
+
+</body></html>
