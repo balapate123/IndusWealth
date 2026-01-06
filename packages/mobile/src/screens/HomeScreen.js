@@ -4,13 +4,7 @@ import { COLORS, SPACING } from '../constants/theme';
 // import { Ionicons } from '@expo/vector-icons'; // Assuming icons available
 
 // Mock Data matching the structure (Fallback)
-const MOCK_TRANSACTIONS = [
-    { id: '1', description: 'Uber Trip', amount: -24.50, date: 'Today', bank: 'RBC' },
-    { id: '2', description: 'Starbucks', amount: -6.75, date: 'Today', bank: 'TD' },
-    { id: '3', description: 'Payroll Deposit', amount: 3200.00, date: 'Yesterday', bank: 'CIBC' },
-    { id: '4', description: 'Amazon.ca', amount: -154.20, date: 'Yesterday', bank: 'RBC' },
-    { id: '5', description: 'Hydro Bill', amount: -120.00, date: 'Dec 22', bank: 'TD' },
-];
+// Real Data Only
 
 const HomeScreen = () => {
     const [transactions, setTransactions] = useState([]);
@@ -23,18 +17,14 @@ const HomeScreen = () => {
                 const data = await response.json();
                 if (data.success) {
                     setTransactions(data.data);
-                    // Calculate total mock cash
-                    const total = data.data.reduce((acc, curr) => acc + curr.amount, 10000); // Start with base
-                    setTransactions(data.data);
+                    // Calculate total from real data (or fetch balance endpoint in future)
+                    const total = data.data.reduce((acc, curr) => acc + curr.amount, 0);
                     setTotalCash(total);
-                } else {
-                    setTransactions(MOCK_TRANSACTIONS);
-                    setTotalCash(12450.00);
                 }
             } catch (error) {
-                console.log('Error fetching transactions, using mock:', error);
-                setTransactions(MOCK_TRANSACTIONS);
-                setTotalCash(12450.00);
+                console.log('Error fetching transactions:', error);
+                setTransactions([]);
+                setTotalCash(0);
             }
         };
 
@@ -88,103 +78,123 @@ const HomeScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
+        backgroundColor: '#0F172A', // Slate 900
         paddingTop: Platform.OS === 'android' ? 25 : 0,
     },
     header: {
         padding: SPACING.MEDIUM,
     },
     greeting: {
-        color: COLORS.GOLD,
+        color: '#FCD34D', // Amber 300
         fontSize: 18,
         fontWeight: '600',
+        letterSpacing: 0.5
     },
     subtitle: {
-        color: COLORS.TEXT_SECONDARY,
+        color: '#94A3B8', // Slate 400
         fontSize: 14,
     },
     card: {
-        backgroundColor: COLORS.CARD_BG,
+        // Glassmorphism effect
+        backgroundColor: 'rgba(30, 41, 59, 0.7)', // Slate 800 with opacity
         margin: SPACING.MEDIUM,
         padding: SPACING.LARGE,
-        borderRadius: 16,
-        borderLeftWidth: 4,
-        borderLeftColor: COLORS.GOLD,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.3,
-        shadowRadius: 5,
-        elevation: 8,
+        shadowRadius: 20,
+        elevation: 10,
     },
     cardLabel: {
-        color: COLORS.TEXT_SECONDARY,
+        color: '#94A3B8', // Slate 400
         fontSize: 12,
         letterSpacing: 1.5,
         marginBottom: SPACING.SMALL,
         textTransform: 'uppercase',
+        fontWeight: '600'
     },
     cardAmount: {
         color: COLORS.WHITE,
-        fontSize: 36,
+        fontSize: 42,
         fontWeight: 'bold',
         marginBottom: SPACING.SMALL,
+        letterSpacing: -1
+    },
+    cardFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        alignSelf: 'flex-start',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
     },
     cardFooterText: {
-        color: '#4CAF50',
+        color: '#4ADE80', // Green 400
         fontSize: 12,
+        fontWeight: '600',
     },
     feedContainer: {
         flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
+        backgroundColor: '#0F172A',
         paddingHorizontal: SPACING.MEDIUM,
     },
     feedHeader: {
-        color: COLORS.TEXT_PRIMARY,
-        fontSize: 20,
-        fontWeight: 'bold',
+        color: COLORS.WHITE,
+        fontSize: 18,
+        fontWeight: '600',
         marginBottom: SPACING.MEDIUM,
         marginTop: SPACING.SMALL,
+        letterSpacing: 0.5
     },
     listContent: {
-        paddingBottom: SPACING.LARGE,
+        paddingBottom: 100,
     },
     transactionItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: COLORS.CARD_BG, // Or transparent depending on design
-        padding: SPACING.MEDIUM,
-        borderRadius: 12,
-        marginBottom: SPACING.SMALL,
+        backgroundColor: 'rgba(30, 41, 59, 0.4)', // Slate 800 transparent
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
     },
     transactionIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: COLORS.GOLD,
+        width: 44,
+        height: 44,
+        borderRadius: 14,
+        backgroundColor: 'rgba(252, 211, 77, 0.1)', // Amber with opacity
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: SPACING.MEDIUM,
+        marginRight: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(252, 211, 77, 0.2)', // Amber border
     },
     bankTag: {
-        color: COLORS.NAVY,
+        color: '#FCD34D', // Amber 300
         fontWeight: 'bold',
+        fontSize: 18
     },
     transactionContent: {
         flex: 1,
     },
     transactionTitle: {
-        color: COLORS.WHITE,
+        color: '#E2E8F0', // Slate 200
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '600',
+        marginBottom: 2
     },
     transactionDate: {
-        color: COLORS.TEXT_SECONDARY,
+        color: '#64748B', // Slate 500
         fontSize: 12,
-        marginTop: 4,
     },
     transactionAmount: {
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
     },
 });
 

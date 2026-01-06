@@ -46,3 +46,6 @@ android/
 
 # Backend
 packages/backend/node_modules/
+
+# Other
+screenshots
