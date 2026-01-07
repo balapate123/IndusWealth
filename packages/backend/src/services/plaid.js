@@ -102,6 +102,27 @@ class PlaidService {
             throw error; // Throw error instead of returning match
         }
     }
+
+    async getAccounts(accessToken) {
+        if (!accessToken) {
+            if (process.env.PLAID_ACCESS_TOKEN_OVERRIDE) {
+                accessToken = process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
+            } else {
+                console.warn('No Access Token provided for Accounts.');
+                return [];
+            }
+        }
+
+        try {
+            const response = await client.accountsGet({
+                access_token: accessToken,
+            });
+            return response.data.accounts;
+        } catch (error) {
+            console.error('Error fetching accounts from Plaid:', error.response ? error.response.data : error.message);
+            throw error;
+        }
+    }
 }
 
 module.exports = new PlaidService();

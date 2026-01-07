@@ -1,93 +1,266 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Platform, StatusBar, TouchableOpacity } from 'react-native';
-import { COLORS, SPACING } from '../constants/theme';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    Platform,
+    StatusBar,
+    TouchableOpacity,
+    ActivityIndicator,
+    RefreshControl,
+} from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import api from '../services/api';
+
+const CATEGORIES = [
+    { id: 'all', name: 'All', icon: null },
+    { id: 'streaming', name: 'Streaming', icon: 'tv' },
+    { id: 'utilities', name: 'Utilities', icon: 'flash' },
+    { id: 'other', name: 'Other', icon: 'construct' },
+];
 
 const WatchdogScreen = () => {
-    const [analysis, setAnalysis] = useState(null);
+    const [expenses, setExpenses] = useState([]);
+    const [selectedCategory, setSelectedCategory] = useState('all');
+    const [flagsFound, setFlagsFound] = useState(0);
+    const [potentialSavings, setPotentialSavings] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState(null);
 
-    useEffect(() => {
-        fetchAnalysis();
-    }, []);
-
-    const fetchAnalysis = async () => {
+    const fetchData = useCallback(async () => {
         try {
-            const response = await fetch('http://localhost:3000/transactions');
-            const data = await response.json();
-            if (data.success && data.analysis) {
-                setAnalysis(data.analysis);
+            setError(null);
+            const data = await api.getWatchdogAnalysis();
+
+            if (data?.success) {
+                setExpenses(data.expenses || []);
+                setPotentialSavings(data.analysis?.potential_savings || 0);
+                setFlagsFound(data.analysis?.flags_found || 0);
             }
-        } catch (error) {
-            console.error('Watchdog Fetch Error:', error);
+        } catch (err) {
+            console.error('Error fetching watchdog data:', err);
+            setError('Failed to load data. Pull to refresh.');
         } finally {
             setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchData();
+    }, [fetchData]);
+
+    const handleAction = async (expenseId, action) => {
+        try {
+            await api.handleExpenseAction(expenseId, action);
+            // Refresh data after action
+            fetchData();
+        } catch (err) {
+            console.error('Error processing action:', err);
         }
     };
 
-    const renderAlertCard = (title, items, type) => {
-        if (!items || items.length === 0) return null;
+    const filteredExpenses = selectedCategory === 'all'
+        ? expenses
+        : expenses.filter(e => e.category.toLowerCase().includes(selectedCategory));
 
-        const total = items.reduce((acc, curr) => acc + curr.amount, 0);
+    const renderExpenseItem = (item) => {
+        const getActionButton = () => {
+            switch (item.action) {
+                case 'negotiate':
+                    return (
+                        <TouchableOpacity
+                            style={styles.negotiateButton}
+                            onPress={() => handleAction(item.id, 'negotiate')}
+                        >
+                            <Text style={styles.negotiateText}>Negotiate</Text>
+                        </TouchableOpacity>
+                    );
+                case 'stop':
+                    return (
+                        <TouchableOpacity
+                            style={styles.stopButton}
+                            onPress={() => handleAction(item.id, 'stop')}
+                        >
+                            <Ionicons name="close-circle" size={14} color="#EF4444" />
+                            <Text style={styles.stopText}>Stop</Text>
+                        </TouchableOpacity>
+                    );
+                case 'active':
+                    return (
+                        <View style={styles.activeButton}>
+                            <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
+                            <Text style={styles.activeText}>Active</Text>
+                        </View>
+                    );
+                default:
+                    return null;
+            }
+        };
+
+        const renderLogo = () => {
+            const initial = item.name.charAt(0).toUpperCase();
+            const bgColor = item.logoColor ? `${item.logoColor}20` : COLORS.CARD_BORDER;
+
+            if (item.category === 'Music') {
+                return (
+                    <View style={[styles.expenseLogo, { backgroundColor: '#191414' }]}>
+                        <Ionicons name="musical-notes" size={20} color="#1DB954" />
+                    </View>
+                );
+            }
+            return (
+                <View style={[styles.expenseLogo, { backgroundColor: bgColor }]}>
+                    <Text style={[styles.logoText, { color: item.logoColor || COLORS.WHITE }]}>
+                        {initial}
+                    </Text>
+                </View>
+            );
+        };
 
         return (
-            <View style={styles.alertCard}>
-                <View style={styles.alertHeader}>
-                    <Text style={styles.alertTitle}>{title}</Text>
-                    <Text style={styles.alertTotal}>${total.toFixed(2)}/mo</Text>
-                </View>
-                <Text style={styles.alertSubtitle}>Potential Annual Loss: ${(total * 12).toFixed(2)}</Text>
-
-                <View style={styles.divider} />
-
-                {items.map((item, index) => (
-                    <View key={index} style={styles.leakRow}>
-                        <Text style={styles.leakName}>{item.name}</Text>
-                        <Text style={styles.leakAmount}>${item.amount.toFixed(2)}</Text>
+            <View key={item.id} style={styles.expenseItem}>
+                {renderLogo()}
+                <View style={styles.expenseContent}>
+                    <View style={styles.expenseRow}>
+                        <Text style={styles.expenseName} numberOfLines={1}>{item.name}</Text>
+                        <Text style={styles.expenseAmount}>${item.amount.toFixed(2)}</Text>
                     </View>
-                ))}
-
-                <TouchableOpacity style={styles.actionButton}>
-                    <Text style={styles.actionButtonText}>
-                        {type === 'sub' ? 'CANCEL SUBSCRIPTION' : 'DISPUTE FEES'}
-                    </Text>
-                </TouchableOpacity>
+                    <View style={styles.expenseRow}>
+                        <Text style={styles.expenseDetails}>Due {item.dueDate} • {item.category}</Text>
+                        {getActionButton()}
+                    </View>
+                </View>
             </View>
         );
     };
 
     if (loading) {
         return (
-            <View style={[styles.container, styles.center]}>
-                <Text style={styles.loadingText}>Scanning for leakage...</Text>
+            <View style={[styles.container, styles.centerContent]}>
+                <ActivityIndicator size="large" color={COLORS.GOLD} />
+                <Text style={styles.loadingText}>Analyzing your expenses...</Text>
             </View>
         );
     }
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="light-content" />
+            <StatusBar barStyle="light-content" backgroundColor={COLORS.BACKGROUND} />
+
+            {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Subscription Watchdog</Text>
-                <Text style={styles.headerSubtitle}>Active Leakage Verification</Text>
+                <TouchableOpacity style={styles.backButton}>
+                    <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Watchdog</Text>
+                <TouchableOpacity style={styles.settingsButton}>
+                    <Ionicons name="settings-outline" size={24} color={COLORS.WHITE} />
+                </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.content}>
-                {/* Summary Header */}
-                <View style={styles.summaryContainer}>
-                    <Text style={styles.totalLeakageLabel}>TOTAL MONTHLY LEAKAGE</Text>
-                    <Text style={styles.totalLeakageAmount}>
-                        ${analysis?.total_monthly_leakage?.toFixed(2) || '0.00'}
-                    </Text>
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={COLORS.GOLD}
+                        colors={[COLORS.GOLD]}
+                    />
+                }
+            >
+                {/* Savings Card */}
+                <View style={styles.savingsCard}>
+                    <View style={styles.savingsCardGlow} />
+                    <View style={styles.savingsCardContent}>
+                        <View style={styles.piggyContainer}>
+                            <View style={styles.piggyIcon}>
+                                <MaterialCommunityIcons name="piggy-bank" size={28} color={COLORS.GOLD} />
+                            </View>
+                            <View style={styles.flagsBadge}>
+                                <Text style={styles.flagsText}>{flagsFound} Flags Found</Text>
+                            </View>
+                        </View>
+
+                        <Text style={styles.savingsLabel}>POTENTIAL MONTHLY SAVINGS</Text>
+                        <Text style={styles.savingsAmount}>${potentialSavings.toFixed(2)}</Text>
+
+                        <View style={styles.infoRow}>
+                            <Ionicons name="information-circle-outline" size={14} color={COLORS.TEXT_SECONDARY} />
+                            <Text style={styles.infoText}>Based on your recurring expense analysis</Text>
+                        </View>
+                    </View>
                 </View>
 
-                {renderAlertCard('DETECTED SUBSCRIPTIONS', analysis?.subscriptions, 'sub')}
-                {renderAlertCard('HIDDEN BANK FEES', analysis?.fees, 'fee')}
+                {/* Category Filters */}
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.categoryFilters}
+                    contentContainerStyle={styles.categoryFiltersContent}
+                >
+                    {CATEGORIES.map((category) => (
+                        <TouchableOpacity
+                            key={category.id}
+                            style={[
+                                styles.categoryTab,
+                                selectedCategory === category.id && styles.categoryTabActive
+                            ]}
+                            onPress={() => setSelectedCategory(category.id)}
+                        >
+                            {category.icon && (
+                                <Ionicons
+                                    name={category.icon}
+                                    size={16}
+                                    color={selectedCategory === category.id ? COLORS.WHITE : COLORS.TEXT_SECONDARY}
+                                    style={styles.categoryIcon}
+                                />
+                            )}
+                            <Text style={[
+                                styles.categoryTabText,
+                                selectedCategory === category.id && styles.categoryTabTextActive
+                            ]}>
+                                {category.name}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
 
-                {!analysis?.subscriptions?.length && !analysis?.fees?.length && (
-                    <View style={styles.safeState}>
-                        <Text style={styles.safeText}>No leakage detected. You are safe.</Text>
+                {/* Error Message */}
+                {error && (
+                    <View style={styles.errorContainer}>
+                        <Text style={styles.errorText}>{error}</Text>
                     </View>
                 )}
+
+                {/* Recurring Expenses */}
+                <View style={styles.expensesSection}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Recurring Expenses</Text>
+                        <TouchableOpacity>
+                            <Text style={styles.viewAllText}>View all</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {filteredExpenses.map(item => renderExpenseItem(item))}
+
+                    {filteredExpenses.length === 0 && !error && (
+                        <View style={styles.emptyState}>
+                            <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.GREEN} />
+                            <Text style={styles.emptyText}>No flagged expenses in this category</Text>
+                        </View>
+                    )}
+                </View>
             </ScrollView>
         </View>
     );
@@ -96,132 +269,266 @@ const WatchdogScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0F172A', // Slate 900
-        paddingTop: Platform.OS === 'android' ? 25 : 0,
+        backgroundColor: COLORS.BACKGROUND,
+        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 50,
     },
-    center: {
+    centerContent: {
         justifyContent: 'center',
-        alignItems: 'center'
+        alignItems: 'center',
     },
     loadingText: {
-        color: '#FCD34D', // Amber 300
-        fontSize: 16
+        color: COLORS.TEXT_SECONDARY,
+        marginTop: SPACING.MEDIUM,
     },
+    scrollContent: {
+        paddingBottom: 100,
+    },
+
+    // Header
     header: {
-        padding: SPACING.MEDIUM,
-        backgroundColor: '#0F172A',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingVertical: SPACING.SMALL,
+    },
+    backButton: {
+        padding: SPACING.SMALL,
     },
     headerTitle: {
-        color: '#FCD34D', // Amber 300
-        fontSize: 22,
-        fontWeight: 'bold',
-        letterSpacing: 0.5
-    },
-    headerSubtitle: {
-        color: '#94A3B8', // Slate 400
-        fontSize: 14,
-    },
-    content: {
-        padding: SPACING.MEDIUM,
-        paddingBottom: 100
-    },
-    summaryContainer: {
-        alignItems: 'center',
-        marginBottom: 32,
-        marginTop: SPACING.MEDIUM
-    },
-    totalLeakageLabel: {
-        color: '#94A3B8',
-        fontSize: 12,
-        letterSpacing: 2,
-        marginBottom: 8
-    },
-    totalLeakageAmount: {
-        color: '#F43F5E', // Rose 500 (Red)
-        fontSize: 48,
-        fontWeight: 'bold',
-        letterSpacing: -2
-    },
-    alertCard: {
-        backgroundColor: 'rgba(30, 41, 59, 0.7)', // Glass
-        borderRadius: 20,
-        padding: 24,
-        marginBottom: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(252, 211, 77, 0.3)', // Amber Border
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-    },
-    alertHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8
-    },
-    alertTitle: {
-        color: '#FCD34D', // Amber 300
-        fontSize: 14,
-        fontWeight: 'bold',
-        letterSpacing: 1,
-        textTransform: 'uppercase'
-    },
-    alertTotal: {
         color: COLORS.WHITE,
-        fontSize: 20,
-        fontWeight: '700'
+        fontSize: 18,
+        fontWeight: '600',
     },
-    alertSubtitle: {
-        color: '#94A3B8',
+    settingsButton: {
+        padding: SPACING.SMALL,
+    },
+
+    // Savings Card
+    savingsCard: {
+        margin: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.XL,
+        backgroundColor: COLORS.CARD_BG,
+        overflow: 'hidden',
+        position: 'relative',
+    },
+    savingsCardGlow: {
+        position: 'absolute',
+        top: -50,
+        right: -50,
+        width: 150,
+        height: 150,
+        backgroundColor: COLORS.GOLD,
+        opacity: 0.1,
+        borderRadius: 75,
+    },
+    savingsCardContent: {
+        padding: SPACING.LARGE,
+    },
+    piggyContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: SPACING.LARGE,
+    },
+    piggyIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        backgroundColor: 'rgba(201, 162, 39, 0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    flagsBadge: {
+        marginLeft: 'auto',
+        backgroundColor: '#0D9488',
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingVertical: SPACING.SMALL,
+        borderRadius: BORDER_RADIUS.LARGE,
+    },
+    flagsText: {
+        color: COLORS.WHITE,
         fontSize: 12,
-        marginBottom: 16
+        fontWeight: '600',
     },
-    divider: {
-        height: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        marginBottom: 16
+    savingsLabel: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 11,
+        letterSpacing: 1,
+        marginBottom: SPACING.SMALL,
     },
-    leakRow: {
+    savingsAmount: {
+        color: '#4ADE80',
+        fontSize: 42,
+        fontWeight: 'bold',
+        marginBottom: SPACING.SMALL,
+    },
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    infoText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 12,
+        marginLeft: SPACING.TINY,
+    },
+
+    // Category Filters
+    categoryFilters: {
+        marginBottom: SPACING.MEDIUM,
+    },
+    categoryFiltersContent: {
+        paddingHorizontal: SPACING.MEDIUM,
+        gap: SPACING.SMALL,
+    },
+    categoryTab: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: SPACING.SMALL,
+        paddingHorizontal: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.XL,
+        backgroundColor: COLORS.CARD_BG,
+        marginRight: SPACING.SMALL,
+    },
+    categoryTabActive: {
+        backgroundColor: '#2563EB',
+    },
+    categoryIcon: {
+        marginRight: SPACING.TINY,
+    },
+    categoryTabText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 13,
+    },
+    categoryTabTextActive: {
+        color: COLORS.WHITE,
+    },
+
+    // Error
+    errorContainer: {
+        margin: SPACING.MEDIUM,
+        padding: SPACING.MEDIUM,
+        backgroundColor: 'rgba(244, 67, 54, 0.1)',
+        borderRadius: BORDER_RADIUS.MEDIUM,
+    },
+    errorText: {
+        color: '#F44336',
+        textAlign: 'center',
+    },
+
+    // Expenses Section
+    expensesSection: {
+        paddingHorizontal: SPACING.MEDIUM,
+    },
+    sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 12
-    },
-    leakName: {
-        color: '#E2E8F0', // Slate 200
-        fontSize: 15
-    },
-    leakAmount: {
-        color: '#E2E8F0',
-        fontSize: 15,
-        fontWeight: '600'
-    },
-    actionButton: {
-        backgroundColor: '#FCD34D', // Amber 300
-        borderRadius: 12,
-        paddingVertical: 12,
         alignItems: 'center',
-        marginTop: 8
+        marginBottom: SPACING.MEDIUM,
     },
-    actionButtonText: {
-        color: '#0F172A', // Slate 900
-        fontWeight: 'bold',
-        fontSize: 12,
-        letterSpacing: 1
+    sectionTitle: {
+        color: COLORS.WHITE,
+        fontSize: 18,
+        fontWeight: '600',
     },
-    safeState: {
-        padding: SPACING.LARGE,
+    viewAllText: {
+        color: '#3B82F6',
+        fontSize: 14,
+    },
+
+    // Expense Item
+    expenseItem: {
+        flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#22c55e'
+        backgroundColor: COLORS.CARD_BG,
+        padding: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        marginBottom: SPACING.SMALL,
     },
-    safeText: {
-        color: '#4ADE80',
+    expenseLogo: {
+        width: 48,
+        height: 48,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: SPACING.MEDIUM,
+    },
+    logoText: {
         fontSize: 16,
-        fontWeight: '600'
-    }
+        fontWeight: 'bold',
+    },
+    expenseContent: {
+        flex: 1,
+    },
+    expenseRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    expenseName: {
+        color: COLORS.WHITE,
+        fontSize: 15,
+        fontWeight: '600',
+        flex: 1,
+    },
+    expenseAmount: {
+        color: COLORS.WHITE,
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    expenseDetails: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 12,
+    },
+
+    // Action Buttons
+    negotiateButton: {
+        backgroundColor: '#2563EB',
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingVertical: 6,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+    },
+    negotiateText: {
+        color: COLORS.WHITE,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    stopButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#EF4444',
+        paddingHorizontal: SPACING.SMALL,
+        paddingVertical: 4,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+    },
+    stopText: {
+        color: '#EF4444',
+        fontSize: 12,
+        marginLeft: 4,
+    },
+    activeButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: SPACING.SMALL,
+        paddingVertical: 4,
+    },
+    activeText: {
+        color: '#4CAF50',
+        fontSize: 12,
+        marginLeft: 4,
+    },
+
+    // Empty State
+    emptyState: {
+        alignItems: 'center',
+        padding: SPACING.XL,
+    },
+    emptyText: {
+        color: COLORS.TEXT_MUTED,
+        marginTop: SPACING.MEDIUM,
+        textAlign: 'center',
+    },
 });
 
 export default WatchdogScreen;

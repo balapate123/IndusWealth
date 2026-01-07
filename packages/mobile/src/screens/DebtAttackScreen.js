@@ -1,380 +1,626 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { COLORS, SPACING, FONTS } from '../constants/theme';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    Platform,
+    StatusBar,
+    TouchableOpacity,
+    ActivityIndicator,
+    RefreshControl,
+} from 'react-native';
 import Slider from '@react-native-community/slider';
-
-// If Slider package is missing, we will use buttons for MVP, but let's assume standard install or we can add it. 
-// Given the complexity of adding native modules in this environment without full rebuild control, 
-// I will Implement a "Visual Custom Slider" or just use +/- Buttons if native slider fails, 
-// BUT the user explicitely asked for a Slider. 
-// I will try to use the standard one. If it crashes, I will hot-swap.
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import api from '../services/api';
 
 const DebtAttackScreen = () => {
-    const [loading, setLoading] = useState(true);
-    const [analysis, setAnalysis] = useState(null);
     const [extraPayment, setExtraPayment] = useState(0);
+    const [strategy, setStrategy] = useState('snowball');
+    const [debts, setDebts] = useState([]);
     const [rawLiabilities, setRawLiabilities] = useState(null);
-    const [projectedSavings, setProjectedSavings] = useState(0);
+    const [analysis, setAnalysis] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [calculating, setCalculating] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState(null);
 
-    // Initial Fetch
-    useEffect(() => {
-        fetchDebtData();
-    }, []);
-
-    const fetchDebtData = async () => {
+    const fetchData = useCallback(async () => {
         try {
-            // Use the verify token we generated or the env override
-            // For the app to work "live" without us manually passing it, we hardcode the verify token 
-            // OR we expect backend to use its ENV override.
-            const response = await fetch('http://localhost:3000/debt');
-            const data = await response.json();
+            setError(null);
+            const data = await api.getDebtOverview();
 
-            if (data.success) {
+            if (data?.success) {
                 setAnalysis(data.analysis);
                 setRawLiabilities(data.raw_liabilities);
-                setLoading(false);
+
+                // Extract debts from analysis for display
+                if (data.raw_liabilities?.credit) {
+                    const formattedDebts = data.raw_liabilities.credit.map((d, index) => ({
+                        id: index + 1,
+                        name: d.name || 'Credit Card',
+                        apr: d.aprs?.find(a => a.apr_type === 'purchase_apr')?.apr_percentage || 19.99,
+                        balance: d.last_statement_balance || 0,
+                        payoffMonths: 12, // Will be updated by calculation
+                    }));
+                    setDebts(formattedDebts);
+                }
             }
-        } catch (error) {
-            console.error(error);
+        } catch (err) {
+            console.error('Error fetching debt data:', err);
+            setError('Failed to load debt data. Pull to refresh.');
+        } finally {
             setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchData();
+    }, [fetchData]);
+
+    // Recalculate when slider changes
+    const handleSliderChange = async (value) => {
+        setExtraPayment(value);
+
+        if (!rawLiabilities) return;
+
+        setCalculating(true);
+        try {
+            const data = await api.calculateDebt(value, rawLiabilities);
+            if (data?.success) {
+                setAnalysis(data.analysis);
+            }
+        } catch (err) {
+            console.error('Error calculating debt:', err);
+        } finally {
+            setCalculating(false);
         }
     };
 
-    const handleCalculate = async (val) => {
-        setExtraPayment(val);
-        // Debounce or just wait for slide complete? 
-        // For local responsiveness, we could estimate, but let's call API for accuracy
-        try {
-            const response = await fetch('http://localhost:3000/debt/calculate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    extra_payment: val,
-                    liabilities: rawLiabilities
-                })
-            });
-            const data = await response.json();
-            if (data.success) {
-                setAnalysis(data.analysis);
-                if (data.analysis.savings) {
-                    setProjectedSavings(data.analysis.savings.interest_saved_avalanche);
-                }
-            }
-        } catch (error) {
-            console.error(error);
+    // Get display values from analysis
+    const getStrategyData = () => {
+        if (!analysis?.strategies) {
+            return {
+                debtFreeDate: 'N/A',
+                monthsSooner: 0,
+                interestSaved: 0,
+            };
         }
+
+        const strategyData = strategy === 'snowball'
+            ? analysis.strategies.snowball
+            : analysis.strategies.avalanche;
+
+        const statusQuo = analysis.strategies.status_quo;
+
+        const payoffDate = strategyData?.payoff_date
+            ? new Date(strategyData.payoff_date + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+            : 'N/A';
+
+        return {
+            debtFreeDate: payoffDate,
+            monthsSooner: statusQuo?.months_to_payoff - strategyData?.months_to_payoff || 0,
+            interestSaved: Math.round(statusQuo?.total_interest - strategyData?.total_interest) || 0,
+        };
     };
+
+    const { debtFreeDate, monthsSooner, interestSaved } = getStrategyData();
+    const basePayment = 400;
+    const totalPayment = basePayment + extraPayment;
+
+    const renderDebtItem = (item, index) => (
+        <View key={item.id} style={styles.debtItem}>
+            <View style={styles.debtRank}>
+                <Text style={styles.debtRankText}>#{index + 1}</Text>
+            </View>
+            <View style={styles.debtContent}>
+                <Text style={styles.debtName}>{item.name}</Text>
+                <Text style={styles.debtApr}>{item.apr.toFixed(2)}% APR</Text>
+            </View>
+            <View style={styles.debtRight}>
+                <Text style={styles.debtBalance}>${item.balance.toLocaleString()}</Text>
+                <Text style={styles.debtPayoff}>Payoff: {item.payoffMonths} mo</Text>
+            </View>
+        </View>
+    );
 
     if (loading) {
         return (
-            <View style={[styles.container, styles.center]}>
+            <View style={[styles.container, styles.centerContent]}>
                 <ActivityIndicator size="large" color={COLORS.GOLD} />
+                <Text style={styles.loadingText}>Loading your debt plan...</Text>
             </View>
         );
     }
 
-    // Default empty analysis
-    const statusQuo = analysis?.strategies?.status_quo || {};
-    const avalanche = analysis?.strategies?.avalanche || {};
-    const totalDebt = analysis?.total_debt || 0;
-
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-            <Text style={styles.header}>Debt Attack Engine</Text>
+        <View style={styles.container}>
+            <StatusBar barStyle="light-content" backgroundColor={COLORS.BACKGROUND} />
 
-            {/* HERRO CARD */}
-            <View style={styles.heroCard}>
-                <Text style={styles.label}>TOTAL DEBT LOAD</Text>
-                <Text style={styles.amount}>${totalDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
-                <Text style={styles.subtext}>Your starting point.</Text>
+            {/* Header */}
+            <View style={styles.header}>
+                <TouchableOpacity style={styles.backButton}>
+                    <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Debt Attack Plan</Text>
+                <TouchableOpacity style={styles.saveButton}>
+                    <Text style={styles.saveText}>Save</Text>
+                </TouchableOpacity>
             </View>
 
-            {/* SLIDER SECTION */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Your Debts</Text>
-                {/* Dynamically render liabilities */}
-                {rawLiabilities && Object.entries(rawLiabilities).map(([key, list]) =>
-                    list && Array.isArray(list) && list.map((item, index) => (
-                        <View key={`${key}-${index}`} style={styles.liabilityCard}>
-                            <View>
-                                <Text style={styles.liabilityName}>{item.name || key === 'credit' ? 'Credit Card' : 'Loan'}</Text>
-                                <View style={styles.aprBadge}>
-                                    <Text style={styles.aprText}>
-                                        {item.aprs?.find(a => a.apr_type === 'purchase_apr')?.apr_percentage || 19.99}% APR
-                                    </Text>
-                                </View>
-                            </View>
-                            <Text style={styles.liabilityAmount}>${(item.last_statement_balance || item.last_payment_balance || 0).toFixed(2)}</Text>
-                        </View>
-                    ))
-                )}
-            </View>
-
-            {/* SLIDER SECTION */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Adjust Your Firepower</Text>
-                <Text style={styles.sliderLabel}>Extra Monthly Payment: <Text style={styles.goldText}>${Math.round(extraPayment)}</Text></Text>
-
-                {/* Note: In Expo Go / Web, native slider might need specific package. 
-                    If this component strictly fails, we replace with buttons. */}
-                <Slider
-                    style={{ width: '100%', height: 40 }}
-                    minimumValue={0}
-                    maximumValue={1000}
-                    step={50}
-                    minimumTrackTintColor={COLORS.GOLD}
-                    maximumTrackTintColor="#FFFFFF"
-                    thumbTintColor={COLORS.GOLD}
-                    value={extraPayment}
-                    onSlidingComplete={handleCalculate}
-                    onValueChange={(val) => setExtraPayment(val)}
-                />
-                <View style={styles.sliderRow}>
-                    <Text style={styles.sliderMin}>$0</Text>
-                    <Text style={styles.sliderMax}>$1,000</Text>
-                </View>
-            </View>
-
-            {/* RESULTS COMPARISON */}
-            <View style={styles.comparisonContainer}>
-                {/* STATUS QUO */}
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Status Quo</Text>
-                    <Text style={styles.dataLabel}>Payoff Date</Text>
-                    <Text style={styles.dataValue}>{statusQuo.payoff_date || 'N/A'}</Text>
-                    <Text style={styles.dataLabel}>Total Interest</Text>
-                    <Text style={styles.dataValue}>${(statusQuo.total_interest || 0).toFixed(0)}</Text>
-                </View>
-
-                {/* ATTACK PLAN */}
-                <View style={[styles.card, styles.goldBorder]}>
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>RECOMMENDED</Text>
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={COLORS.GOLD}
+                        colors={[COLORS.GOLD]}
+                    />
+                }
+            >
+                {/* Error Message */}
+                {error && (
+                    <View style={styles.errorContainer}>
+                        <Text style={styles.errorText}>{error}</Text>
                     </View>
-                    <Text style={[styles.cardTitle, { color: COLORS.GOLD }]}>Avalanche</Text>
-                    <Text style={styles.dataLabel}>Payoff Date</Text>
-                    <Text style={[styles.dataValue, { color: COLORS.WHITE }]}>{avalanche.payoff_date || 'N/A'}</Text>
-                    <Text style={styles.dataLabel}>Total Interest</Text>
-                    <Text style={[styles.dataValue, { color: COLORS.WHITE }]}>${(avalanche.total_interest || 0).toFixed(0)}</Text>
+                )}
+
+                {/* Main Results Card */}
+                <View style={styles.resultsCard}>
+                    <View style={styles.debtFreeSection}>
+                        <View style={styles.labelRow}>
+                            <Ionicons name="calendar" size={16} color="#4ADE80" />
+                            <Text style={styles.labelText}>DEBT-FREE DATE</Text>
+                        </View>
+                        <Text style={styles.debtFreeDate}>{debtFreeDate}</Text>
+                        {monthsSooner > 0 && (
+                            <View style={styles.soonerBadge}>
+                                <Ionicons name="trending-down" size={14} color="#4ADE80" />
+                                <Text style={styles.soonerText}>{monthsSooner} months sooner</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={styles.divider} />
+
+                    <View style={styles.interestSection}>
+                        <Text style={styles.interestLabel}>INTEREST SAVED</Text>
+                        <View style={styles.interestRow}>
+                            <Text style={styles.interestAmount}>
+                                ${interestSaved.toLocaleString()}
+                            </Text>
+                            <View style={styles.trophyIcon}>
+                                <MaterialCommunityIcons name="trophy" size={28} color={COLORS.GOLD} />
+                            </View>
+                        </View>
+                    </View>
+
+                    {calculating && (
+                        <View style={styles.calculatingOverlay}>
+                            <ActivityIndicator size="small" color={COLORS.GOLD} />
+                        </View>
+                    )}
                 </View>
-            </View>
 
-            {/* SAVINGS CARD */}
-            <View style={styles.savingsCard}>
-                <Text style={styles.savingsLabel}>POTENTIAL INTEREST SAVINGS</Text>
-                <Text style={styles.savingsAmount}>${projectedSavings.toFixed(2)}</Text>
-                <Text style={styles.disclaimer}>*Based on current Prime Rate of 4.45%</Text>
-            </View>
+                {/* Payment Slider Card */}
+                <View style={styles.sliderCard}>
+                    <Text style={styles.sliderLabel}>Extra Monthly Payment</Text>
+                    <View style={styles.paymentRow}>
+                        <Text style={styles.paymentAmount}>+${extraPayment}</Text>
+                        <Text style={styles.paymentSuffix}>/mo</Text>
+                        <Text style={styles.totalPayment}>Total: ${totalPayment}/mo</Text>
+                    </View>
+                    <Slider
+                        style={styles.slider}
+                        minimumValue={0}
+                        maximumValue={1000}
+                        step={50}
+                        value={extraPayment}
+                        onSlidingComplete={handleSliderChange}
+                        onValueChange={setExtraPayment}
+                        minimumTrackTintColor="#3B82F6"
+                        maximumTrackTintColor={COLORS.CARD_BORDER}
+                        thumbTintColor={COLORS.WHITE}
+                    />
+                    <View style={styles.sliderLabels}>
+                        <Text style={styles.sliderLabelText}>+$0</Text>
+                        <Text style={styles.sliderLabelText}>+$1,000</Text>
+                    </View>
+                </View>
 
-        </ScrollView>
+                {/* Strategy Section */}
+                <View style={styles.strategySection}>
+                    <Text style={styles.sectionTitle}>Strategy</Text>
+                    <View style={styles.strategyButtons}>
+                        <TouchableOpacity
+                            style={[
+                                styles.strategyButton,
+                                strategy === 'snowball' && styles.strategyButtonActive
+                            ]}
+                            onPress={() => setStrategy('snowball')}
+                        >
+                            <MaterialCommunityIcons
+                                name="snowflake"
+                                size={16}
+                                color={strategy === 'snowball' ? COLORS.WHITE : COLORS.TEXT_SECONDARY}
+                            />
+                            <Text style={[
+                                styles.strategyText,
+                                strategy === 'snowball' && styles.strategyTextActive
+                            ]}>
+                                Snowball
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[
+                                styles.strategyButton,
+                                strategy === 'avalanche' && styles.strategyButtonActive
+                            ]}
+                            onPress={() => setStrategy('avalanche')}
+                        >
+                            <MaterialCommunityIcons
+                                name="trending-up"
+                                size={16}
+                                color={strategy === 'avalanche' ? COLORS.WHITE : COLORS.TEXT_SECONDARY}
+                            />
+                            <Text style={[
+                                styles.strategyText,
+                                strategy === 'avalanche' && styles.strategyTextActive
+                            ]}>
+                                Avalanche
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                    <Text style={styles.strategyDescription}>
+                        <Text style={styles.strategyMethodLabel}>
+                            {strategy === 'snowball' ? 'Snowball method: ' : 'Avalanche method: '}
+                        </Text>
+                        {strategy === 'snowball'
+                            ? 'You pay off the smallest debts first to build momentum.'
+                            : 'You pay off highest interest debts first to save money.'}
+                    </Text>
+                </View>
+
+                {/* Debts List */}
+                <View style={styles.debtsSection}>
+                    <Text style={styles.sectionTitle}>Your Debts</Text>
+                    {debts.length > 0 ? (
+                        debts.map((debt, index) => renderDebtItem(debt, index))
+                    ) : (
+                        <View style={styles.emptyState}>
+                            <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.GREEN} />
+                            <Text style={styles.emptyText}>No debts found. You're debt free!</Text>
+                        </View>
+                    )}
+                </View>
+            </ScrollView>
+
+            {/* Bottom Action Button */}
+            <View style={styles.bottomAction}>
+                <TouchableOpacity style={styles.applyButton}>
+                    <Ionicons name="checkmark-circle" size={20} color={COLORS.WHITE} />
+                    <Text style={styles.applyText}>Apply This Plan</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0F172A', // Slate 900
+        backgroundColor: COLORS.BACKGROUND,
+        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 50,
     },
-    content: {
-        padding: SPACING.MEDIUM,
-        paddingBottom: 40,
-    },
-    center: {
+    centerContent: {
         justifyContent: 'center',
         alignItems: 'center',
     },
-    header: {
-        fontSize: 28,
-        color: COLORS.WHITE,
-        fontWeight: '800',
-        marginBottom: SPACING.LARGE,
+    loadingText: {
+        color: COLORS.TEXT_SECONDARY,
         marginTop: SPACING.MEDIUM,
-        letterSpacing: -1
     },
-    heroCard: {
-        backgroundColor: 'rgba(30, 41, 59, 0.7)',
-        padding: 30,
-        borderRadius: 24,
-        marginBottom: SPACING.LARGE,
+    scrollContent: {
+        paddingBottom: 120,
+    },
+
+    // Header
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
-        elevation: 10
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingVertical: SPACING.SMALL,
     },
-    label: {
-        color: '#94A3B8',
-        fontSize: 12,
-        letterSpacing: 2,
-        marginBottom: 8,
-        textTransform: 'uppercase',
-        fontWeight: '600'
+    backButton: {
+        padding: SPACING.SMALL,
     },
-    amount: {
+    headerTitle: {
         color: COLORS.WHITE,
-        fontSize: 48,
-        fontWeight: 'bold',
-        letterSpacing: -2
-    },
-    subtext: {
-        color: '#64748B',
-        fontSize: 14,
-        marginTop: 8,
-    },
-    section: {
-        marginBottom: 32,
-    },
-    sectionTitle: {
-        color: '#E2E8F0',
         fontSize: 18,
-        fontWeight: '700',
-        marginBottom: 16,
-        letterSpacing: 0.5
+        fontWeight: '600',
+    },
+    saveButton: {
+        padding: SPACING.SMALL,
+    },
+    saveText: {
+        color: '#3B82F6',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+
+    // Error
+    errorContainer: {
+        margin: SPACING.MEDIUM,
+        padding: SPACING.MEDIUM,
+        backgroundColor: 'rgba(244, 67, 54, 0.1)',
+        borderRadius: BORDER_RADIUS.MEDIUM,
+    },
+    errorText: {
+        color: '#F44336',
+        textAlign: 'center',
+    },
+
+    // Results Card
+    resultsCard: {
+        margin: SPACING.MEDIUM,
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: BORDER_RADIUS.XL,
+        padding: SPACING.LARGE,
+        position: 'relative',
+    },
+    calculatingOverlay: {
+        position: 'absolute',
+        top: SPACING.SMALL,
+        right: SPACING.SMALL,
+    },
+    debtFreeSection: {
+        marginBottom: SPACING.MEDIUM,
+    },
+    labelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: SPACING.SMALL,
+    },
+    labelText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 11,
+        letterSpacing: 1,
+        marginLeft: SPACING.SMALL,
+    },
+    debtFreeDate: {
+        color: COLORS.WHITE,
+        fontSize: 36,
+        fontWeight: 'bold',
+        marginBottom: SPACING.SMALL,
+    },
+    soonerBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    soonerText: {
+        color: '#4ADE80',
+        fontSize: 14,
+        marginLeft: SPACING.TINY,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: COLORS.CARD_BORDER,
+        marginVertical: SPACING.MEDIUM,
+    },
+    interestSection: {},
+    interestLabel: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 11,
+        letterSpacing: 1,
+        marginBottom: SPACING.SMALL,
+    },
+    interestRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    interestAmount: {
+        color: '#4ADE80',
+        fontSize: 32,
+        fontWeight: 'bold',
+    },
+    trophyIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: 'rgba(201, 162, 39, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    // Slider Card
+    sliderCard: {
+        marginHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: BORDER_RADIUS.XL,
+        padding: SPACING.LARGE,
     },
     sliderLabel: {
-        color: '#CBD5E1',
-        fontSize: 14,
-        marginBottom: 12,
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 13,
+        marginBottom: SPACING.SMALL,
     },
-    goldText: {
-        color: '#FCD34D',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    sliderRow: {
+    paymentRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 8,
+        alignItems: 'baseline',
+        marginBottom: SPACING.MEDIUM,
     },
-    sliderMin: { color: '#64748B', fontSize: 12, fontWeight: '600' },
-    sliderMax: { color: '#64748B', fontSize: 12, fontWeight: '600' },
-
-    comparisonContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: SPACING.LARGE,
-        gap: 12
-    },
-    card: {
-        flex: 1,
-        backgroundColor: 'rgba(30, 41, 59, 0.4)', // Glass
-        padding: 20,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.05)',
-    },
-    goldBorder: {
-        borderWidth: 1,
-        borderColor: '#FCD34D', // Amber 300
-        backgroundColor: 'rgba(252, 211, 77, 0.05)',
-    },
-    cardTitle: {
-        color: '#E2E8F0',
-        fontSize: 14,
-        fontWeight: 'bold',
-        marginBottom: 16,
-        textTransform: 'uppercase',
-        letterSpacing: 1
-    },
-    dataLabel: {
-        color: '#94A3B8',
-        fontSize: 11,
-        marginBottom: 4,
-        fontWeight: '600'
-    },
-    dataValue: {
+    paymentAmount: {
         color: COLORS.WHITE,
-        fontSize: 20,
-        fontWeight: '700',
-        marginBottom: 12,
-        letterSpacing: -0.5
-    },
-    badge: {
-        position: 'absolute',
-        top: -10,
-        right: 12,
-        backgroundColor: '#FCD34D',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-        shadowColor: '#FCD34D',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-    },
-    badgeText: {
-        color: '#0F172A',
-        fontSize: 10,
+        fontSize: 32,
         fontWeight: 'bold',
     },
-    savingsCard: {
-        backgroundColor: 'rgba(34, 197, 94, 0.1)', // Green tint
-        padding: 24,
-        borderRadius: 24,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#22c55e', // Green 500
-        marginBottom: 40
+    paymentSuffix: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 16,
+        marginLeft: SPACING.TINY,
     },
-    savingsLabel: {
-        color: '#4ADE80', // Green 400
-        fontSize: 12,
-        fontWeight: '800',
-        letterSpacing: 2,
-        marginBottom: 8,
-        textTransform: 'uppercase'
+    totalPayment: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 13,
+        marginLeft: 'auto',
     },
-    savingsAmount: {
-        color: '#4ADE80',
-        fontSize: 42,
-        fontWeight: '800',
-        marginBottom: 12,
-        letterSpacing: -1
+    slider: {
+        width: '100%',
+        height: 40,
     },
-    disclaimer: {
-        color: '#64748B',
-        fontSize: 11,
-        fontStyle: 'italic',
-    },
-    liabilityCard: {
-        backgroundColor: 'rgba(30, 41, 59, 0.4)',
-        padding: 16,
-        borderRadius: 16,
-        marginBottom: 12,
+    sliderLabels: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        borderLeftWidth: 4,
-        borderLeftColor: '#F43F5E', // Rose 500
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.05)'
     },
-    liabilityName: {
-        color: '#E2E8F0',
+    sliderLabelText: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 12,
+    },
+
+    // Strategy Section
+    strategySection: {
+        paddingHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.LARGE,
+    },
+    sectionTitle: {
+        color: COLORS.WHITE,
+        fontSize: 18,
+        fontWeight: '600',
+        marginBottom: SPACING.MEDIUM,
+    },
+    strategyButtons: {
+        flexDirection: 'row',
+        gap: SPACING.SMALL,
+        marginBottom: SPACING.MEDIUM,
+    },
+    strategyButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: SPACING.SMALL,
+        paddingHorizontal: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        backgroundColor: COLORS.CARD_BG,
+    },
+    strategyButtonActive: {
+        backgroundColor: '#2563EB',
+    },
+    strategyText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 14,
+        marginLeft: SPACING.SMALL,
+    },
+    strategyTextActive: {
+        color: COLORS.WHITE,
+    },
+    strategyDescription: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 13,
+        lineHeight: 20,
+    },
+    strategyMethodLabel: {
+        color: '#3B82F6',
+    },
+
+    // Debts Section
+    debtsSection: {
+        paddingHorizontal: SPACING.MEDIUM,
+    },
+    debtItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.CARD_BG,
+        padding: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        marginBottom: SPACING.SMALL,
+    },
+    debtRank: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: COLORS.CARD_BORDER,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: SPACING.MEDIUM,
+    },
+    debtRankText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    debtContent: {
+        flex: 1,
+    },
+    debtName: {
+        color: COLORS.WHITE,
         fontSize: 15,
         fontWeight: '600',
-        marginBottom: 4
+        marginBottom: 2,
     },
-    liabilityAmount: {
+    debtApr: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 12,
+    },
+    debtRight: {
+        alignItems: 'flex-end',
+    },
+    debtBalance: {
+        color: COLORS.WHITE,
+        fontSize: 15,
+        fontWeight: '600',
+        marginBottom: 2,
+    },
+    debtPayoff: {
+        color: '#3B82F6',
+        fontSize: 12,
+    },
+
+    // Empty State
+    emptyState: {
+        alignItems: 'center',
+        padding: SPACING.XL,
+    },
+    emptyText: {
+        color: COLORS.TEXT_MUTED,
+        marginTop: SPACING.MEDIUM,
+        textAlign: 'center',
+    },
+
+    // Bottom Action
+    bottomAction: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: SPACING.MEDIUM,
+        paddingBottom: SPACING.LARGE,
+        backgroundColor: COLORS.BACKGROUND,
+    },
+    applyButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#2563EB',
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+    },
+    applyText: {
         color: COLORS.WHITE,
         fontSize: 16,
-        fontWeight: 'bold'
+        fontWeight: '600',
+        marginLeft: SPACING.SMALL,
     },
-    aprBadge: {
-        backgroundColor: 'rgba(244, 63, 94, 0.1)', // Rose tint
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        alignSelf: 'flex-start'
-    },
-    aprText: {
-        color: '#F43F5E',
-        fontSize: 11,
-        fontWeight: '700'
-    }
 });
 
 export default DebtAttackScreen;
