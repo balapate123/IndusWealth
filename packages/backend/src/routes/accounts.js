@@ -1,17 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/db');
-
-// Default user ID for MVP (test user)
-const DEFAULT_USER_ID = 1;
+const { authenticateToken } = require('../middleware/auth');
 
 // GET /accounts
 // Returns linked accounts with balances from database cache
-router.get('/', async (req, res) => {
+// Requires authentication
+router.get('/', authenticateToken, async (req, res) => {
     console.log('\n📥 [GET /accounts] Request received');
 
     try {
-        const userId = parseInt(req.headers['x-user-id']) || DEFAULT_USER_ID;
+        const userId = req.user.id;
 
         // Get accounts from database cache
         const accounts = await db.getAccounts(userId);

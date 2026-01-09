@@ -3,17 +3,16 @@ const router = express.Router();
 const plaidService = require('../services/plaid');
 const watchdogService = require('../services/watchdog');
 const db = require('../services/db');
-
-// Default user ID for MVP (test user)
-const DEFAULT_USER_ID = 1;
+const { authenticateToken } = require('../middleware/auth');
 
 // GET /transactions
 // Fetches transactions from cache or Plaid (if stale)
-router.get('/', async (req, res) => {
+// Requires authentication
+router.get('/', authenticateToken, async (req, res) => {
     console.log('\n📥 [GET /transactions] Request received');
 
     try {
-        const userId = parseInt(req.headers['x-user-id']) || DEFAULT_USER_ID;
+        const userId = req.user.id;
         const forceRefresh = req.query.refresh === 'true';
 
         // Check if we need to sync from Plaid (conservative: 24 hours)
@@ -25,9 +24,8 @@ router.get('/', async (req, res) => {
         if (needsSync) {
             console.log('   🔄 Cache stale or force refresh - syncing from Plaid...');
 
-            // Get user's Plaid access token
-            const user = await db.getUserById(userId);
-            const accessToken = user?.plaid_access_token || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
+            // Get user's Plaid access token from the authenticated user
+            const accessToken = req.user.plaidAccessToken || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
 
             if (accessToken) {
                 try {

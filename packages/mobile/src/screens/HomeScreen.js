@@ -281,7 +281,10 @@ const HomeScreen = ({ navigation }) => {
 
                     {/* Action Buttons */}
                     <View style={styles.actionButtons}>
-                        <TouchableOpacity style={styles.addMoneyButton}>
+                        <TouchableOpacity
+                            style={styles.addMoneyButton}
+                            onPress={() => navigation.navigate('ConnectBank')}
+                        >
                             <Ionicons name="add" size={18} color={COLORS.BACKGROUND} />
                             <Text style={styles.addMoneyText}>Add Account</Text>
                         </TouchableOpacity>

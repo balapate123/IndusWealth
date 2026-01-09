@@ -3,11 +3,37 @@
 // Find it with: ipconfig (Windows) or ifconfig (Mac/Linux)
 // Replace with your actual IP when testing on a physical device
 
+import cache from './cache';
+
 const API_BASE_URL = __DEV__
     ? 'http://192.168.2.34:3000'  // Your local IP
     : 'https://api.induswealth.com';
 
-// Helper for making API requests
+// In-memory token for faster access
+let cachedToken = null;
+
+// Initialize token from storage on app start
+export const initializeAuth = async () => {
+    cachedToken = await cache.getAuthToken();
+    return cachedToken;
+};
+
+// Get the current auth token
+export const getToken = () => cachedToken;
+
+// Set auth token (saves to both memory and storage)
+export const setToken = async (token) => {
+    cachedToken = token;
+    await cache.setAuthToken(token);
+};
+
+// Clear auth token
+export const clearToken = async () => {
+    cachedToken = null;
+    await cache.clearAuthToken();
+};
+
+// Helper for making API requests with JWT authentication
 const apiRequest = async (endpoint, options = {}) => {
     try {
         const headers = {
@@ -15,8 +41,12 @@ const apiRequest = async (endpoint, options = {}) => {
             ...options.headers,
         };
 
-        // Inject User ID if available (simple auth for MVP)
-        // In a real app, this would be a Bearer token
+        // Add JWT Bearer token if available
+        if (cachedToken) {
+            headers['Authorization'] = `Bearer ${cachedToken}`;
+        }
+
+        // Legacy support: Also inject User ID if available (for backwards compatibility)
         if (typeof global.CURRENT_USER_ID !== 'undefined') {
             headers['x-user-id'] = global.CURRENT_USER_ID.toString();
         }
@@ -25,6 +55,19 @@ const apiRequest = async (endpoint, options = {}) => {
             headers,
             ...options,
         });
+
+        // Handle 401 Unauthorized - token expired or invalid
+        if (response.status === 401) {
+            const errorData = await response.json().catch(() => ({}));
+
+            // Clear invalid token
+            if (errorData.code === 'TOKEN_INVALID' || errorData.code === 'TOKEN_REQUIRED') {
+                await clearToken();
+                await cache.clearUserCache();
+            }
+
+            throw new Error(errorData.message || 'Session expired. Please log in again.');
+        }
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
@@ -42,16 +85,58 @@ const apiRequest = async (endpoint, options = {}) => {
 export const api = {
     // Authentication
     auth: {
-        login: (email, password) => apiRequest('/users/login', {
-            method: 'POST',
-            body: JSON.stringify({ email, password }),
-        }),
-        signup: (name, email, password) => apiRequest('/users/signup', {
-            method: 'POST',
-            body: JSON.stringify({ name, email, password }),
-        }),
+        login: async (email, password) => {
+            const response = await apiRequest('/users/login', {
+                method: 'POST',
+                body: JSON.stringify({ email, password }),
+            });
+
+            // Save token on successful login
+            if (response.success && response.token) {
+                await setToken(response.token);
+                global.CURRENT_USER_ID = response.user.id;
+            }
+
+            return response;
+        },
+
+        signup: async (name, email, password) => {
+            const response = await apiRequest('/users/signup', {
+                method: 'POST',
+                body: JSON.stringify({ name, email, password }),
+            });
+
+            // Save token on successful signup
+            if (response.success && response.token) {
+                await setToken(response.token);
+                global.CURRENT_USER_ID = response.user.id;
+            }
+
+            return response;
+        },
+
         me: () => apiRequest('/users/me'),
+
+        logout: async () => {
+            try {
+                await apiRequest('/users/logout', { method: 'POST' });
+            } catch (error) {
+                // Ignore logout errors
+            }
+            await cache.logout();
+        },
+
+        updateProfile: (name) => apiRequest('/users/profile', {
+            method: 'PUT',
+            body: JSON.stringify({ name }),
+        }),
+
+        changePassword: (currentPassword, newPassword) => apiRequest('/users/password', {
+            method: 'PUT',
+            body: JSON.stringify({ currentPassword, newPassword }),
+        }),
     },
+
     // Accounts & Balance
     getAccounts: () => apiRequest('/accounts'),
 
@@ -81,14 +166,25 @@ export const api = {
         }),
 
     // Plaid Link
-    createLinkToken: () => apiRequest('/plaid/link-token', { method: 'POST' }),
+    createLinkToken: () => apiRequest('/plaid/create_link_token', { method: 'POST' }),
 
     exchangePublicToken: (publicToken) =>
-        apiRequest('/plaid/exchange-token', {
+        apiRequest('/plaid/exchange_public_token', {
             method: 'POST',
             body: JSON.stringify({ public_token: publicToken }),
         }),
+
+    saveBankConnection: (accessToken, itemId) =>
+        apiRequest('/plaid/save_connection', {
+            method: 'POST',
+            body: JSON.stringify({ access_token: accessToken, item_id: itemId }),
+        }),
+
+    disconnectBank: () => apiRequest('/plaid/disconnect', { method: 'DELETE' }),
 };
+
+// Check if user is authenticated
+export const isAuthenticated = () => !!cachedToken;
 
 // Configuration for updating the API URL
 export const setApiBaseUrl = (url) => {

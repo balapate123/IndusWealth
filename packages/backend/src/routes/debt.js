@@ -2,12 +2,15 @@ const express = require('express');
 const router = express.Router();
 const plaidService = require('../services/plaid');
 const debtCalculator = require('../services/debt_calculator');
+const { authenticateToken } = require('../middleware/auth');
 
 // GET /debt
 // Fetches liabilities and runs default calculation (Zero Extra Payment)
-router.get('/', async (req, res) => {
+// Requires authentication
+router.get('/', authenticateToken, async (req, res) => {
     try {
-        const accessToken = req.headers['plaid-access-token'] || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
+        // Use user's Plaid access token or fallback to override
+        const accessToken = req.user.plaidAccessToken || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
 
         // 1. Fetch Liabilities
         const liabilities = await plaidService.getLiabilities(accessToken);
@@ -28,20 +31,17 @@ router.get('/', async (req, res) => {
 
 // POST /debt/calculate
 // Recalculates based on user slide input (Extra Payment)
-router.post('/calculate', async (req, res) => {
+// Requires authentication
+router.post('/calculate', authenticateToken, async (req, res) => {
     try {
         const { extra_payment, liabilities } = req.body;
 
-        // If frontend passes cached liabilities, use them. Otherwise fetch fresh? 
-        // For efficiency, frontend should pass the liabilities it already has.
-        // Or if we stick to state-less, we fetch again (slower). 
-        // Let's assume frontend passes 'raw_liabilities' back to us.
-
+        // If frontend passes cached liabilities, use them. Otherwise fetch fresh
         let debtsData = liabilities;
 
         // Fallback: fetch if not provided
         if (!debtsData) {
-            const accessToken = req.headers['plaid-access-token'] || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
+            const accessToken = req.user.plaidAccessToken || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
             debtsData = await plaidService.getLiabilities(accessToken);
         }
 

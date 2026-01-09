@@ -55,16 +55,13 @@ const SignupScreen = ({ navigation }) => {
                 // Set global user ID
                 global.CURRENT_USER_ID = response.user.id;
 
-                // Show success and navigate
+                // Show success and navigate to bank connection
                 Alert.alert(
                     'Welcome!',
-                    'Your account has been created successfully.',
+                    'Your account has been created successfully. Let\'s connect your bank.',
                     [{
-                        text: 'Get Started',
-                        onPress: () => navigation.reset({
-                            index: 0,
-                            routes: [{ name: 'Main' }],
-                        })
+                        text: 'Connect Bank',
+                        onPress: () => navigation.navigate('ConnectBank', { isOnboarding: true })
                     }]
                 );
             } else {

@@ -10,6 +10,7 @@ import DebtAttackScreen from '../screens/DebtAttackScreen';
 import AllTransactionsScreen from '../screens/AllTransactionsScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
+import ConnectBankScreen from '../screens/ConnectBankScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { COLORS, BORDER_RADIUS } from '../constants/theme';
 import cache from '../services/cache';
@@ -94,6 +95,7 @@ const AuthStack = () => {
         >
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
+            <Stack.Screen name="ConnectBank" component={ConnectBankScreen} />
         </Stack.Navigator>
     );
 };
@@ -106,10 +108,18 @@ const AppNavigator = () => {
     useEffect(() => {
         const checkSession = async () => {
             try {
+                // Initialize auth token from storage
+                const { initializeAuth } = require('../services/api');
+                const token = await initializeAuth();
+
+                // Check for cached user
                 const cachedUser = await cache.getCachedUser();
-                if (cachedUser) {
+                if (cachedUser && token) {
                     global.CURRENT_USER_ID = cachedUser.id;
                     setUser(cachedUser);
+                } else if (cachedUser && !token) {
+                    // User cached but no token - clear stale session
+                    await cache.clearUserCache();
                 }
             } catch (error) {
                 console.error('Session check failed:', error);
@@ -142,6 +152,13 @@ const AppNavigator = () => {
                 <Stack.Screen
                     name="AllTransactions"
                     component={AllTransactionsScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="ConnectBank"
+                    component={ConnectBankScreen}
                     options={{
                         presentation: 'card',
                     }}

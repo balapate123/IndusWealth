@@ -1,16 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const watchdogService = require('../services/watchdog');
+const { authenticateToken } = require('../middleware/auth');
 
 // GET /watchdog
 // Returns recurring expense analysis for WatchdogScreen
-router.get('/', async (req, res) => {
+// Requires authentication
+router.get('/', authenticateToken, async (req, res) => {
     console.log('\n📥 [GET /watchdog] Request received');
     console.log('   📦 [DATA SOURCE: MOCK] Using mock recurring expenses\n');
 
     try {
         // Category-based recurring expenses detection
-        // In production, this would analyze transaction history patterns
+        // In production, this would analyze transaction history patterns for this user
         const recurringExpenses = [
             {
                 id: 1,
@@ -83,9 +85,13 @@ router.get('/', async (req, res) => {
 
 // POST /watchdog/action
 // Handle actions like negotiate, stop, etc.
-router.post('/action', async (req, res) => {
+// Requires authentication
+router.post('/action', authenticateToken, async (req, res) => {
     try {
         const { expenseId, action } = req.body;
+        const userId = req.user.id;
+
+        console.log(`📝 [POST /watchdog/action] User ${userId}: ${action} on expense ${expenseId}`);
 
         // In production, this would update the expense status in the database
         res.json({

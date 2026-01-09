@@ -5,7 +5,43 @@ const CACHE_KEYS = {
     TRANSACTIONS: '@induswealth_transactions',
     ACCOUNTS: '@induswealth_accounts',
     USER: '@induswealth_user',
+    AUTH_TOKEN: '@induswealth_auth_token',
     LAST_FETCH: '@induswealth_last_fetch',
+};
+
+// ============ AUTH TOKEN ============
+
+export const getAuthToken = async () => {
+    try {
+        const token = await AsyncStorage.getItem(CACHE_KEYS.AUTH_TOKEN);
+        return token;
+    } catch (error) {
+        console.error('Error reading auth token:', error);
+        return null;
+    }
+};
+
+export const setAuthToken = async (token) => {
+    try {
+        if (token) {
+            await AsyncStorage.setItem(CACHE_KEYS.AUTH_TOKEN, token);
+            console.log('🔐 [CACHE] Auth token saved');
+        } else {
+            await AsyncStorage.removeItem(CACHE_KEYS.AUTH_TOKEN);
+            console.log('🔐 [CACHE] Auth token cleared');
+        }
+    } catch (error) {
+        console.error('Error saving auth token:', error);
+    }
+};
+
+export const clearAuthToken = async () => {
+    try {
+        await AsyncStorage.removeItem(CACHE_KEYS.AUTH_TOKEN);
+        console.log('🔐 [CACHE] Auth token cleared');
+    } catch (error) {
+        console.error('Error clearing auth token:', error);
+    }
 };
 
 // ============ TRANSACTIONS ============
@@ -124,7 +160,26 @@ export const isCacheStale = async (type = 'transactions', maxAgeMinutes = 5) => 
     return minutesSinceFetch > maxAgeMinutes;
 };
 
+// Full logout - clears all user data
+export const logout = async () => {
+    try {
+        await clearAuthToken();
+        await clearUserCache();
+        await clearAllCache();
+        global.CURRENT_USER_ID = undefined;
+        global.AUTH_TOKEN = undefined;
+        console.log('🚪 [CACHE] Full logout completed');
+    } catch (error) {
+        console.error('Error during logout:', error);
+    }
+};
+
 export default {
+    // Auth
+    getAuthToken,
+    setAuthToken,
+    clearAuthToken,
+    // Data
     getCachedTransactions,
     setCachedTransactions,
     getCachedAccounts,
@@ -135,4 +190,5 @@ export default {
     clearAllCache,
     getLastFetchTime,
     isCacheStale,
+    logout,
 };
