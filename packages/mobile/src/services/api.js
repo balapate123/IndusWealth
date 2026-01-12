@@ -181,6 +181,13 @@ export const api = {
         }),
 
     disconnectBank: () => apiRequest('/plaid/disconnect', { method: 'DELETE' }),
+
+    // Analytics
+    getAnalytics: (period = 30) => apiRequest(`/analytics?period=${period}`),
+    getMonthlyAnalytics: () => apiRequest('/analytics/monthly'),
+
+    // Account-specific transactions
+    getAccountTransactions: (accountId) => apiRequest(`/transactions?account_id=${accountId}`),
 };
 
 // Check if user is authenticated

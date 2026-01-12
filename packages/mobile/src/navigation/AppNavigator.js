@@ -8,6 +8,8 @@ import HomeScreen from '../screens/HomeScreen';
 import WatchdogScreen from '../screens/WatchdogScreen';
 import DebtAttackScreen from '../screens/DebtAttackScreen';
 import AllTransactionsScreen from '../screens/AllTransactionsScreen';
+import AnalyticsScreen from '../screens/AnalyticsScreen';
+import AccountTransactionsScreen from '../screens/AccountTransactionsScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import ConnectBankScreen from '../screens/ConnectBankScreen';
@@ -159,6 +161,20 @@ const AppNavigator = () => {
                 <Stack.Screen
                     name="ConnectBank"
                     component={ConnectBankScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="Analytics"
+                    component={AnalyticsScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="AccountTransactions"
+                    component={AccountTransactionsScreen}
                     options={{
                         presentation: 'card',
                     }}

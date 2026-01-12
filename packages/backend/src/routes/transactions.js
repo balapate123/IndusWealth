@@ -60,9 +60,16 @@ router.get('/', authenticateToken, async (req, res) => {
         }
 
         // Get transactions from database
-        transactions = await db.getTransactions(userId, 100);
+        // Support filtering by account_id
+        const accountId = req.query.account_id;
+        if (accountId && accountId !== 'all') {
+            transactions = await db.getTransactionsByAccount(userId, accountId, 100);
+            console.log(`   🔍 Filtering by account: ${accountId}`);
+        } else {
+            transactions = await db.getTransactions(userId, 100);
+        }
 
-        if (transactions.length === 0) {
+        if (transactions.length === 0 && !accountId) {
             console.log('   📦 [DATA SOURCE: MOCK] No cached data, using mock transactions');
             dataSource = 'MOCK';
             transactions = getMockTransactions();

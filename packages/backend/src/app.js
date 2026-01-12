@@ -14,6 +14,7 @@ app.use('/debt', require('./routes/debt'));
 app.use('/accounts', require('./routes/accounts'));
 app.use('/watchdog', require('./routes/watchdog'));
 app.use('/users', require('./routes/users'));
+app.use('/analytics', require('./routes/analytics'));
 
 app.get('/', (req, res) => {
     res.send('IndusWealth Backend Running');

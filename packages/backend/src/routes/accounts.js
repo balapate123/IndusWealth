@@ -35,12 +35,18 @@ router.get('/', authenticateToken, async (req, res) => {
 
         console.log(`   📦 [DATA SOURCE: DATABASE] Returning ${accounts.length} cached accounts\n`);
 
-        // Calculate total balance
+        // Calculate total balance (all accounts)
         const totalBalance = accounts.reduce((sum, acc) => sum + parseFloat(acc.current_balance || 0), 0);
+
+        // Calculate liquid cash (only checking, savings, and depository accounts)
+        const liquidAccountTypes = ['checking', 'savings', 'depository'];
+        const liquidCash = accounts
+            .filter(acc => liquidAccountTypes.includes(acc.type) || liquidAccountTypes.includes(acc.subtype))
+            .reduce((sum, acc) => sum + parseFloat(acc.current_balance || 0), 0);
 
         // Format accounts for frontend
         const formattedAccounts = [
-            { id: 'all', name: 'All Accounts', type: 'aggregate', balance: totalBalance },
+            { id: 'all', name: 'All Accounts', type: 'aggregate', balance: liquidCash },
             ...accounts.map(acc => ({
                 id: acc.plaid_account_id,
                 name: acc.name,
@@ -57,6 +63,7 @@ router.get('/', authenticateToken, async (req, res) => {
             success: true,
             accounts: formattedAccounts,
             total_balance: totalBalance,
+            liquid_cash: liquidCash,
             change_percent: 2.4, // TODO: Calculate from historical data
             _meta: { source: 'DATABASE' }
         });

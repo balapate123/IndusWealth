@@ -70,7 +70,8 @@ const HomeScreen = ({ navigation }) => {
 
                 if (cachedAccounts) {
                     setAccounts(cachedAccounts.accounts || []);
-                    setTotalCash(cachedAccounts.total_balance || 0);
+                    // Use liquid_cash for display (only checking/savings accounts)
+                    setTotalCash(cachedAccounts.liquid_cash || cachedAccounts.total_balance || 0);
                     setChangePercent(cachedAccounts.change_percent || 0);
                 }
 
@@ -89,7 +90,8 @@ const HomeScreen = ({ navigation }) => {
 
             if (accountsData?.success) {
                 setAccounts(accountsData.accounts || []);
-                setTotalCash(accountsData.total_balance || 0);
+                // Use liquid_cash for display (only checking/savings accounts)
+                setTotalCash(accountsData.liquid_cash || accountsData.total_balance || 0);
                 setChangePercent(accountsData.change_percent || 0);
                 // Cache the accounts data
                 await cache.setCachedAccounts(accountsData);
@@ -288,7 +290,10 @@ const HomeScreen = ({ navigation }) => {
                             <Ionicons name="add" size={18} color={COLORS.BACKGROUND} />
                             <Text style={styles.addMoneyText}>Add Account</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.transferButton}>
+                        <TouchableOpacity
+                            style={styles.transferButton}
+                            onPress={() => navigation.navigate('Analytics')}
+                        >
                             <Ionicons name="analytics" size={18} color={COLORS.WHITE} />
                             <Text style={styles.transferText}>Analytics</Text>
                         </TouchableOpacity>
@@ -309,7 +314,13 @@ const HomeScreen = ({ navigation }) => {
                                 styles.accountTab,
                                 selectedAccount === account.id && styles.accountTabActive
                             ]}
-                            onPress={() => setSelectedAccount(account.id)}
+                            onPress={() => {
+                                setSelectedAccount(account.id);
+                                // Navigate to account transactions for non-aggregate accounts
+                                if (account.type !== 'aggregate') {
+                                    navigation.navigate('AccountTransactions', { account });
+                                }
+                            }}
                         >
                             {account.type === 'aggregate' ? (
                                 <Ionicons
