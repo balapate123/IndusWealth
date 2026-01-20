@@ -301,47 +301,57 @@ const HomeScreen = ({ navigation }) => {
                 </View>
 
                 {/* Account Filters */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.accountFilters}
-                    contentContainerStyle={styles.accountFiltersContent}
-                >
-                    {accounts.map((account) => (
-                        <TouchableOpacity
-                            key={account.id}
-                            style={[
-                                styles.accountTab,
-                                selectedAccount === account.id && styles.accountTabActive
-                            ]}
-                            onPress={() => {
-                                setSelectedAccount(account.id);
-                                // Navigate to account transactions for non-aggregate accounts
-                                if (account.type !== 'aggregate') {
-                                    navigation.navigate('AccountTransactions', { account });
-                                }
-                            }}
+                {accounts.filter(acc => acc.type !== 'aggregate').length > 0 ? (
+                    <View style={styles.accountFiltersWrapper}>
+                        <View style={styles.accountFiltersHeader}>
+                            <Text style={styles.accountFiltersLabel}>ACCOUNTS</Text>
+                            <TouchableOpacity onPress={() => navigation.navigate('AllAccounts')}>
+                                <Text style={styles.manageText}>Manage</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.accountFilters}
+                            contentContainerStyle={styles.accountFiltersContent}
                         >
-                            {account.type === 'aggregate' ? (
-                                <Ionicons
-                                    name="grid"
-                                    size={16}
-                                    color={selectedAccount === account.id ? COLORS.WHITE : COLORS.TEXT_SECONDARY}
-                                />
-                            ) : (
-                                <View style={styles.bankLogo}>
-                                    <Text style={styles.bankLogoText}>{account.bank?.[0] || 'A'}</Text>
-                                </View>
-                            )}
-                            <Text style={[
-                                styles.accountTabText,
-                                selectedAccount === account.id && styles.accountTabTextActive
-                            ]}>
-                                {account.name}
-                            </Text>
+                            {accounts.filter(acc => acc.type !== 'aggregate').map((account) => (
+                                <TouchableOpacity
+                                    key={account.id}
+                                    style={[
+                                        styles.accountTab,
+                                        selectedAccount === account.id && styles.accountTabActive
+                                    ]}
+                                    onPress={() => {
+                                        setSelectedAccount(account.id);
+                                        navigation.navigate('AccountTransactions', { account });
+                                    }}
+                                >
+                                    <View style={styles.bankLogo}>
+                                        <Text style={styles.bankLogoText}>{account.bank?.[0] || account.name?.[0] || 'A'}</Text>
+                                    </View>
+                                    <Text style={[
+                                        styles.accountTabText,
+                                        selectedAccount === account.id && styles.accountTabTextActive
+                                    ]}>
+                                        {account.name}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                ) : (
+                    <View style={styles.noAccountsPrompt}>
+                        <Text style={styles.noAccountsText}>Connect a bank account to get started</Text>
+                        <TouchableOpacity
+                            style={styles.connectPromptButton}
+                            onPress={() => navigation.navigate('ConnectBank')}
+                        >
+                            <Ionicons name="add" size={16} color={COLORS.BACKGROUND} />
+                            <Text style={styles.connectPromptText}>Connect Account</Text>
                         </TouchableOpacity>
-                    ))}
-                </ScrollView>
+                    </View>
+                )}
 
                 {/* Error Message */}
                 {error && (
@@ -587,6 +597,61 @@ const styles = StyleSheet.create({
     },
     accountTabTextActive: {
         color: COLORS.WHITE,
+    },
+
+    // Account Filters Wrapper
+    accountFiltersWrapper: {
+        paddingHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+    },
+    accountFiltersHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.SMALL,
+    },
+    accountFiltersLabel: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 12,
+        fontWeight: '600',
+        letterSpacing: 1,
+    },
+    manageText: {
+        color: '#3B82F6',
+        fontSize: 13,
+        fontWeight: '500',
+    },
+
+    // No Accounts Prompt
+    noAccountsPrompt: {
+        marginHorizontal: SPACING.MEDIUM,
+        marginVertical: SPACING.MEDIUM,
+        padding: SPACING.LARGE,
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: BORDER_RADIUS.LARGE,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+        borderStyle: 'dashed',
+        alignItems: 'center',
+    },
+    noAccountsText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 14,
+        marginBottom: SPACING.MEDIUM,
+    },
+    connectPromptButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.GREEN,
+        paddingVertical: SPACING.SMALL,
+        paddingHorizontal: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+    },
+    connectPromptText: {
+        color: COLORS.BACKGROUND,
+        fontSize: 13,
+        fontWeight: '600',
+        marginLeft: 4,
     },
 
     // Error

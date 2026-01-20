@@ -14,6 +14,7 @@ import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import ConnectBankScreen from '../screens/ConnectBankScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import AllAccountsScreen from '../screens/AllAccountsScreen';
 import { COLORS, BORDER_RADIUS } from '../constants/theme';
 import cache from '../services/cache';
 
@@ -175,6 +176,13 @@ const AppNavigator = () => {
                 <Stack.Screen
                     name="AccountTransactions"
                     component={AccountTransactionsScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="AllAccounts"
+                    component={AllAccountsScreen}
                     options={{
                         presentation: 'card',
                     }}

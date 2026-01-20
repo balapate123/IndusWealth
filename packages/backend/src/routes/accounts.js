@@ -16,20 +16,17 @@ router.get('/', authenticateToken, async (req, res) => {
         const accounts = await db.getAccounts(userId);
 
         if (accounts.length === 0) {
-            console.log('   🔒 No cached accounts, returning mock data');
-            console.log('   📦 [DATA SOURCE: MOCK] Using mock account data\n');
+            console.log('   📦 No accounts linked for this user\n');
 
-            // Return mock accounts for development
+            // Return empty accounts - user needs to connect a bank
             return res.json({
                 success: true,
-                accounts: [
-                    { id: 'all', name: 'All Accounts', type: 'aggregate', balance: 24592.45 },
-                    { id: 'td', name: 'TD Checking', bank: 'TD', type: 'checking', balance: 15234.50 },
-                    { id: 'rbc', name: 'RBC Savings', bank: 'RBC', type: 'savings', balance: 9357.95 },
-                ],
-                total_balance: 24592.45,
-                change_percent: 2.4,
-                _meta: { source: 'MOCK' }
+                accounts: [],
+                total_balance: 0,
+                liquid_cash: 0,
+                change_percent: 0,
+                needs_bank_connection: true,
+                _meta: { source: 'EMPTY' }
             });
         }
 

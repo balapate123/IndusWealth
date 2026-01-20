@@ -13,17 +13,6 @@ const configuration = new Configuration({
 
 const client = new PlaidApi(configuration);
 
-// MOCK FALLBACK for Development if credentials are missing
-// MOCK FALLBACK REMOVED - Using Real Plaid Data Only
-
-// HYBRID DEMO STRATEGY: 
-// Inject specific "Leakage" transactions so Watchdog works even with "Good" user (who has Liabilities data).
-const DEMO_LEAKAGE = [
-    { transaction_id: 'd1', name: 'Netflix Premium', amount: 16.99, date: '2025-01-05', category: ['Subscription'], iso_currency_code: 'CAD' },
-    { transaction_id: 'd2', name: 'Spotify Family', amount: 11.99, date: '2025-01-10', category: ['Subscription'], iso_currency_code: 'CAD' },
-    { transaction_id: 'd3', name: 'NSF Fee', amount: 48.00, date: '2025-01-12', category: ['Bank Fees'], iso_currency_code: 'CAD' }
-];
-
 class PlaidService {
     async createLinkToken(userId) {
         if (!process.env.PLAID_CLIENT_ID) throw new Error("Missing Plaid Keys");
@@ -94,9 +83,7 @@ class PlaidService {
                 end_date: endDate,
             });
 
-            // HYBRID MERGE: Real Data + Demo Leakage
-            // Use spread to combine. We put Demo first to ensure they are top of feed for visibility.
-            return [...DEMO_LEAKAGE, ...response.data.transactions];
+            return response.data.transactions;
         } catch (error) {
             console.error('Error fetching from Plaid:', error.response ? error.response.data : error.message);
             throw error; // Throw error instead of returning match

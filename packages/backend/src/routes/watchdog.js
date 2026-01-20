@@ -8,57 +8,13 @@ const { authenticateToken } = require('../middleware/auth');
 // Requires authentication
 router.get('/', authenticateToken, async (req, res) => {
     console.log('\n📥 [GET /watchdog] Request received');
-    console.log('   📦 [DATA SOURCE: MOCK] Using mock recurring expenses\n');
 
     try {
-        // Category-based recurring expenses detection
-        // In production, this would analyze transaction history patterns for this user
-        const recurringExpenses = [
-            {
-                id: 1,
-                name: 'Rogers',
-                fullName: 'Rogers Communications',
-                amount: 85.00,
-                dueDate: 'Oct 15',
-                category: 'Mobile & Internet',
-                logoColor: '#D32F2F',
-                action: 'negotiate',
-                isRecurring: true,
-            },
-            {
-                id: 2,
-                name: 'Netflix Premium',
-                fullName: 'Netflix Premium',
-                amount: 16.99,
-                dueDate: 'Oct 12',
-                category: 'Streaming',
-                logoColor: '#E50914',
-                action: 'stop',
-                isRecurring: true,
-            },
-            {
-                id: 3,
-                name: 'GoodLife Fitness',
-                fullName: 'GoodLife Fitness',
-                amount: 29.99,
-                dueDate: 'Oct 20',
-                category: 'Health',
-                logoColor: '#4CAF50',
-                action: 'stop',
-                isRecurring: true,
-            },
-            {
-                id: 4,
-                name: 'Spotify Duo',
-                fullName: 'Spotify Duo',
-                amount: 10.99,
-                dueDate: 'Oct 28',
-                category: 'Music',
-                logoColor: '#1DB954',
-                action: 'active',
-                isRecurring: true,
-            },
-        ];
+        // TODO: In production, analyze user's transaction history to detect recurring patterns
+        // For now, return empty array until real pattern detection is implemented
+        const recurringExpenses = [];
+
+        console.log('   📦 Recurring expense detection pending implementation\n');
 
         // Calculate potential savings (items that can be stopped or negotiated)
         const potentialSavings = recurringExpenses
@@ -75,7 +31,8 @@ router.get('/', authenticateToken, async (req, res) => {
                 flags_found: flagsFound,
                 total_monthly: recurringExpenses.reduce((sum, e) => sum + e.amount, 0),
             },
-            categories: ['All', 'Streaming', 'Utilities', 'Health', 'Other']
+            categories: ['All', 'Streaming', 'Utilities', 'Health', 'Other'],
+            needs_transaction_history: true
         });
     } catch (error) {
         console.error('Error analyzing recurring expenses:', error);
