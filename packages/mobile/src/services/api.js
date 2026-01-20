@@ -5,9 +5,9 @@
 
 import cache from './cache';
 
-const API_BASE_URL = __DEV__
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || (__DEV__
     ? 'http://192.168.2.34:3000'  // Your local IP
-    : 'https://api.induswealth.com';
+    : 'https://api.induswealth.com');
 
 // In-memory token for faster access
 let cachedToken = null;
