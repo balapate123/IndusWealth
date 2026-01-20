@@ -1,18 +1,47 @@
 const { Pool } = require('pg');
 
 // PostgreSQL connection pool
-const pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME || 'induswealth',
-    user: process.env.DB_USER || 'induswealth',
-    password: process.env.DB_PASSWORD || 'induswealth123',
-});
+const fs = require('fs');
+const path = require('path');
+
+// PostgreSQL connection pool
+const pool = new Pool(
+    process.env.DATABASE_URL
+        ? {
+            connectionString: process.env.DATABASE_URL,
+            ssl: {
+                rejectUnauthorized: false, // Required for Render
+            },
+        }
+        : {
+            host: process.env.DB_HOST || 'localhost',
+            port: process.env.DB_PORT || 5432,
+            database: process.env.DB_NAME || 'induswealth',
+            user: process.env.DB_USER || 'induswealth',
+            password: process.env.DB_PASSWORD || 'induswealth123',
+        }
+);
 
 // Test connection on startup
 pool.query('SELECT NOW()')
     .then(() => console.log('✅ PostgreSQL connected'))
-    .catch(err => console.error('❌ PostgreSQL connection failed:', err.message));
+    .catch(err => {
+        console.error('❌ PostgreSQL connection failed:', err.message);
+        // Don't exit process, let it try to reconnect or let the request fail
+    });
+
+// Initialize Database Schema
+const initDb = async () => {
+    try {
+        const initSqlPath = path.join(__dirname, '../../db/init.sql');
+        const initSql = fs.readFileSync(initSqlPath, 'utf8');
+        console.log('🔄 Initializing database schema...');
+        await pool.query(initSql);
+        console.log('✅ Database schema initialized');
+    } catch (error) {
+        console.error('❌ Failed to initialize database:', error);
+    }
+};
 
 // ============ USER OPERATIONS ============
 
@@ -285,5 +314,6 @@ module.exports = {
     getDailySpending,
     getIncomeVsExpenses,
     getMonthlySpending,
+    initDb,
 };
 
