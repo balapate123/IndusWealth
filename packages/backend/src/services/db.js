@@ -251,7 +251,7 @@ const upsertTransactions = async (userId, transactions) => {
 const getTransactions = async (userId, limit = 100) => {
     const result = await pool.query(
         `SELECT t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name, 
-                t.amount, t.date, t.category, t.pending, t.iso_currency_code,
+                t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending, t.iso_currency_code,
                 a.name as account_name, a.plaid_account_id as account_id
          FROM transactions t
          LEFT JOIN accounts a ON t.account_id = a.id
@@ -267,7 +267,7 @@ const getTransactions = async (userId, limit = 100) => {
 const getTransactionsByAccount = async (userId, accountId, limit = 100) => {
     const result = await pool.query(
         `SELECT t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name, 
-                t.amount, t.date, t.category, t.pending, t.iso_currency_code,
+                t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending, t.iso_currency_code,
                 a.name as account_name, a.plaid_account_id as account_id
          FROM transactions t
          LEFT JOIN accounts a ON t.account_id = a.id

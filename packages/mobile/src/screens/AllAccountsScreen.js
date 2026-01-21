@@ -25,6 +25,9 @@ const AllAccountsScreen = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [showDisconnectModal, setShowDisconnectModal] = useState(false);
     const [disconnecting, setDisconnecting] = useState(false);
+    const [accountToDelete, setAccountToDelete] = useState(null);
+    const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+    const [deletingAccount, setDeletingAccount] = useState(false);
 
     const loadAccounts = useCallback(async () => {
         try {
@@ -120,36 +123,33 @@ const AllAccountsScreen = ({ navigation }) => {
     };
 
     const handleDeleteAccount = (account) => {
-        Alert.alert(
-            'Remove Account',
-            `Are you sure you want to remove "${account.name}"? All transactions from this account will also be deleted.`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Remove',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            const accountId = account.plaid_account_id || account.account_id;
-                            const response = await api.disconnectAccount(accountId);
-                            if (response?.success) {
-                                // Remove from local state
-                                setAccounts(prev => prev.filter(a => a.id !== account.id));
-                                // Update totals
-                                setTotalBalance(prev => prev - (account.balance || 0));
-                                if (account.type === 'depository') {
-                                    setLiquidCash(prev => prev - (account.balance || 0));
-                                }
-                                Alert.alert('Success', 'Account removed successfully.');
-                            }
-                        } catch (error) {
-                            console.error('Error removing account:', error);
-                            Alert.alert('Error', 'Failed to remove account. Please try again.');
-                        }
-                    }
+        setAccountToDelete(account);
+        setShowDeleteAccountModal(true);
+    };
+
+    const confirmDeleteAccount = async () => {
+        if (!accountToDelete) return;
+
+        setDeletingAccount(true);
+        try {
+            const accountId = accountToDelete.plaid_account_id || accountToDelete.id;
+            const response = await api.disconnectAccount(accountId);
+            if (response?.success) {
+                // Remove from local state
+                setAccounts(prev => prev.filter(a => a.id !== accountToDelete.id));
+                // Update totals
+                setTotalBalance(prev => prev - (accountToDelete.balance || 0));
+                if (accountToDelete.type === 'depository') {
+                    setLiquidCash(prev => prev - (accountToDelete.balance || 0));
                 }
-            ]
-        );
+                setShowDeleteAccountModal(false);
+                setAccountToDelete(null);
+            }
+        } catch (error) {
+            console.error('Error removing account:', error);
+        } finally {
+            setDeletingAccount(false);
+        }
     };
 
     const renderAccount = (account) => {
@@ -331,6 +331,49 @@ const AllAccountsScreen = ({ navigation }) => {
                                     <ActivityIndicator size="small" color={COLORS.WHITE} />
                                 ) : (
                                     <Text style={styles.modalConfirmText}>Disconnect</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Single Account Delete Modal */}
+            <Modal
+                visible={showDeleteAccountModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowDeleteAccountModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalIconContainer}>
+                            <Ionicons name="trash-outline" size={48} color="#FF6B6B" />
+                        </View>
+                        <Text style={styles.modalTitle}>Remove Account?</Text>
+                        <Text style={styles.modalMessage}>
+                            Are you sure you want to remove "{accountToDelete?.name}"? All transactions from this account will also be deleted.
+                        </Text>
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity
+                                style={styles.modalCancelButton}
+                                onPress={() => {
+                                    setShowDeleteAccountModal(false);
+                                    setAccountToDelete(null);
+                                }}
+                                disabled={deletingAccount}
+                            >
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.modalConfirmButton}
+                                onPress={confirmDeleteAccount}
+                                disabled={deletingAccount}
+                            >
+                                {deletingAccount ? (
+                                    <ActivityIndicator size="small" color={COLORS.WHITE} />
+                                ) : (
+                                    <Text style={styles.modalConfirmText}>Remove</Text>
                                 )}
                             </TouchableOpacity>
                         </View>

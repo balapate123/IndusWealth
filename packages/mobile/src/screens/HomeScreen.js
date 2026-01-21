@@ -9,6 +9,7 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     RefreshControl,
+    Modal,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -92,6 +93,8 @@ const HomeScreen = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
     const [userName, setUserName] = useState('User');
+    const [selectedTransaction, setSelectedTransaction] = useState(null);
+    const [showTransactionModal, setShowTransactionModal] = useState(false);
 
     // Format transactions for display
     const formatTransactions = (rawTransactions) => {
@@ -199,8 +202,17 @@ const HomeScreen = ({ navigation }) => {
     };
 
     const formatTime = (dateStr) => {
-        const date = new Date(dateStr);
-        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        // Handle null, undefined, or empty dates
+        if (!dateStr) return 'N/A';
+
+        // Plaid only provides date, not time - so show formatted date
+        try {
+            const date = new Date(dateStr + 'T12:00:00'); // Add noon to avoid timezone issues
+            if (isNaN(date.getTime())) return 'N/A';
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        } catch (e) {
+            return 'N/A';
+        }
     };
 
     const todayTransactions = transactions.filter(t => t.dateGroup === 'today');
@@ -251,11 +263,21 @@ const HomeScreen = ({ navigation }) => {
         return ACCOUNT_COLORS[accountIndex % ACCOUNT_COLORS.length];
     };
 
+    const openTransactionDetails = (item) => {
+        setSelectedTransaction(item);
+        setShowTransactionModal(true);
+    };
+
     const renderTransaction = (item) => {
         const accountColor = getAccountColor(item.account_id);
 
         return (
-            <View key={item.id} style={styles.transactionItem}>
+            <TouchableOpacity
+                key={item.id}
+                style={styles.transactionItem}
+                onPress={() => openTransactionDetails(item)}
+                activeOpacity={0.7}
+            >
                 {/* Account color indicator */}
                 {accountColor && (
                     <View style={[styles.accountColorIndicator, { backgroundColor: accountColor }]} />
@@ -274,7 +296,7 @@ const HomeScreen = ({ navigation }) => {
                     </Text>
                     <Text style={styles.transactionTime}>{item.time}</Text>
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     };
 
@@ -479,6 +501,101 @@ const HomeScreen = ({ navigation }) => {
                     </View>
                 )}
             </ScrollView>
+
+            {/* Transaction Details Modal */}
+            <Modal
+                visible={showTransactionModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowTransactionModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.transactionModalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Transaction Details</Text>
+                            <TouchableOpacity
+                                style={styles.modalCloseButton}
+                                onPress={() => setShowTransactionModal(false)}
+                            >
+                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {selectedTransaction && (
+                            <View style={styles.transactionDetails}>
+                                {/* Amount */}
+                                <View style={styles.detailAmountRow}>
+                                    <Text style={[
+                                        styles.detailAmount,
+                                        { color: selectedTransaction.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
+                                    ]}>
+                                        {selectedTransaction.amount > 0 ? '+' : '-'}${Math.abs(selectedTransaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </Text>
+                                    <View style={[
+                                        styles.amountBadge,
+                                        { backgroundColor: selectedTransaction.amount > 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 107, 107, 0.2)' }
+                                    ]}>
+                                        <Text style={[
+                                            styles.amountBadgeText,
+                                            { color: selectedTransaction.amount > 0 ? COLORS.GREEN : '#FF6B6B' }
+                                        ]}>
+                                            {selectedTransaction.amount > 0 ? 'Income' : 'Expense'}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                {/* Detail Rows */}
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Merchant</Text>
+                                    <Text style={styles.detailValue}>{selectedTransaction.merchant}</Text>
+                                </View>
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Category</Text>
+                                    <Text style={styles.detailValue}>{selectedTransaction.category}</Text>
+                                </View>
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Date</Text>
+                                    <Text style={styles.detailValue}>
+                                        {selectedTransaction.rawDate
+                                            ? new Date(selectedTransaction.rawDate + 'T12:00:00').toLocaleDateString('en-US', {
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric'
+                                            })
+                                            : 'N/A'}
+                                    </Text>
+                                </View>
+
+                                {selectedTransaction.account_id && (
+                                    <View style={styles.detailRow}>
+                                        <Text style={styles.detailLabel}>Account</Text>
+                                        <View style={styles.accountIndicator}>
+                                            <View style={[styles.accountDot, { backgroundColor: getAccountColor(selectedTransaction.account_id) }]} />
+                                            <Text style={styles.detailValue}>
+                                                {accounts.find(a => a.id === selectedTransaction.account_id)?.name || 'N/A'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                )}
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Transaction ID</Text>
+                                    <Text style={[styles.detailValue, styles.transactionId]}>{selectedTransaction.id}</Text>
+                                </View>
+                            </View>
+                        )}
+
+                        <TouchableOpacity
+                            style={styles.modalDoneButton}
+                            onPress={() => setShowTransactionModal(false)}
+                        >
+                            <Text style={styles.modalDoneText}>Done</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -899,6 +1016,105 @@ const styles = StyleSheet.create({
         height: 6,
         borderRadius: 3,
         backgroundColor: COLORS.TEXT_MUTED,
+    },
+
+    // Transaction Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        justifyContent: 'flex-end',
+    },
+    transactionModalContent: {
+        backgroundColor: COLORS.CARD_BG,
+        borderTopLeftRadius: BORDER_RADIUS.XL,
+        borderTopRightRadius: BORDER_RADIUS.XL,
+        padding: SPACING.LARGE,
+        paddingBottom: 80,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.LARGE,
+    },
+    modalTitle: {
+        color: COLORS.WHITE,
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    modalCloseButton: {
+        padding: SPACING.SMALL,
+    },
+    transactionDetails: {
+        marginBottom: SPACING.LARGE,
+    },
+    detailAmountRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: SPACING.LARGE,
+        paddingBottom: SPACING.MEDIUM,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.CARD_BORDER,
+    },
+    detailAmount: {
+        fontSize: 32,
+        fontWeight: 'bold',
+    },
+    amountBadge: {
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingVertical: SPACING.SMALL,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+    },
+    amountBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    detailRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: SPACING.MEDIUM,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.CARD_BORDER,
+    },
+    detailLabel: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 14,
+    },
+    detailValue: {
+        color: COLORS.WHITE,
+        fontSize: 14,
+        fontWeight: '500',
+        maxWidth: '60%',
+        textAlign: 'right',
+    },
+    accountIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    accountDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginRight: SPACING.SMALL,
+    },
+    transactionId: {
+        fontSize: 11,
+        color: COLORS.TEXT_MUTED,
+    },
+    modalDoneButton: {
+        backgroundColor: COLORS.GOLD,
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        alignItems: 'center',
+    },
+    modalDoneText: {
+        color: COLORS.BACKGROUND,
+        fontSize: 16,
+        fontWeight: '600',
     },
 });
 
