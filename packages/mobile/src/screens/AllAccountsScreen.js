@@ -9,6 +9,8 @@ import {
     StatusBar,
     ActivityIndicator,
     RefreshControl,
+    Modal,
+    Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
@@ -21,6 +23,8 @@ const AllAccountsScreen = ({ navigation }) => {
     const [liquidCash, setLiquidCash] = useState(0);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+    const [disconnecting, setDisconnecting] = useState(false);
 
     const loadAccounts = useCallback(async () => {
         try {
@@ -50,6 +54,29 @@ const AllAccountsScreen = ({ navigation }) => {
         setRefreshing(true);
         loadAccounts();
     }, [loadAccounts]);
+
+    const handleDisconnectAll = async () => {
+        setDisconnecting(true);
+        try {
+            const response = await api.disconnectBank();
+            if (response?.success) {
+                setShowDisconnectModal(false);
+                setAccounts([]);
+                setTotalBalance(0);
+                setLiquidCash(0);
+                Alert.alert(
+                    'Success',
+                    'All accounts have been disconnected.',
+                    [{ text: 'OK', onPress: () => navigation.navigate('Home') }]
+                );
+            }
+        } catch (error) {
+            console.error('Error disconnecting:', error);
+            Alert.alert('Error', 'Failed to disconnect accounts. Please try again.');
+        } finally {
+            setDisconnecting(false);
+        }
+    };
 
     const getAccountTypeIcon = (type, subtype) => {
         const accountType = subtype || type;
@@ -92,44 +119,84 @@ const AllAccountsScreen = ({ navigation }) => {
         return `$${Math.abs(balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     };
 
+    const handleDeleteAccount = (account) => {
+        Alert.alert(
+            'Remove Account',
+            `Are you sure you want to remove "${account.name}"? All transactions from this account will also be deleted.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Remove',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const accountId = account.plaid_account_id || account.account_id;
+                            const response = await api.disconnectAccount(accountId);
+                            if (response?.success) {
+                                // Remove from local state
+                                setAccounts(prev => prev.filter(a => a.id !== account.id));
+                                // Update totals
+                                setTotalBalance(prev => prev - (account.balance || 0));
+                                if (account.type === 'depository') {
+                                    setLiquidCash(prev => prev - (account.balance || 0));
+                                }
+                                Alert.alert('Success', 'Account removed successfully.');
+                            }
+                        } catch (error) {
+                            console.error('Error removing account:', error);
+                            Alert.alert('Error', 'Failed to remove account. Please try again.');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const renderAccount = (account) => {
         const iconColor = getAccountTypeColor(account.type, account.subtype);
         const isNegative = account.balance < 0;
 
         return (
-            <TouchableOpacity
-                key={account.id}
-                style={styles.accountCard}
-                onPress={() => navigation.navigate('AccountTransactions', { account })}
-            >
-                <View style={[styles.accountIcon, { backgroundColor: `${iconColor}20` }]}>
-                    <Ionicons
-                        name={getAccountTypeIcon(account.type, account.subtype)}
-                        size={24}
-                        color={iconColor}
-                    />
-                </View>
+            <View key={account.id} style={styles.accountCard}>
+                <TouchableOpacity
+                    style={styles.accountCardContent}
+                    onPress={() => navigation.navigate('AccountTransactions', { account })}
+                >
+                    <View style={[styles.accountIcon, { backgroundColor: `${iconColor}20` }]}>
+                        <Ionicons
+                            name={getAccountTypeIcon(account.type, account.subtype)}
+                            size={24}
+                            color={iconColor}
+                        />
+                    </View>
 
-                <View style={styles.accountInfo}>
-                    <Text style={styles.accountName} numberOfLines={1}>
-                        {account.name}
-                    </Text>
-                    <Text style={styles.accountType}>
-                        {account.subtype || account.type}
-                        {account.mask && ` • ****${account.mask}`}
-                    </Text>
-                </View>
+                    <View style={styles.accountInfo}>
+                        <Text style={styles.accountName} numberOfLines={1}>
+                            {account.name}
+                        </Text>
+                        <Text style={styles.accountType}>
+                            {account.subtype || account.type}
+                            {account.mask && ` • ****${account.mask}`}
+                        </Text>
+                    </View>
 
-                <View style={styles.accountBalance}>
-                    <Text style={[
-                        styles.balanceAmount,
-                        isNegative && styles.negativeBalance
-                    ]}>
-                        {isNegative ? '-' : ''}{formatBalance(account.balance)}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={16} color={COLORS.TEXT_MUTED} />
-                </View>
-            </TouchableOpacity>
+                    <View style={styles.accountBalance}>
+                        <Text style={[
+                            styles.balanceAmount,
+                            isNegative && styles.negativeBalance
+                        ]}>
+                            {isNegative ? '-' : ''}{formatBalance(account.balance)}
+                        </Text>
+                    </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={styles.deleteAccountButton}
+                    onPress={() => handleDeleteAccount(account)}
+                >
+                    <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
+                </TouchableOpacity>
+            </View>
         );
     };
 
@@ -218,7 +285,58 @@ const AllAccountsScreen = ({ navigation }) => {
                     <Ionicons name="add-circle-outline" size={20} color={COLORS.BACKGROUND} />
                     <Text style={styles.connectButtonText}>Connect New Account</Text>
                 </TouchableOpacity>
+
+                {/* Disconnect All Button */}
+                {accounts.length > 0 && (
+                    <TouchableOpacity
+                        style={styles.disconnectButton}
+                        onPress={() => setShowDisconnectModal(true)}
+                    >
+                        <Ionicons name="unlink-outline" size={20} color="#FF6B6B" />
+                        <Text style={styles.disconnectButtonText}>Disconnect All Accounts</Text>
+                    </TouchableOpacity>
+                )}
             </ScrollView>
+
+            {/* Disconnect Confirmation Modal */}
+            <Modal
+                visible={showDisconnectModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowDisconnectModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalIconContainer}>
+                            <Ionicons name="warning-outline" size={48} color="#FF6B6B" />
+                        </View>
+                        <Text style={styles.modalTitle}>Disconnect All Accounts?</Text>
+                        <Text style={styles.modalMessage}>
+                            This will remove all connected bank accounts and their transaction history. This action cannot be undone.
+                        </Text>
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity
+                                style={styles.modalCancelButton}
+                                onPress={() => setShowDisconnectModal(false)}
+                                disabled={disconnecting}
+                            >
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.modalConfirmButton}
+                                onPress={handleDisconnectAll}
+                                disabled={disconnecting}
+                            >
+                                {disconnecting ? (
+                                    <ActivityIndicator size="small" color={COLORS.WHITE} />
+                                ) : (
+                                    <Text style={styles.modalConfirmText}>Disconnect</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -328,11 +446,22 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: COLORS.CARD_BG,
-        padding: SPACING.MEDIUM,
         borderRadius: BORDER_RADIUS.LARGE,
         marginBottom: SPACING.SMALL,
         borderWidth: 1,
         borderColor: COLORS.CARD_BORDER,
+        overflow: 'hidden',
+    },
+    accountCardContent: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: SPACING.MEDIUM,
+    },
+    deleteAccountButton: {
+        padding: SPACING.MEDIUM,
+        borderLeftWidth: 1,
+        borderLeftColor: COLORS.CARD_BORDER,
     },
     accountIcon: {
         width: 48,
@@ -405,6 +534,90 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
         marginLeft: SPACING.SMALL,
+    },
+
+    // Disconnect Button
+    disconnectButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'transparent',
+        paddingVertical: SPACING.MEDIUM,
+        paddingHorizontal: SPACING.LARGE,
+        borderRadius: BORDER_RADIUS.LARGE,
+        marginTop: SPACING.MEDIUM,
+        borderWidth: 1,
+        borderColor: '#FF6B6B',
+    },
+    disconnectButtonText: {
+        color: '#FF6B6B',
+        fontSize: 15,
+        fontWeight: '600',
+        marginLeft: SPACING.SMALL,
+    },
+
+    // Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: SPACING.LARGE,
+    },
+    modalContent: {
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: BORDER_RADIUS.XL,
+        padding: SPACING.LARGE,
+        width: '100%',
+        maxWidth: 340,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    modalIconContainer: {
+        alignItems: 'center',
+        marginBottom: SPACING.MEDIUM,
+    },
+    modalTitle: {
+        color: COLORS.WHITE,
+        fontSize: 18,
+        fontWeight: '700',
+        textAlign: 'center',
+        marginBottom: SPACING.SMALL,
+    },
+    modalMessage: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: SPACING.LARGE,
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        gap: SPACING.MEDIUM,
+    },
+    modalCancelButton: {
+        flex: 1,
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        backgroundColor: COLORS.CARD_BORDER,
+        alignItems: 'center',
+    },
+    modalCancelText: {
+        color: COLORS.WHITE,
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    modalConfirmButton: {
+        flex: 1,
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        backgroundColor: '#FF6B6B',
+        alignItems: 'center',
+    },
+    modalConfirmText: {
+        color: COLORS.WHITE,
+        fontSize: 15,
+        fontWeight: '600',
     },
 });
 

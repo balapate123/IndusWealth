@@ -155,6 +155,61 @@ const getAccounts = async (userId) => {
     return result.rows;
 };
 
+// Delete all accounts for a user
+const deleteUserAccounts = async (userId) => {
+    const result = await pool.query(
+        `DELETE FROM accounts WHERE user_id = $1`,
+        [userId]
+    );
+    return result.rowCount;
+};
+
+// Delete all transactions for a user
+const deleteUserTransactions = async (userId) => {
+    const result = await pool.query(
+        `DELETE FROM transactions WHERE user_id = $1`,
+        [userId]
+    );
+    return result.rowCount;
+};
+
+// Clear Plaid tokens for a user
+const clearUserPlaidTokens = async (userId) => {
+    await pool.query(
+        `UPDATE users SET plaid_access_token = NULL, plaid_item_id = NULL, updated_at = NOW() WHERE id = $1`,
+        [userId]
+    );
+};
+
+// Delete a single account by plaid_account_id
+const deleteAccount = async (userId, plaidAccountId) => {
+    const result = await pool.query(
+        `DELETE FROM accounts WHERE user_id = $1 AND plaid_account_id = $2`,
+        [userId, plaidAccountId]
+    );
+    return result.rowCount;
+};
+
+// Delete transactions for a single account by plaid_account_id
+const deleteAccountTransactions = async (userId, plaidAccountId) => {
+    // First get the internal account ID
+    const accountResult = await pool.query(
+        `SELECT id FROM accounts WHERE user_id = $1 AND plaid_account_id = $2`,
+        [userId, plaidAccountId]
+    );
+
+    if (accountResult.rows.length === 0) {
+        return 0;
+    }
+
+    const accountId = accountResult.rows[0].id;
+    const result = await pool.query(
+        `DELETE FROM transactions WHERE user_id = $1 AND account_id = $2`,
+        [userId, accountId]
+    );
+    return result.rowCount;
+};
+
 // ============ TRANSACTION OPERATIONS ============
 
 const upsertTransactions = async (userId, transactions) => {
@@ -305,6 +360,11 @@ module.exports = {
     // Account operations
     upsertAccounts,
     getAccounts,
+    deleteUserAccounts,
+    deleteUserTransactions,
+    clearUserPlaidTokens,
+    deleteAccount,
+    deleteAccountTransactions,
     // Transaction operations
     upsertTransactions,
     getTransactions,

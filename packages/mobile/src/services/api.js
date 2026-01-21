@@ -5,9 +5,7 @@
 
 import cache from './cache';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || (__DEV__
-    ? 'http://192.168.2.34:3000'  // Your local IP
-    : 'https://api.induswealth.com');
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://induswealth.onrender.com';
 
 // In-memory token for faster access
 let cachedToken = null;
@@ -181,6 +179,8 @@ export const api = {
         }),
 
     disconnectBank: () => apiRequest('/plaid/disconnect', { method: 'DELETE' }),
+
+    disconnectAccount: (accountId) => apiRequest(`/plaid/account/${accountId}`, { method: 'DELETE' }),
 
     // Analytics
     getAnalytics: (period = 30) => apiRequest(`/analytics?period=${period}`),

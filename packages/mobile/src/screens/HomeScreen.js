@@ -11,9 +11,51 @@ import {
     RefreshControl,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import api from '../services/api';
 import cache from '../services/cache';
+
+// Mini Balance Chart Component
+const BalanceChart = ({ width = 120, height = 40 }) => {
+    // Sample data points for the trend line (normalized 0-1)
+    const dataPoints = [0.3, 0.4, 0.35, 0.5, 0.45, 0.6, 0.7, 0.65, 0.8, 0.85, 0.9];
+
+    const padding = 2;
+    const chartWidth = width - padding * 2;
+    const chartHeight = height - padding * 2;
+
+    // Convert data points to path
+    const points = dataPoints.map((point, index) => {
+        const x = padding + (index / (dataPoints.length - 1)) * chartWidth;
+        const y = padding + (1 - point) * chartHeight;
+        return { x, y };
+    });
+
+    // Create smooth curve path
+    const linePath = points.reduce((path, point, index) => {
+        if (index === 0) return `M ${point.x} ${point.y}`;
+        const prev = points[index - 1];
+        const cpX = (prev.x + point.x) / 2;
+        return `${path} Q ${cpX} ${prev.y} ${point.x} ${point.y}`;
+    }, '');
+
+    // Create area path (for gradient fill)
+    const areaPath = `${linePath} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
+
+    return (
+        <Svg width={width} height={height}>
+            <Defs>
+                <LinearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <Stop offset="0%" stopColor="#4CAF50" stopOpacity="0.3" />
+                    <Stop offset="100%" stopColor="#4CAF50" stopOpacity="0" />
+                </LinearGradient>
+            </Defs>
+            <Path d={areaPath} fill="url(#areaGradient)" />
+            <Path d={linePath} stroke="#4CAF50" strokeWidth={2} fill="none" />
+        </Svg>
+    );
+};
 
 // Category icon mapping
 const CATEGORY_ICONS = {
@@ -27,6 +69,18 @@ const CATEGORY_ICONS = {
     'default': { icon: 'wallet', library: 'Ionicons', color: '#9E9E9E' },
 };
 
+// Account colors for color-coding transactions
+const ACCOUNT_COLORS = [
+    '#4CAF50', // Green
+    '#2196F3', // Blue
+    '#FF9800', // Orange
+    '#9C27B0', // Purple
+    '#E91E63', // Pink
+    '#00BCD4', // Cyan
+    '#FF5722', // Deep Orange
+    '#607D8B', // Blue Grey
+];
+
 const HomeScreen = ({ navigation }) => {
     const [transactions, setTransactions] = useState([]);
     const [accounts, setAccounts] = useState([]);
@@ -37,6 +91,7 @@ const HomeScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
+    const [userName, setUserName] = useState('User');
 
     // Format transactions for display
     const formatTransactions = (rawTransactions) => {
@@ -52,6 +107,7 @@ const HomeScreen = ({ navigation }) => {
                 time: formatTime(tx.date),
                 rawDate: tx.date,
                 dateGroup: isToday ? 'today' : isYesterday ? 'yesterday' : 'older',
+                account_id: tx.account_id,
             };
         });
     };
@@ -63,10 +119,15 @@ const HomeScreen = ({ navigation }) => {
 
             // STEP 1: Load from cache first (instant display)
             if (!forceRefresh) {
-                const [cachedAccounts, cachedTransactions] = await Promise.all([
+                const [cachedAccounts, cachedTransactions, cachedUser] = await Promise.all([
                     cache.getCachedAccounts(),
                     cache.getCachedTransactions(),
+                    cache.getCachedUser(),
                 ]);
+
+                if (cachedUser?.name) {
+                    setUserName(cachedUser.name.split(' ')[0]); // Use first name
+                }
 
                 if (cachedAccounts) {
                     setAccounts(cachedAccounts.accounts || []);
@@ -83,10 +144,16 @@ const HomeScreen = ({ navigation }) => {
 
             // STEP 2: Fetch fresh data from API
             const refreshParam = forceRefresh ? '?refresh=true' : '';
-            const [accountsData, transactionsData] = await Promise.all([
+            const [accountsData, transactionsData, userData] = await Promise.all([
                 api.getAccounts().catch(() => null),
                 api.getTransactions(refreshParam).catch(() => null),
+                api.auth.me().catch(() => null),
             ]);
+
+            if (userData?.user?.name) {
+                setUserName(userData.user.name.split(' ')[0]); // Use first name
+                await cache.setCachedUser(userData.user);
+            }
 
             if (accountsData?.success) {
                 setAccounts(accountsData.accounts || []);
@@ -170,24 +237,46 @@ const HomeScreen = ({ navigation }) => {
         );
     };
 
-    const renderTransaction = (item) => (
-        <View key={item.id} style={styles.transactionItem}>
-            {renderTransactionIcon(item.category, item.amount > 0)}
-            <View style={styles.transactionContent}>
-                <Text style={styles.transactionMerchant} numberOfLines={1}>{item.merchant}</Text>
-                <Text style={styles.transactionCategory}>{item.category}</Text>
+    // Get color for an account based on its index in the accounts array
+    const getAccountColor = (accountId) => {
+        if (!accountId || accounts.length === 0) return ACCOUNT_COLORS[0]; // Default to first color
+
+        // Filter out the aggregate 'all' account for color matching
+        const realAccounts = accounts.filter(acc => acc.id !== 'all' && acc.type !== 'aggregate');
+
+        // Match by id (which is the plaid_account_id in formatted accounts)
+        const accountIndex = realAccounts.findIndex(acc => acc.id === accountId);
+
+        if (accountIndex === -1) return ACCOUNT_COLORS[0]; // Default color if no match
+        return ACCOUNT_COLORS[accountIndex % ACCOUNT_COLORS.length];
+    };
+
+    const renderTransaction = (item) => {
+        const accountColor = getAccountColor(item.account_id);
+
+        return (
+            <View key={item.id} style={styles.transactionItem}>
+                {/* Account color indicator */}
+                {accountColor && (
+                    <View style={[styles.accountColorIndicator, { backgroundColor: accountColor }]} />
+                )}
+                {renderTransactionIcon(item.category, item.amount > 0)}
+                <View style={styles.transactionContent}>
+                    <Text style={styles.transactionMerchant} numberOfLines={1}>{item.merchant}</Text>
+                    <Text style={styles.transactionCategory}>{item.category}</Text>
+                </View>
+                <View style={styles.transactionRight}>
+                    <Text style={[
+                        styles.transactionAmount,
+                        { color: item.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
+                    ]}>
+                        {item.amount > 0 ? '+' : '-'}${Math.abs(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                    <Text style={styles.transactionTime}>{item.time}</Text>
+                </View>
             </View>
-            <View style={styles.transactionRight}>
-                <Text style={[
-                    styles.transactionAmount,
-                    { color: item.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
-                ]}>
-                    {item.amount > 0 ? '+' : '-'}${Math.abs(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </Text>
-                <Text style={styles.transactionTime}>{item.time}</Text>
-            </View>
-        </View>
-    );
+        );
+    };
 
     const renderTransactionGroup = (title, items, showSeeAll = false) => {
         if (items.length === 0) return null;
@@ -230,7 +319,7 @@ const HomeScreen = ({ navigation }) => {
                     </View>
                     <View style={styles.greetingContainer}>
                         <Text style={styles.welcomeText}>Welcome back,</Text>
-                        <Text style={styles.userName}>Alexander</Text>
+                        <Text style={styles.userName}>{userName}</Text>
                     </View>
                 </View>
                 <TouchableOpacity style={styles.notificationButton}>
@@ -252,33 +341,40 @@ const HomeScreen = ({ navigation }) => {
             >
                 {/* Balance Card */}
                 <View style={styles.balanceCard}>
-                    <View style={styles.balanceHeader}>
-                        <Text style={styles.balanceLabel}>TOTAL LIQUID CASH</Text>
-                        <View style={styles.growthBadge}>
-                            <Ionicons name="trending-up" size={12} color="#4CAF50" />
-                            <Text style={styles.growthText}>+{changePercent}%</Text>
+                    {/* Top row: Label + Chart + Badge */}
+                    <View style={styles.balanceTopRow}>
+                        <View style={styles.balanceLeftSection}>
+                            <Text style={styles.balanceLabel}>TOTAL LIQUID CASH</Text>
+                            <View style={styles.balanceAmountRow}>
+                                <Text style={styles.currencySign}>$</Text>
+                                <Text style={styles.balanceAmount}>
+                                    {showBalance ? totalCash.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '••••••'}
+                                </Text>
+                                <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeButton}>
+                                    <Ionicons
+                                        name={showBalance ? 'eye-outline' : 'eye-off-outline'}
+                                        size={18}
+                                        color={COLORS.TEXT_SECONDARY}
+                                    />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                        <View style={styles.balanceRightSection}>
+                            <View style={styles.growthBadge}>
+                                <Ionicons name="trending-up" size={12} color="#4CAF50" />
+                                <Text style={styles.growthText}>+{changePercent}%</Text>
+                            </View>
+                            <BalanceChart width={100} height={35} />
                         </View>
                     </View>
 
-                    <View style={styles.balanceRow}>
-                        <Text style={styles.balanceAmount}>
-                            {showBalance ? `$${totalCash.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '••••••'}
-                        </Text>
-                        <TouchableOpacity onPress={() => setShowBalance(!showBalance)}>
-                            <Ionicons
-                                name={showBalance ? 'eye-outline' : 'eye-off-outline'}
-                                size={20}
-                                color={COLORS.TEXT_SECONDARY}
-                            />
+                    {/* Savings info */}
+                    <View style={styles.savingsRow}>
+                        <Text style={styles.savingsPositive}>+$1,200.00</Text>
+                        <Text style={styles.savingsText}> in savings this month</Text>
+                        <TouchableOpacity style={styles.settingsButton}>
+                            <Ionicons name="settings-outline" size={16} color={COLORS.GOLD} />
                         </TouchableOpacity>
-                    </View>
-
-                    {/* Mini Cards */}
-                    <View style={styles.miniCardsRow}>
-                        <View style={styles.miniCard} />
-                        <View style={styles.miniCard} />
-                        <View style={styles.miniCard} />
-                        <View style={[styles.miniCard, styles.miniCardGold]} />
                     </View>
 
                     {/* Action Buttons */}
@@ -467,17 +563,43 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: COLORS.CARD_BORDER,
     },
-    balanceHeader: {
+    balanceTopRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.SMALL,
+        alignItems: 'flex-start',
+        marginBottom: SPACING.MEDIUM,
+    },
+    balanceLeftSection: {
+        flex: 1,
+    },
+    balanceRightSection: {
+        alignItems: 'flex-end',
     },
     balanceLabel: {
         color: COLORS.TEXT_SECONDARY,
         fontSize: 11,
         letterSpacing: 1,
         fontWeight: '500',
+        marginBottom: 4,
+    },
+    balanceAmountRow: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+    },
+    currencySign: {
+        color: COLORS.WHITE,
+        fontSize: 22,
+        fontWeight: '600',
+        marginRight: 2,
+    },
+    balanceAmount: {
+        color: COLORS.WHITE,
+        fontSize: 32,
+        fontWeight: 'bold',
+    },
+    eyeButton: {
+        marginLeft: SPACING.SMALL,
+        padding: 4,
     },
     growthBadge: {
         flexDirection: 'row',
@@ -486,6 +608,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.SMALL,
         paddingVertical: 4,
         borderRadius: BORDER_RADIUS.MEDIUM,
+        marginBottom: SPACING.SMALL,
     },
     growthText: {
         color: '#4CAF50',
@@ -493,16 +616,28 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginLeft: 4,
     },
-    balanceRow: {
+    savingsRow: {
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: SPACING.LARGE,
     },
-    balanceAmount: {
-        color: COLORS.WHITE,
-        fontSize: 36,
-        fontWeight: 'bold',
-        marginRight: SPACING.SMALL,
+    savingsPositive: {
+        color: '#4CAF50',
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    savingsText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 13,
+        flex: 1,
+    },
+    settingsButton: {
+        padding: 4,
+    },
+    balanceRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: SPACING.LARGE,
     },
     miniCardsRow: {
         flexDirection: 'row',
@@ -697,6 +832,16 @@ const styles = StyleSheet.create({
         padding: SPACING.MEDIUM,
         borderRadius: BORDER_RADIUS.LARGE,
         marginBottom: SPACING.SMALL,
+        overflow: 'hidden',
+    },
+    accountColorIndicator: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 4,
+        borderTopLeftRadius: BORDER_RADIUS.LARGE,
+        borderBottomLeftRadius: BORDER_RADIUS.LARGE,
     },
     transactionIcon: {
         width: 44,

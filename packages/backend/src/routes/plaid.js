@@ -68,18 +68,67 @@ router.post('/save_connection', authenticateToken, async (req, res) => {
 });
 
 // DELETE /plaid/disconnect
-// Disconnect Plaid from user account
+// Disconnect Plaid from user account and clear all data
 router.delete('/disconnect', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
 
-        await db.updateUserPlaidToken(userId, null, null);
+        // Delete all transactions first (due to foreign key constraints)
+        const deletedTx = await db.deleteUserTransactions(userId);
+        console.log(`🗑️ Deleted ${deletedTx} transactions for user ${userId}`);
 
-        console.log(`🔓 [DELETE /plaid/disconnect] Bank disconnected for user ${userId}`);
+        // Delete all accounts
+        const deletedAccounts = await db.deleteUserAccounts(userId);
+        console.log(`🗑️ Deleted ${deletedAccounts} accounts for user ${userId}`);
 
-        res.json({ success: true, message: 'Bank disconnected successfully' });
+        // Clear Plaid tokens
+        await db.clearUserPlaidTokens(userId);
+
+        console.log(`🔓 [DELETE /plaid/disconnect] Bank fully disconnected for user ${userId}`);
+
+        res.json({
+            success: true,
+            message: 'Bank disconnected successfully',
+            deleted: {
+                transactions: deletedTx,
+                accounts: deletedAccounts
+            }
+        });
     } catch (error) {
         console.error('Error disconnecting bank:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// DELETE /plaid/account/:accountId
+// Disconnect a single account and its transactions
+router.delete('/account/:accountId', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { accountId } = req.params;
+
+        if (!accountId) {
+            return res.status(400).json({ error: 'Account ID is required' });
+        }
+
+        // Delete transactions for this specific account
+        const deletedTx = await db.deleteAccountTransactions(userId, accountId);
+        console.log(`🗑️ Deleted ${deletedTx} transactions for account ${accountId}`);
+
+        // Delete the account
+        const deletedAccount = await db.deleteAccount(userId, accountId);
+        console.log(`🗑️ Deleted account ${accountId} for user ${userId}`);
+
+        res.json({
+            success: true,
+            message: 'Account disconnected successfully',
+            deleted: {
+                transactions: deletedTx,
+                account: deletedAccount
+            }
+        });
+    } catch (error) {
+        console.error('Error disconnecting account:', error);
         res.status(500).json({ error: error.message });
     }
 });
