@@ -1029,7 +1029,7 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: BORDER_RADIUS.XL,
         borderTopRightRadius: BORDER_RADIUS.XL,
         padding: SPACING.LARGE,
-        paddingBottom: 80,
+        paddingBottom: 120,
         borderWidth: 1,
         borderColor: COLORS.CARD_BORDER,
     },

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/db');
 const { authenticateToken } = require('../middleware/auth');
+const { categorizeTransaction, getCategoryBreakdown } = require('../services/categorization');
 
 // GET /analytics
 // Returns analytics data for charts and insights
@@ -12,18 +13,53 @@ router.get('/', authenticateToken, async (req, res) => {
         const userId = req.user.id;
         const { period = '30' } = req.query; // Default to 30 days
 
-        // Get all analytics data in parallel
-        const [categorySpending, dailySpending, incomeVsExpenses, accounts] = await Promise.all([
-            db.getCategorySpending(userId, parseInt(period)),
-            db.getDailySpending(userId, parseInt(period)),
-            db.getIncomeVsExpenses(userId, parseInt(period)),
+        // Get transactions and accounts
+        const [transactions, accounts] = await Promise.all([
+            db.getTransactions(userId, 500), // Get more transactions for analytics
             db.getAccounts(userId),
         ]);
 
+        // Filter transactions by period
+        const periodDays = parseInt(period);
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - periodDays);
+
+        const filteredTransactions = transactions.filter(tx => {
+            const txDate = new Date(tx.date);
+            return txDate >= startDate;
+        });
+
+        // Apply categorization to transactions
+        const categorizedTransactions = filteredTransactions.map(tx => {
+            const categoryInfo = categorizeTransaction(tx);
+            return {
+                ...tx,
+                category: (tx.category && tx.category.length > 0)
+                    ? tx.category
+                    : [categoryInfo.category],
+                categoryIcon: categoryInfo.icon,
+                categoryColor: categoryInfo.color
+            };
+        });
+
+        // Get category breakdown using our categorization
+        const categoryBreakdown = getCategoryBreakdown(categorizedTransactions);
+
         // Calculate totals
-        const totalSpending = categorySpending.reduce((sum, cat) => sum + parseFloat(cat.amount || 0), 0);
-        const totalIncome = parseFloat(incomeVsExpenses.income || 0);
-        const totalExpenses = parseFloat(incomeVsExpenses.expenses || 0);
+        const totalSpending = categoryBreakdown.reduce((sum, cat) => sum + cat.total, 0);
+
+        // Calculate income and expenses
+        let totalIncome = 0;
+        let totalExpenses = 0;
+        categorizedTransactions.forEach(tx => {
+            const amount = parseFloat(tx.amount);
+            if (amount < 0) {
+                totalIncome += Math.abs(amount);
+            } else {
+                totalExpenses += amount;
+            }
+        });
+
         const netCashFlow = totalIncome - totalExpenses;
 
         // Calculate liquid cash
@@ -32,22 +68,25 @@ router.get('/', authenticateToken, async (req, res) => {
             .filter(acc => liquidAccountTypes.includes(acc.type) || liquidAccountTypes.includes(acc.subtype))
             .reduce((sum, acc) => sum + parseFloat(acc.current_balance || 0), 0);
 
-        // Get previous period for comparison
-        const previousPeriodSpending = await db.getCategorySpending(userId, parseInt(period), parseInt(period));
-        const previousTotal = previousPeriodSpending.reduce((sum, cat) => sum + parseFloat(cat.amount || 0), 0);
-        const spendingChange = previousTotal > 0
-            ? ((totalSpending - previousTotal) / previousTotal * 100).toFixed(1)
-            : 0;
-
-        // Find top spending category
-        const topCategory = categorySpending.length > 0
-            ? categorySpending.reduce((max, cat) => parseFloat(cat.amount) > parseFloat(max.amount) ? cat : max, categorySpending[0])
-            : null;
+        // Get daily spending
+        const dailySpendingMap = {};
+        categorizedTransactions.forEach(tx => {
+            if (parseFloat(tx.amount) > 0) {
+                const date = tx.date;
+                dailySpendingMap[date] = (dailySpendingMap[date] || 0) + parseFloat(tx.amount);
+            }
+        });
+        const dailySpending = Object.entries(dailySpendingMap)
+            .map(([date, amount]) => ({ date, amount }))
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
 
         // Calculate average daily spending
         const avgDailySpending = dailySpending.length > 0
-            ? (dailySpending.reduce((sum, day) => sum + parseFloat(day.amount || 0), 0) / dailySpending.length).toFixed(2)
+            ? (dailySpending.reduce((sum, day) => sum + day.amount, 0) / periodDays).toFixed(2)
             : 0;
+
+        // Find top spending category
+        const topCategory = categoryBreakdown.length > 0 ? categoryBreakdown[0] : null;
 
         console.log(`   📤 Responding with analytics for ${period} days\n`);
 
@@ -60,23 +99,24 @@ router.get('/', authenticateToken, async (req, res) => {
                 totalIncome,
                 totalExpenses,
                 netCashFlow,
-                spendingChange: parseFloat(spendingChange),
+                spendingChange: 0, // TODO: Add period comparison
                 avgDailySpending: parseFloat(avgDailySpending),
                 topCategory: topCategory ? {
-                    name: topCategory.category,
-                    amount: parseFloat(topCategory.amount),
+                    name: topCategory.name,
+                    amount: topCategory.total,
+                    icon: topCategory.icon,
+                    color: topCategory.color,
                 } : null,
             },
             charts: {
-                categoryBreakdown: categorySpending.map(cat => ({
-                    category: cat.category,
-                    amount: parseFloat(cat.amount),
-                    count: parseInt(cat.count),
+                categoryBreakdown: categoryBreakdown.map(cat => ({
+                    category: cat.name,
+                    amount: cat.total,
+                    count: cat.count,
+                    icon: cat.icon,
+                    color: cat.color,
                 })),
-                dailySpending: dailySpending.map(day => ({
-                    date: day.date,
-                    amount: parseFloat(day.amount),
-                })),
+                dailySpending,
                 incomeVsExpenses: {
                     income: totalIncome,
                     expenses: totalExpenses,

@@ -4,6 +4,7 @@ const plaidService = require('../services/plaid');
 const watchdogService = require('../services/watchdog');
 const db = require('../services/db');
 const { authenticateToken } = require('../middleware/auth');
+const { categorizeTransaction, getCategoryBreakdown } = require('../services/categorization');
 
 // GET /transactions
 // Fetches transactions from cache or Plaid (if stale)
@@ -78,15 +79,33 @@ router.get('/', authenticateToken, async (req, res) => {
             return new Date(b.date) - new Date(a.date);
         });
 
-        // Run Watchdog Analysis
-        const leakageAnalysis = watchdogService.analyze(sortedTransactions);
+        // Apply categorization to each transaction
+        const categorizedTransactions = sortedTransactions.map(tx => {
+            const categoryInfo = categorizeTransaction(tx);
+            return {
+                ...tx,
+                // If Plaid category is empty, use our pattern-based category
+                category: (tx.category && tx.category.length > 0)
+                    ? tx.category
+                    : [categoryInfo.category],
+                categoryIcon: categoryInfo.icon,
+                categoryColor: categoryInfo.color
+            };
+        });
 
-        console.log(`   📤 Responding with ${sortedTransactions.length} transactions (source: ${dataSource})\n`);
+        // Get category breakdown for analytics
+        const categoryBreakdown = getCategoryBreakdown(categorizedTransactions);
+
+        // Run Watchdog Analysis
+        const leakageAnalysis = watchdogService.analyze(categorizedTransactions);
+
+        console.log(`   📤 Responding with ${categorizedTransactions.length} transactions (source: ${dataSource})\n`);
 
         res.json({
             success: true,
-            count: sortedTransactions.length,
-            data: sortedTransactions,
+            count: categorizedTransactions.length,
+            data: categorizedTransactions,
+            categoryBreakdown,
             analysis: leakageAnalysis,
             _meta: {
                 source: dataSource,

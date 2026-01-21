@@ -19,6 +19,7 @@ web-build/
 .env.test.local
 .env.production.local
 packages/backend/.env.new
+packages/backend/query-transactions.js
 
 # Logs
 npm-debug.log*

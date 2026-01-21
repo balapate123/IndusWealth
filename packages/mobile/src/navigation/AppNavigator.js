@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { NavigationContainer } from '@react-navigation/native';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
 import WatchdogScreen from '../screens/WatchdogScreen';
@@ -15,27 +15,30 @@ import SignupScreen from '../screens/SignupScreen';
 import ConnectBankScreen from '../screens/ConnectBankScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AllAccountsScreen from '../screens/AllAccountsScreen';
-import { COLORS, BORDER_RADIUS } from '../constants/theme';
+import { COLORS, BORDER_RADIUS, SPACING } from '../constants/theme';
 import cache from '../services/cache';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-const TabBarIcon = ({ focused, name }) => {
+const TabBarIcon = ({ focused, name, label }) => {
     const iconMap = {
-        'Home': focused ? 'home' : 'home-outline',
-        'Wealth': focused ? 'bar-chart' : 'bar-chart-outline',
-        'Watchdog': focused ? 'location' : 'location-outline',
-        'Profile': focused ? 'person' : 'person-outline',
+        'Home': 'home-outline',
+        'Wealth': 'bar-chart-outline',
+        'Watchdog': 'location-outline',
+        'Profile': 'person-outline',
     };
 
     return (
-        <View style={[styles.iconContainer, focused && styles.iconContainerActive]}>
+        <View style={[styles.tabItem, focused && styles.tabItemActive]}>
             <Ionicons
                 name={iconMap[name]}
-                size={24}
-                color={focused ? COLORS.GOLD : COLORS.TEXT_SECONDARY}
+                size={22}
+                color={focused ? COLORS.BACKGROUND : COLORS.GOLD}
             />
+            <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
+                {name}
+            </Text>
         </View>
     );
 };
@@ -47,8 +50,7 @@ const TabNavigator = () => {
             screenOptions={{
                 headerShown: false,
                 tabBarStyle: styles.tabBar,
-                tabBarShowLabel: true,
-                tabBarLabelStyle: styles.tabBarLabel,
+                tabBarShowLabel: false,
                 tabBarActiveTintColor: COLORS.GOLD,
                 tabBarInactiveTintColor: COLORS.TEXT_SECONDARY,
             }}
@@ -194,30 +196,54 @@ const AppNavigator = () => {
 
 const styles = StyleSheet.create({
     tabBar: {
-        backgroundColor: COLORS.CARD_BG,
+        backgroundColor: 'rgba(30, 30, 30, 0.95)',
         borderTopWidth: 0,
         height: 70,
-        paddingBottom: 10,
-        paddingTop: 5,
         position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        elevation: 0,
-        shadowOpacity: 0,
+        bottom: 25,
+        left: 16,
+        right: 16,
+        borderRadius: 35,
+        borderWidth: 1,
+        borderColor: 'rgba(201, 180, 88, 0.3)',
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        paddingHorizontal: 8,
+        paddingTop: 0,
+        paddingBottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    tabBarLabel: {
-        fontSize: 11,
-        marginTop: -2,
-    },
-    iconContainer: {
+    tabItem: {
         alignItems: 'center',
         justifyContent: 'center',
-        width: 40,
-        height: 32,
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 20,
+        flexDirection: 'column',
+        minHeight: 50,
     },
-    iconContainerActive: {
-        // No background for cleaner look with labels
+    tabItemActive: {
+        backgroundColor: COLORS.GOLD,
+        paddingHorizontal: 18,
+        paddingVertical: 8,
+    },
+    tabLabel: {
+        fontSize: 10,
+        color: COLORS.GOLD,
+        fontWeight: '500',
+        marginTop: 2,
+    },
+    tabLabelActive: {
+        color: COLORS.BACKGROUND,
+        fontWeight: '600',
+    },
+    container: {
+        flex: 1,
+        backgroundColor: COLORS.BACKGROUND,
     },
 });
 
