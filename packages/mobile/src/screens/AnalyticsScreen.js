@@ -12,23 +12,18 @@ import {
     Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import api from '../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Category colors for charts
-const CATEGORY_COLORS = [
-    '#FF6B6B', // Red
-    '#4ECDC4', // Teal
-    '#45B7D1', // Blue
-    '#96CEB4', // Green
-    '#FFEAA7', // Yellow
-    '#DDA0DD', // Plum
-    '#98D8C8', // Mint
-    '#F7DC6F', // Gold
-    '#BB8FCE', // Purple
-    '#85C1E9', // Light Blue
+// Time period options
+const TIME_PERIODS = [
+    { label: '7D', value: 7 },
+    { label: '30D', value: 30 },
+    { label: '90D', value: 90 },
+    { label: 'YTD', value: 365 },
 ];
 
 const AnalyticsScreen = ({ navigation }) => {
@@ -36,7 +31,6 @@ const AnalyticsScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedPeriod, setSelectedPeriod] = useState(30);
-    const [selectedCategory, setSelectedCategory] = useState(null);
 
     const fetchAnalytics = useCallback(async () => {
         try {
@@ -62,315 +56,301 @@ const AnalyticsScreen = ({ navigation }) => {
     }, [fetchAnalytics]);
 
     const formatCurrency = (amount) => {
-        return `$${parseFloat(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        const num = parseFloat(amount || 0);
+        if (num >= 1000000) {
+            return `$${(num / 1000000).toFixed(2)}M`;
+        }
+        if (num >= 1000) {
+            return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+        return `$${num.toFixed(2)}`;
     };
 
     const formatCompactCurrency = (amount) => {
         const num = parseFloat(amount || 0);
+        if (num >= 1000000) {
+            return `$${(num / 1000000).toFixed(1)}M`;
+        }
         if (num >= 1000) {
             return `$${(num / 1000).toFixed(1)}k`;
         }
         return `$${num.toFixed(0)}`;
     };
 
-    // Calculate percentages for donut chart
-    const getCategoryPercentages = () => {
-        if (!analytics?.charts?.categoryBreakdown) return [];
-        const total = analytics.charts.categoryBreakdown.reduce((sum, cat) => sum + cat.amount, 0);
-        return analytics.charts.categoryBreakdown.map((cat, index) => ({
-            ...cat,
-            percentage: total > 0 ? (cat.amount / total * 100) : 0,
-            color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-        }));
-    };
-
-    // Circular Progress Ring using Views (no SVG needed)
-    const DonutChart = ({ data, size = 180 }) => {
-        if (!data || data.length === 0) {
-            return (
-                <View style={styles.emptyChart}>
-                    <Ionicons name="pie-chart-outline" size={48} color={COLORS.TEXT_MUTED} />
-                    <Text style={styles.emptyChartText}>No spending data</Text>
+    // Header Component
+    const Header = () => (
+        <View style={styles.header}>
+            <View style={styles.headerLeft}>
+                <View style={styles.logoContainer}>
+                    <Ionicons name="analytics" size={20} color={COLORS.TEAL} />
                 </View>
-            );
-        }
-
-        const total = data.reduce((sum, cat) => sum + cat.amount, 0);
-        const selectedData = selectedCategory
-            ? data.find(d => d.category === selectedCategory)
-            : null;
-        const displayAmount = selectedData ? selectedData.amount : total;
-        const displayLabel = selectedData ? selectedData.category : 'Total';
-
-        return (
-            <View style={styles.donutContainer}>
-                {/* Donut visualization using stacked horizontal bars */}
-                <View style={styles.donutVisualContainer}>
-                    <View style={[styles.donutRing, { width: size, height: size }]}>
-                        {/* Outer ring with colored segments */}
-                        <View style={styles.donutSegments}>
-                            {data.slice(0, 8).map((cat, index) => (
-                                <View
-                                    key={cat.category}
-                                    style={[
-                                        styles.donutSegment,
-                                        {
-                                            backgroundColor: cat.color,
-                                            width: `${cat.percentage}%`,
-                                            opacity: selectedCategory && selectedCategory !== cat.category ? 0.3 : 1,
-                                        }
-                                    ]}
-                                />
-                            ))}
-                        </View>
-
-                        {/* Center content */}
-                        <View style={styles.donutCenter}>
-                            <Text style={styles.donutCenterAmount}>
-                                {formatCompactCurrency(displayAmount)}
-                            </Text>
-                            <Text style={styles.donutCenterLabel} numberOfLines={1}>
-                                {displayLabel}
-                            </Text>
-                            {selectedData && (
-                                <Text style={styles.donutCenterPercentage}>
-                                    {selectedData.percentage.toFixed(1)}%
-                                </Text>
-                            )}
-                        </View>
-                    </View>
-                </View>
-
-                {/* Category Legend - Interactive */}
-                <View style={styles.donutLegend}>
-                    {data.slice(0, 6).map((cat, index) => (
-                        <TouchableOpacity
-                            key={cat.category}
-                            style={[
-                                styles.legendItem,
-                                selectedCategory === cat.category && styles.legendItemActive
-                            ]}
-                            onPress={() => setSelectedCategory(
-                                selectedCategory === cat.category ? null : cat.category
-                            )}
-                        >
-                            <View style={[styles.legendDot, { backgroundColor: cat.color }]} />
-                            <View style={styles.legendTextContainer}>
-                                <Text style={styles.legendCategory} numberOfLines={1}>
-                                    {cat.category}
-                                </Text>
-                                <Text style={styles.legendAmount}>
-                                    {formatCurrency(cat.amount)}
-                                </Text>
-                            </View>
-                            <Text style={styles.legendPercentage}>
-                                {cat.percentage.toFixed(0)}%
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
+                <Text style={styles.headerTitle}>Wealth Narrative</Text>
             </View>
-        );
-    };
+            <TouchableOpacity style={styles.notificationButton}>
+                <Ionicons name="notifications-outline" size={22} color={COLORS.WHITE} />
+            </TouchableOpacity>
+        </View>
+    );
 
-    // Spending Trend Component
-    const SpendingTrend = () => {
-        const spendingChange = analytics?.summary?.spendingChange || 0;
-        const isUp = spendingChange > 0;
-        const isDown = spendingChange < 0;
-
-        return (
-            <View style={styles.trendCard}>
-                <View style={styles.trendHeader}>
-                    <Text style={styles.trendTitle}>Spending Trend</Text>
-                    <Text style={styles.trendPeriod}>vs previous {selectedPeriod} days</Text>
-                </View>
-
-                <View style={styles.trendContent}>
-                    <View style={[
-                        styles.trendBadge,
-                        isUp ? styles.trendBadgeUp : isDown ? styles.trendBadgeDown : styles.trendBadgeNeutral
+    // Time Period Toggle
+    const TimePeriodToggle = () => (
+        <View style={styles.periodContainer}>
+            {TIME_PERIODS.map((period) => (
+                <TouchableOpacity
+                    key={period.value}
+                    style={[
+                        styles.periodButton,
+                        selectedPeriod === period.value && styles.periodButtonActive
+                    ]}
+                    onPress={() => {
+                        if (selectedPeriod !== period.value) {
+                            setSelectedPeriod(period.value);
+                            setLoading(true);
+                        }
+                    }}
+                >
+                    <Text style={[
+                        styles.periodButtonText,
+                        selectedPeriod === period.value && styles.periodButtonTextActive
                     ]}>
-                        <Ionicons
-                            name={isUp ? 'trending-up' : isDown ? 'trending-down' : 'remove'}
-                            size={24}
-                            color={isUp ? '#FF6B6B' : isDown ? '#4CAF50' : COLORS.TEXT_SECONDARY}
-                        />
-                    </View>
+                        {period.label}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+        </View>
+    );
 
-                    <View style={styles.trendDetails}>
-                        <Text style={[
-                            styles.trendPercentage,
-                            { color: isUp ? '#FF6B6B' : isDown ? '#4CAF50' : COLORS.WHITE }
-                        ]}>
-                            {isUp ? '+' : ''}{spendingChange.toFixed(1)}%
-                        </Text>
-                        <Text style={styles.trendDescription}>
-                            {isUp
-                                ? `You're spending more than the previous period`
-                                : isDown
-                                    ? `Great! You've reduced your spending`
-                                    : 'Spending is consistent'
-                            }
-                        </Text>
-                    </View>
-                </View>
+    // Net Worth Card with Line Chart
+    const NetWorthCard = () => {
+        const wealthNarrative = analytics?.wealthNarrative;
+        const netWorthTrend = analytics?.charts?.netWorthTrend || [];
+        const changePercent = wealthNarrative?.netWorthChange || 0;
+        const isPositive = changePercent >= 0;
 
-                {/* Visual trend bar */}
-                <View style={styles.trendBarContainer}>
-                    <View style={styles.trendBarBackground}>
-                        <View
-                            style={[
-                                styles.trendBarFill,
-                                {
-                                    width: `${Math.min(Math.abs(spendingChange) * 2 + 50, 100)}%`,
-                                    backgroundColor: isUp ? '#FF6B6B' : isDown ? '#4CAF50' : COLORS.GOLD,
-                                }
-                            ]}
-                        />
-                    </View>
-                    <View style={styles.trendBarLabels}>
-                        <Text style={styles.trendBarLabel}>Less</Text>
-                        <Text style={styles.trendBarLabel}>Same</Text>
-                        <Text style={styles.trendBarLabel}>More</Text>
-                    </View>
-                </View>
-            </View>
-        );
-    };
+        // Simple line chart using Views
+        const renderLineChart = () => {
+            if (netWorthTrend.length < 2) return null;
 
-    // Daily Spending Chart
-    const renderBarChart = () => {
-        const dailyData = analytics?.charts?.dailySpending || [];
-        if (dailyData.length === 0) {
+            const values = netWorthTrend.map(d => d.value);
+            const minValue = Math.min(...values);
+            const maxValue = Math.max(...values);
+            const range = maxValue - minValue || 1;
+
             return (
-                <View style={styles.emptyChart}>
-                    <Ionicons name="bar-chart-outline" size={48} color={COLORS.TEXT_MUTED} />
-                    <Text style={styles.emptyChartText}>No daily data</Text>
-                </View>
-            );
-        }
-
-        const maxAmount = Math.max(...dailyData.map(d => d.amount), 1);
-        const last14Days = dailyData.slice(-14);
-        const avgAmount = last14Days.reduce((sum, d) => sum + d.amount, 0) / last14Days.length;
-
-        return (
-            <View style={styles.barChartContainer}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.barsRow}>
-                        {last14Days.map((day, index) => {
-                            const height = (day.amount / maxAmount) * 100;
-                            const date = new Date(day.date);
-                            const dayLabel = date.getDate();
-                            const isAboveAvg = day.amount > avgAmount;
-
+                <View style={styles.lineChartContainer}>
+                    <View style={styles.lineChart}>
+                        {netWorthTrend.slice(-20).map((point, index, arr) => {
+                            const height = ((point.value - minValue) / range) * 80 + 10;
+                            const prevPoint = arr[index - 1];
                             return (
-                                <View key={day.date} style={styles.barWrapper}>
-                                    <Text style={styles.barValue}>
-                                        {formatCompactCurrency(day.amount)}
-                                    </Text>
-                                    <View style={styles.barContainer}>
-                                        <View
-                                            style={[
-                                                styles.bar,
-                                                {
-                                                    height: `${Math.max(height, 5)}%`,
-                                                    backgroundColor: isAboveAvg ? '#FF6B6B' : COLORS.GOLD,
-                                                }
-                                            ]}
-                                        />
-                                    </View>
-                                    <Text style={styles.barLabel}>{dayLabel}</Text>
+                                <View key={point.date} style={styles.chartPointWrapper}>
+                                    <View
+                                        style={[
+                                            styles.chartPoint,
+                                            { height: height, backgroundColor: COLORS.TEAL }
+                                        ]}
+                                    />
                                 </View>
                             );
                         })}
                     </View>
-                </ScrollView>
+                    {/* Chart gradient overlay */}
+                    <LinearGradient
+                        colors={['rgba(78, 205, 196, 0.3)', 'transparent']}
+                        style={styles.chartGradient}
+                    />
+                </View>
+            );
+        };
 
-                {/* Average indicator */}
-                <View style={styles.avgIndicator}>
-                    <View style={styles.avgDot} />
-                    <Text style={styles.avgText}>Avg: {formatCompactCurrency(avgAmount)}/day</Text>
+        return (
+            <View style={styles.netWorthCard}>
+                <View style={styles.netWorthHeader}>
+                    <Text style={styles.netWorthLabel}>Net Worth</Text>
+                    <View style={[
+                        styles.changeBadge,
+                        { backgroundColor: isPositive ? 'rgba(78, 205, 196, 0.2)' : 'rgba(255, 107, 107, 0.2)' }
+                    ]}>
+                        <Ionicons
+                            name={isPositive ? 'trending-up' : 'trending-down'}
+                            size={12}
+                            color={isPositive ? COLORS.TEAL : COLORS.RED}
+                        />
+                        <Text style={[
+                            styles.changeBadgeText,
+                            { color: isPositive ? COLORS.TEAL : COLORS.RED }
+                        ]}>
+                            {isPositive ? '+' : ''}{changePercent.toFixed(1)}%
+                        </Text>
+                    </View>
+                </View>
+
+                <Text style={styles.netWorthAmount}>
+                    {formatCurrency(wealthNarrative?.netWorth || 0)}
+                </Text>
+
+                {renderLineChart()}
+
+                <Text style={styles.narrativeText}>
+                    {wealthNarrative?.narrative || 'Loading wealth narrative...'}
+                </Text>
+            </View>
+        );
+    };
+
+    // Burn Rate Card
+    const BurnRateCard = () => {
+        const burnRate = analytics?.burnRate;
+        const status = burnRate?.status || 'safe';
+        const statusColors = {
+            safe: COLORS.GREEN,
+            warning: COLORS.GOLD,
+            danger: COLORS.RED
+        };
+
+        return (
+            <View style={styles.sectionCard}>
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Burn Rate</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: statusColors[status] + '30' }]}>
+                        <Text style={[styles.statusBadgeText, { color: statusColors[status] }]}>
+                            {status.toUpperCase()}
+                        </Text>
+                    </View>
+                </View>
+
+                {/* Month Progress Bar */}
+                <View style={styles.progressRow}>
+                    <Text style={styles.progressLabel}>MONTH PROGRESS</Text>
+                    <Text style={styles.progressValue}>{burnRate?.monthProgress || 0}%</Text>
+                </View>
+                <View style={styles.progressBarBg}>
+                    <View
+                        style={[
+                            styles.progressBarFill,
+                            { width: `${burnRate?.monthProgress || 0}%`, backgroundColor: COLORS.TEXT_SECONDARY }
+                        ]}
+                    />
+                </View>
+
+                {/* Budget Spent Bar */}
+                <View style={styles.progressRow}>
+                    <Text style={styles.progressLabel}>BUDGET SPENT</Text>
+                    <Text style={[styles.progressValue, { color: statusColors[status] }]}>
+                        {burnRate?.budgetSpent || 0}%
+                    </Text>
+                </View>
+                <View style={styles.progressBarBg}>
+                    <View
+                        style={[
+                            styles.progressBarFill,
+                            { width: `${burnRate?.budgetSpent || 0}%`, backgroundColor: statusColors[status] }
+                        ]}
+                    />
                 </View>
             </View>
         );
     };
 
-    // Income vs Expenses comparison
-    const renderIncomeExpenses = () => {
-        const income = analytics?.charts?.incomeVsExpenses?.income || 0;
-        const expenses = analytics?.charts?.incomeVsExpenses?.expenses || 0;
-        const total = Math.max(income + expenses, 1);
-        const incomePercent = (income / total) * 100;
-        const expensePercent = (expenses / total) * 100;
-        const netCashFlow = income - expenses;
-        const savingsRate = income > 0 ? ((income - expenses) / income * 100).toFixed(1) : 0;
+    // AI Tip Card (Floating Gold Card)
+    const AiTipCard = () => {
+        const aiTip = analytics?.aiTip;
+        if (!aiTip) return null;
 
         return (
-            <View style={styles.incomeExpensesContainer}>
-                <View style={styles.ieRow}>
-                    <View style={styles.ieItem}>
-                        <View style={styles.ieIconContainer}>
-                            <Ionicons name="arrow-down-circle" size={24} color="#4CAF50" />
-                        </View>
-                        <View style={styles.ieTextContainer}>
-                            <Text style={styles.ieLabel}>Income</Text>
-                            <Text style={[styles.ieAmount, { color: '#4CAF50' }]}>
-                                {formatCurrency(income)}
-                            </Text>
-                        </View>
+            <LinearGradient
+                colors={['rgba(212, 175, 55, 0.95)', 'rgba(180, 140, 30, 0.95)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.aiTipCard}
+            >
+                <View style={styles.aiTipHeader}>
+                    <View style={styles.aiTipIcon}>
+                        <Ionicons name="flash" size={16} color={COLORS.GOLD} />
                     </View>
-                    <View style={styles.ieItem}>
-                        <View style={[styles.ieIconContainer, { backgroundColor: 'rgba(244, 67, 54, 0.15)' }]}>
-                            <Ionicons name="arrow-up-circle" size={24} color="#FF6B6B" />
-                        </View>
-                        <View style={styles.ieTextContainer}>
-                            <Text style={styles.ieLabel}>Expenses</Text>
-                            <Text style={[styles.ieAmount, { color: '#FF6B6B' }]}>
-                                {formatCurrency(expenses)}
-                            </Text>
-                        </View>
-                    </View>
+                    <Text style={styles.aiTipTitle}>{aiTip.title}</Text>
                 </View>
+                <Text style={styles.aiTipDescription}>
+                    Move <Text style={styles.aiTipHighlight}>${aiTip.surplus?.toLocaleString()}</Text> to your HISA for an extra{' '}
+                    <Text style={styles.aiTipHighlight}>${aiTip.potentialEarnings}/mo</Text> interest.
+                </Text>
+                <TouchableOpacity style={styles.aiTipButton}>
+                    <Text style={styles.aiTipButtonText}>{aiTip.action}</Text>
+                    <Ionicons name="flash" size={14} color="#0D0D0D" />
+                </TouchableOpacity>
+            </LinearGradient>
+        );
+    };
 
-                {/* Visual comparison bars */}
-                <View style={styles.comparisonBars}>
-                    <View style={styles.comparisonBarRow}>
-                        <Text style={styles.comparisonLabel}>Income</Text>
-                        <View style={styles.comparisonBarBg}>
-                            <View style={[styles.comparisonBarFill, styles.incomeBar, { width: `${incomePercent}%` }]} />
-                        </View>
-                        <Text style={styles.comparisonPercent}>{incomePercent.toFixed(0)}%</Text>
-                    </View>
-                    <View style={styles.comparisonBarRow}>
-                        <Text style={styles.comparisonLabel}>Expenses</Text>
-                        <View style={styles.comparisonBarBg}>
-                            <View style={[styles.comparisonBarFill, styles.expenseBar, { width: `${expensePercent}%` }]} />
-                        </View>
-                        <Text style={styles.comparisonPercent}>{expensePercent.toFixed(0)}%</Text>
-                    </View>
-                </View>
+    // Spending by Intent Card
+    const SpendingByIntentCard = () => {
+        const spendingByIntent = analytics?.spendingByIntent;
+        if (!spendingByIntent) return null;
 
-                {/* Net Cash Flow & Savings Rate */}
-                <View style={styles.netStatsRow}>
-                    <View style={styles.netStatItem}>
-                        <Text style={styles.netStatLabel}>Net Cash Flow</Text>
-                        <Text style={[
-                            styles.netStatAmount,
-                            { color: netCashFlow >= 0 ? '#4CAF50' : '#FF6B6B' }
-                        ]}>
-                            {netCashFlow >= 0 ? '+' : ''}{formatCurrency(netCashFlow)}
+        const intentItems = [
+            {
+                key: 'fixedNeeds',
+                icon: 'home',
+                color: '#FF9500',
+                ...spendingByIntent.fixedNeeds
+            },
+            {
+                key: 'growth',
+                icon: 'trending-up',
+                color: COLORS.GREEN,
+                ...spendingByIntent.growth
+            },
+            {
+                key: 'lifestyle',
+                icon: 'heart',
+                color: '#AF52DE',
+                ...spendingByIntent.lifestyle
+            },
+        ];
+
+        return (
+            <View style={styles.sectionCard}>
+                {intentItems.map((item) => (
+                    <View key={item.key} style={styles.intentRow}>
+                        <View style={[styles.intentIcon, { backgroundColor: item.color + '20' }]}>
+                            <Ionicons name={item.icon} size={16} color={item.color} />
+                        </View>
+                        <Text style={styles.intentLabel}>{item.label}</Text>
+                        <Text style={styles.intentAmount}>{formatCurrency(item.amount)}</Text>
+                    </View>
+                ))}
+            </View>
+        );
+    };
+
+    // Top Leakage Card
+    const TopLeakageCard = () => {
+        const topMerchant = analytics?.topMerchant;
+        if (!topMerchant) return null;
+
+        const isUp = topMerchant.changePercent > 0;
+
+        return (
+            <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Top Leakage</Text>
+
+                <View style={styles.merchantRow}>
+                    <View style={styles.merchantIcon}>
+                        <Text style={styles.merchantInitial}>
+                            {topMerchant.name?.charAt(0)?.toUpperCase() || 'U'}
                         </Text>
                     </View>
-                    <View style={styles.netStatDivider} />
-                    <View style={styles.netStatItem}>
-                        <Text style={styles.netStatLabel}>Savings Rate</Text>
+                    <View style={styles.merchantInfo}>
+                        <Text style={styles.merchantName}>{topMerchant.name}</Text>
+                        <Text style={styles.merchantCategory}>{topMerchant.category}</Text>
+                    </View>
+                    <View style={styles.merchantAmountContainer}>
+                        <Text style={styles.merchantAmount}>{formatCurrency(topMerchant.amount)}</Text>
                         <Text style={[
-                            styles.netStatAmount,
-                            { color: savingsRate >= 0 ? '#4CAF50' : '#FF6B6B' }
+                            styles.merchantChange,
+                            { color: isUp ? COLORS.RED : COLORS.GREEN }
                         ]}>
-                            {savingsRate}%
+                            {isUp ? '↑' : '↓'} {Math.abs(topMerchant.changePercent)}%
                         </Text>
                     </View>
                 </View>
@@ -378,29 +358,16 @@ const AnalyticsScreen = ({ navigation }) => {
         );
     };
 
-    // Quick Stats Cards
-    const renderQuickStats = () => {
-        const avgDaily = analytics?.summary?.avgDailySpending || 0;
-        const transactionCount = analytics?.charts?.categoryBreakdown?.reduce((sum, c) => sum + c.count, 0) || 0;
-        const categoryCount = analytics?.charts?.categoryBreakdown?.length || 0;
+    // AI Insight Footer
+    const AiInsightFooter = () => {
+        const aiTip = analytics?.aiTip;
 
         return (
-            <View style={styles.quickStatsRow}>
-                <View style={styles.quickStatCard}>
-                    <Ionicons name="calendar-outline" size={20} color={COLORS.GOLD} />
-                    <Text style={styles.quickStatValue}>{formatCurrency(avgDaily)}</Text>
-                    <Text style={styles.quickStatLabel}>Daily Avg</Text>
-                </View>
-                <View style={styles.quickStatCard}>
-                    <Ionicons name="receipt-outline" size={20} color={COLORS.GOLD} />
-                    <Text style={styles.quickStatValue}>{transactionCount}</Text>
-                    <Text style={styles.quickStatLabel}>Transactions</Text>
-                </View>
-                <View style={styles.quickStatCard}>
-                    <Ionicons name="grid-outline" size={20} color={COLORS.GOLD} />
-                    <Text style={styles.quickStatValue}>{categoryCount}</Text>
-                    <Text style={styles.quickStatLabel}>Categories</Text>
-                </View>
+            <View style={styles.insightFooter}>
+                <Text style={styles.insightLabel}>AI INSIGHT</Text>
+                <Text style={styles.insightText}>
+                    {aiTip?.description || 'Analyzing your spending patterns...'}
+                </Text>
             </View>
         );
     };
@@ -414,23 +381,11 @@ const AnalyticsScreen = ({ navigation }) => {
         );
     }
 
-    const categories = getCategoryPercentages();
-
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor={COLORS.BACKGROUND} />
 
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Analytics</Text>
-                <View style={styles.headerRight} />
-            </View>
+            <Header />
 
             <ScrollView
                 showsVerticalScrollIndicator={false}
@@ -444,94 +399,13 @@ const AnalyticsScreen = ({ navigation }) => {
                     />
                 }
             >
-                {/* Period Selector */}
-                <View style={styles.periodSelector}>
-                    {[7, 30, 90].map((period) => (
-                        <TouchableOpacity
-                            key={period}
-                            style={[
-                                styles.periodButton,
-                                selectedPeriod === period && styles.periodButtonActive
-                            ]}
-                            onPress={() => {
-                                setSelectedPeriod(period);
-                                setSelectedCategory(null);
-                                setLoading(true);
-                            }}
-                        >
-                            <Text style={[
-                                styles.periodButtonText,
-                                selectedPeriod === period && styles.periodButtonTextActive
-                            ]}>
-                                {period === 7 ? '7 Days' : period === 30 ? '30 Days' : '90 Days'}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-
-                {/* Total Spending Hero */}
-                <View style={styles.heroCard}>
-                    <Text style={styles.heroLabel}>Total Spending</Text>
-                    <Text style={styles.heroAmount}>
-                        {formatCurrency(analytics?.summary?.totalSpending)}
-                    </Text>
-                    <View style={styles.heroPeriodBadge}>
-                        <Text style={styles.heroPeriodText}>Last {selectedPeriod} days</Text>
-                    </View>
-                </View>
-
-                {/* Quick Stats */}
-                {renderQuickStats()}
-
-                {/* Spending Trend */}
-                <SpendingTrend />
-
-                {/* Category Breakdown */}
-                <View style={styles.chartCard}>
-                    <Text style={styles.chartTitle}>Spending by Category</Text>
-                    <DonutChart data={categories} size={180} />
-                </View>
-
-                {/* Daily Spending Bar Chart */}
-                <View style={styles.chartCard}>
-                    <View style={styles.chartHeader}>
-                        <Text style={styles.chartTitle}>Daily Spending</Text>
-                        <View style={styles.chartLegendSmall}>
-                            <View style={[styles.chartLegendDot, { backgroundColor: COLORS.GOLD }]} />
-                            <Text style={styles.chartLegendText}>Below avg</Text>
-                            <View style={[styles.chartLegendDot, { backgroundColor: '#FF6B6B', marginLeft: 8 }]} />
-                            <Text style={styles.chartLegendText}>Above avg</Text>
-                        </View>
-                    </View>
-                    {renderBarChart()}
-                </View>
-
-                {/* Income vs Expenses */}
-                <View style={styles.chartCard}>
-                    <Text style={styles.chartTitle}>Income vs Expenses</Text>
-                    {renderIncomeExpenses()}
-                </View>
-
-                {/* Top Category Insight */}
-                {analytics?.summary?.topCategory && (
-                    <View style={styles.insightCard}>
-                        <View style={styles.insightIcon}>
-                            <Ionicons name="bulb" size={24} color={COLORS.GOLD} />
-                        </View>
-                        <View style={styles.insightContent}>
-                            <Text style={styles.insightTitle}>Spending Insight</Text>
-                            <Text style={styles.insightText}>
-                                Your top spending category is{' '}
-                                <Text style={styles.insightHighlight}>{analytics.summary.topCategory.name}</Text>
-                                {' '}at{' '}
-                                <Text style={styles.insightHighlight}>
-                                    {formatCurrency(analytics.summary.topCategory.amount)}
-                                </Text>
-                                {' '}({((analytics.summary.topCategory.amount / analytics.summary.totalSpending) * 100).toFixed(0)}% of total)
-                            </Text>
-                        </View>
-                    </View>
-                )}
+                <TimePeriodToggle />
+                <NetWorthCard />
+                <BurnRateCard />
+                <AiTipCard />
+                <SpendingByIntentCard />
+                <TopLeakageCard />
+                <AiInsightFooter />
             </ScrollView>
         </View>
     );
@@ -563,510 +437,317 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.MEDIUM,
         paddingVertical: SPACING.MEDIUM,
     },
-    backButton: {
-        padding: SPACING.SMALL,
+    headerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    logoContainer: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        backgroundColor: COLORS.CARD_BG,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: SPACING.SMALL,
     },
     headerTitle: {
         color: COLORS.WHITE,
-        fontSize: 20,
-        fontWeight: '700',
+        fontSize: 18,
+        fontWeight: '600',
     },
-    headerRight: {
-        width: 40,
+    notificationButton: {
+        padding: SPACING.SMALL,
     },
 
-    // Period Selector
-    periodSelector: {
+    // Period Toggle
+    periodContainer: {
         flexDirection: 'row',
         marginHorizontal: SPACING.MEDIUM,
         marginBottom: SPACING.MEDIUM,
         backgroundColor: COLORS.CARD_BG,
-        borderRadius: BORDER_RADIUS.LARGE,
+        borderRadius: BORDER_RADIUS.XL,
         padding: 4,
     },
     periodButton: {
         flex: 1,
-        paddingVertical: SPACING.SMALL + 2,
+        paddingVertical: SPACING.SMALL,
         alignItems: 'center',
-        borderRadius: BORDER_RADIUS.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
     },
     periodButtonActive: {
-        backgroundColor: COLORS.GOLD,
+        backgroundColor: COLORS.CARD_BORDER,
     },
     periodButtonText: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 14,
+        color: COLORS.TEXT_MUTED,
+        fontSize: 13,
         fontWeight: '600',
     },
     periodButtonTextActive: {
-        color: COLORS.BACKGROUND,
+        color: COLORS.WHITE,
     },
 
-    // Hero Card
-    heroCard: {
+    // Net Worth Card
+    netWorthCard: {
         marginHorizontal: SPACING.MEDIUM,
         marginBottom: SPACING.MEDIUM,
-        padding: SPACING.LARGE,
+        padding: SPACING.MEDIUM,
         backgroundColor: COLORS.CARD_BG,
         borderRadius: BORDER_RADIUS.XL,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-        alignItems: 'center',
     },
-    heroLabel: {
+    netWorthHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.TINY,
+    },
+    netWorthLabel: {
         color: COLORS.TEXT_SECONDARY,
         fontSize: 14,
-        marginBottom: 4,
     },
-    heroAmount: {
-        color: COLORS.WHITE,
-        fontSize: 36,
-        fontWeight: 'bold',
-    },
-    heroPeriodBadge: {
-        marginTop: SPACING.SMALL,
-        paddingHorizontal: SPACING.MEDIUM,
+    changeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
         paddingVertical: 4,
-        backgroundColor: COLORS.CARD_BORDER,
         borderRadius: BORDER_RADIUS.MEDIUM,
     },
-    heroPeriodText: {
-        color: COLORS.TEXT_SECONDARY,
+    changeBadgeText: {
         fontSize: 12,
-    },
-
-    // Quick Stats
-    quickStatsRow: {
-        flexDirection: 'row',
-        paddingHorizontal: SPACING.MEDIUM,
-        marginBottom: SPACING.MEDIUM,
-        gap: SPACING.SMALL,
-    },
-    quickStatCard: {
-        flex: 1,
-        backgroundColor: COLORS.CARD_BG,
-        borderRadius: BORDER_RADIUS.LARGE,
-        padding: SPACING.MEDIUM,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
-    quickStatValue: {
-        color: COLORS.WHITE,
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginTop: SPACING.SMALL,
-    },
-    quickStatLabel: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 11,
-        marginTop: 2,
-    },
-
-    // Trend Card
-    trendCard: {
-        marginHorizontal: SPACING.MEDIUM,
-        marginBottom: SPACING.MEDIUM,
-        padding: SPACING.MEDIUM,
-        backgroundColor: COLORS.CARD_BG,
-        borderRadius: BORDER_RADIUS.XL,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
-    trendHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.MEDIUM,
-    },
-    trendTitle: {
-        color: COLORS.WHITE,
-        fontSize: 16,
         fontWeight: '600',
+        marginLeft: 4,
     },
-    trendPeriod: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 12,
-    },
-    trendContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    netWorthAmount: {
+        color: COLORS.WHITE,
+        fontSize: 32,
+        fontWeight: 'bold',
         marginBottom: SPACING.MEDIUM,
     },
-    trendBadge: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: SPACING.MEDIUM,
+    lineChartContainer: {
+        height: 100,
+        marginBottom: SPACING.MEDIUM,
+        position: 'relative',
     },
-    trendBadgeUp: {
-        backgroundColor: 'rgba(255, 107, 107, 0.15)',
-    },
-    trendBadgeDown: {
-        backgroundColor: 'rgba(76, 175, 80, 0.15)',
-    },
-    trendBadgeNeutral: {
-        backgroundColor: COLORS.CARD_BORDER,
-    },
-    trendDetails: {
-        flex: 1,
-    },
-    trendPercentage: {
-        fontSize: 24,
-        fontWeight: 'bold',
-    },
-    trendDescription: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 13,
-        marginTop: 2,
-    },
-    trendBarContainer: {
-        marginTop: SPACING.SMALL,
-    },
-    trendBarBackground: {
-        height: 8,
-        backgroundColor: COLORS.CARD_BORDER,
-        borderRadius: 4,
-        overflow: 'hidden',
-    },
-    trendBarFill: {
+    lineChart: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
         height: '100%',
-        borderRadius: 4,
     },
-    trendBarLabels: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 4,
-    },
-    trendBarLabel: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 10,
-    },
-
-    // Chart Cards
-    chartCard: {
-        marginHorizontal: SPACING.MEDIUM,
-        marginBottom: SPACING.MEDIUM,
-        backgroundColor: COLORS.CARD_BG,
-        borderRadius: BORDER_RADIUS.XL,
-        padding: SPACING.MEDIUM,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
-    chartHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    chartPointWrapper: {
+        flex: 1,
         alignItems: 'center',
-        marginBottom: SPACING.SMALL,
+        justifyContent: 'flex-end',
     },
-    chartTitle: {
-        color: COLORS.WHITE,
-        fontSize: 16,
-        fontWeight: '600',
-        marginBottom: SPACING.SMALL,
+    chartPoint: {
+        width: 3,
+        borderRadius: 2,
     },
-    chartLegendSmall: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    chartLegendDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        marginRight: 4,
-    },
-    chartLegendText: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 10,
-    },
-    emptyChart: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: SPACING.XL,
-    },
-    emptyChartText: {
-        color: COLORS.TEXT_MUTED,
-        marginTop: SPACING.SMALL,
-    },
-
-    // Donut Chart (View-based)
-    donutContainer: {
-        alignItems: 'center',
-    },
-    donutVisualContainer: {
-        alignItems: 'center',
-        marginBottom: SPACING.MEDIUM,
-    },
-    donutRing: {
-        borderRadius: 100,
-        backgroundColor: COLORS.CARD_BORDER,
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden',
-    },
-    donutSegments: {
+    chartGradient: {
         position: 'absolute',
-        top: 0,
+        bottom: 0,
         left: 0,
         right: 0,
-        flexDirection: 'row',
-        height: 20,
-        borderRadius: 10,
-        overflow: 'hidden',
+        height: 60,
     },
-    donutSegment: {
-        height: '100%',
+    narrativeText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 13,
+        lineHeight: 18,
     },
-    donutCenter: {
+
+    // Section Cards
+    sectionCard: {
+        marginHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+        padding: SPACING.MEDIUM,
         backgroundColor: COLORS.CARD_BG,
-        width: '70%',
-        height: '70%',
-        borderRadius: 100,
+        borderRadius: BORDER_RADIUS.XL,
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        justifyContent: 'center',
+        marginBottom: SPACING.MEDIUM,
     },
-    donutCenterAmount: {
+    sectionTitle: {
         color: COLORS.WHITE,
-        fontSize: 20,
-        fontWeight: 'bold',
+        fontSize: 16,
+        fontWeight: '600',
     },
-    donutCenterLabel: {
+    statusBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+    },
+    statusBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+
+    // Progress Bars
+    progressRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    progressLabel: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 11,
+        letterSpacing: 0.5,
+    },
+    progressValue: {
         color: COLORS.TEXT_SECONDARY,
         fontSize: 12,
-        marginTop: 2,
+        fontWeight: '600',
     },
-    donutCenterPercentage: {
+    progressBarBg: {
+        height: 6,
+        backgroundColor: COLORS.CARD_BORDER,
+        borderRadius: 3,
+        marginBottom: SPACING.MEDIUM,
+        overflow: 'hidden',
+    },
+    progressBarFill: {
+        height: '100%',
+        borderRadius: 3,
+    },
+
+    // AI Tip Card
+    aiTipCard: {
+        marginHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+        padding: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.XL,
+    },
+    aiTipHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: SPACING.SMALL,
+    },
+    aiTipIcon: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: 'rgba(0,0,0,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: SPACING.SMALL,
+    },
+    aiTipTitle: {
+        color: '#0D0D0D',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    aiTipDescription: {
+        color: '#0D0D0D',
+        fontSize: 13,
+        lineHeight: 18,
+        marginBottom: SPACING.MEDIUM,
+    },
+    aiTipHighlight: {
+        fontWeight: '700',
+    },
+    aiTipButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#0D0D0D',
+        paddingVertical: SPACING.SMALL + 2,
+        borderRadius: BORDER_RADIUS.XL,
+    },
+    aiTipButtonText: {
         color: COLORS.GOLD,
         fontSize: 14,
         fontWeight: '600',
-        marginTop: 2,
+        marginRight: 6,
     },
-    donutLegend: {
-        width: '100%',
-    },
-    legendItem: {
+
+    // Spending by Intent
+    intentRow: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: SPACING.SMALL,
-        paddingHorizontal: SPACING.SMALL,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        marginBottom: 4,
     },
-    legendItemActive: {
-        backgroundColor: COLORS.CARD_BORDER,
-    },
-    legendDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
+    intentIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
         marginRight: SPACING.SMALL,
     },
-    legendTextContainer: {
+    intentLabel: {
         flex: 1,
-    },
-    legendCategory: {
         color: COLORS.WHITE,
         fontSize: 14,
     },
-    legendAmount: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 12,
-    },
-    legendPercentage: {
-        color: COLORS.TEXT_SECONDARY,
+    intentAmount: {
+        color: COLORS.WHITE,
         fontSize: 14,
         fontWeight: '600',
-        minWidth: 40,
-        textAlign: 'right',
     },
 
-    // Bar Chart
-    barChartContainer: {
-        marginTop: SPACING.SMALL,
-    },
-    barsRow: {
+    // Top Leakage
+    merchantRow: {
         flexDirection: 'row',
-        alignItems: 'flex-end',
-        height: 140,
-        paddingRight: SPACING.MEDIUM,
-    },
-    barWrapper: {
         alignItems: 'center',
-        marginRight: 8,
-        width: 32,
+        marginTop: SPACING.MEDIUM,
     },
-    barValue: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 8,
-        marginBottom: 2,
-    },
-    barContainer: {
-        width: 20,
-        height: 100,
+    merchantIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: COLORS.CARD_BORDER,
-        borderRadius: BORDER_RADIUS.SMALL,
-        justifyContent: 'flex-end',
-        overflow: 'hidden',
-    },
-    bar: {
-        width: '100%',
-        borderRadius: BORDER_RADIUS.SMALL,
-    },
-    barLabel: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 10,
-        marginTop: 4,
-    },
-    avgIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: SPACING.SMALL,
-    },
-    avgDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: COLORS.GOLD,
-        marginRight: 6,
-    },
-    avgText: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
-    },
-
-    // Income vs Expenses
-    incomeExpensesContainer: {
-        marginTop: SPACING.SMALL,
-    },
-    ieRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: SPACING.MEDIUM,
-    },
-    ieItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    ieIconContainer: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(76, 175, 80, 0.15)',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: SPACING.SMALL,
     },
-    ieTextContainer: {},
-    ieLabel: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
-    },
-    ieAmount: {
-        fontSize: 18,
-        fontWeight: '700',
-    },
-    comparisonBars: {
-        marginBottom: SPACING.MEDIUM,
-    },
-    comparisonBarRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: SPACING.SMALL,
-    },
-    comparisonLabel: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 12,
-        width: 60,
-    },
-    comparisonBarBg: {
-        flex: 1,
-        height: 12,
-        backgroundColor: COLORS.CARD_BORDER,
-        borderRadius: 6,
-        overflow: 'hidden',
-        marginHorizontal: SPACING.SMALL,
-    },
-    comparisonBarFill: {
-        height: '100%',
-        borderRadius: 6,
-    },
-    incomeBar: {
-        backgroundColor: '#4CAF50',
-    },
-    expenseBar: {
-        backgroundColor: '#FF6B6B',
-    },
-    comparisonPercent: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
+    merchantInitial: {
+        color: COLORS.WHITE,
+        fontSize: 16,
         fontWeight: '600',
-        width: 35,
-        textAlign: 'right',
     },
-    netStatsRow: {
-        flexDirection: 'row',
-        paddingTop: SPACING.MEDIUM,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.CARD_BORDER,
-    },
-    netStatItem: {
+    merchantInfo: {
         flex: 1,
-        alignItems: 'center',
     },
-    netStatDivider: {
-        width: 1,
-        backgroundColor: COLORS.CARD_BORDER,
+    merchantName: {
+        color: COLORS.WHITE,
+        fontSize: 14,
+        fontWeight: '500',
     },
-    netStatLabel: {
+    merchantCategory: {
         color: COLORS.TEXT_MUTED,
         fontSize: 12,
-        marginBottom: 4,
     },
-    netStatAmount: {
-        fontSize: 18,
-        fontWeight: 'bold',
+    merchantAmountContainer: {
+        alignItems: 'flex-end',
     },
-
-    // Insight Card
-    insightCard: {
-        marginHorizontal: SPACING.MEDIUM,
-        marginBottom: SPACING.MEDIUM,
-        flexDirection: 'row',
-        backgroundColor: COLORS.CARD_BG,
-        borderRadius: BORDER_RADIUS.XL,
-        padding: SPACING.MEDIUM,
-        borderWidth: 1,
-        borderColor: COLORS.GOLD + '40',
-    },
-    insightIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: COLORS.GOLD + '20',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: SPACING.MEDIUM,
-    },
-    insightContent: {
-        flex: 1,
-    },
-    insightTitle: {
-        color: COLORS.GOLD,
+    merchantAmount: {
+        color: COLORS.WHITE,
         fontSize: 14,
         fontWeight: '600',
+    },
+    merchantChange: {
+        fontSize: 12,
+        fontWeight: '500',
+    },
+
+    // AI Insight Footer
+    insightFooter: {
+        marginHorizontal: SPACING.MEDIUM,
+        marginTop: SPACING.SMALL,
+        paddingTop: SPACING.MEDIUM,
+    },
+    insightLabel: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 10,
+        letterSpacing: 1,
         marginBottom: 4,
     },
     insightText: {
         color: COLORS.TEXT_SECONDARY,
         fontSize: 13,
         lineHeight: 18,
-    },
-    insightHighlight: {
-        color: COLORS.WHITE,
-        fontWeight: '600',
     },
 });
 
