@@ -1,11 +1,11 @@
 export const COLORS = {
     // Primary backgrounds
     BACKGROUND: '#0D0D0D',        // Near black main background
-    CARD_BG: '#1A2B3C',           // Indus Indigo - card background
-    CARD_BORDER: '#2A3B4C',       // Lighter indigo border
+    CARD_BG: '#1A1A1A',           // Card background
+    CARD_BORDER: '#2A2A2A',       // Subtle card border
 
     // Brand colors
-    GOLD: '#D4AF37',              // Prosperity Gold accent
+    GOLD: '#C9A227',              // Gold accent for active states
     GOLD_LIGHT: '#E5C048',        // Lighter gold for highlights
     GREEN: '#4CAF50',             // Positive amounts
     GREEN_DARK: '#2D6B30',        // Dark green for badges

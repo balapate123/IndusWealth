@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
     View,
     Text,
@@ -10,13 +10,32 @@ import {
     ActivityIndicator,
     RefreshControl,
     Dimensions,
+    Animated,
+    Modal,
+    FlatList,
 } from 'react-native';
+import { Svg, Circle, G, Path, Defs, Stop, LinearGradient as SvgLinearGradient } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import api from '../services/api';
+import { categorizeTransaction } from '../utils/categorization';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Category colors for donut chart
+const CATEGORY_COLORS = [
+    '#4ECDC4', // Teal
+    '#FF6B6B', // Red
+    '#45B7D1', // Blue
+    '#96CEB4', // Green
+    '#FFEAA7', // Yellow
+    '#DDA0DD', // Plum
+    '#98D8C8', // Mint
+    '#F7DC6F', // Gold
+    '#BB8FCE', // Purple
+    '#85C1E9', // Light Blue
+];
 
 // Time period options
 const TIME_PERIODS = [
@@ -31,12 +50,34 @@ const AnalyticsScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedPeriod, setSelectedPeriod] = useState(30);
+    const [selectedCategory, setSelectedCategory] = useState(null);
+    const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+    const [categoryTransactions, setCategoryTransactions] = useState([]);
+    const [loadingTransactions, setLoadingTransactions] = useState(false);
+    const [accounts, setAccounts] = useState([]);
+
+    // Account colors for transaction color coding
+    const ACCOUNT_COLORS = {
+        'checking': '#4ECDC4',
+        'savings': '#45B7D1',
+        'credit': '#FF6B6B',
+        'investment': '#96CEB4',
+        'default': '#FFEAA7'
+    };
 
     const fetchAnalytics = useCallback(async () => {
         try {
-            const data = await api.getAnalytics(selectedPeriod);
-            if (data?.success) {
-                setAnalytics(data);
+            // Fetch both analytics and accounts in parallel
+            const [analyticsData, accountsData] = await Promise.all([
+                api.getAnalytics(selectedPeriod),
+                api.getAccounts()
+            ]);
+
+            if (analyticsData?.success) {
+                setAnalytics(analyticsData);
+            }
+            if (accountsData?.success && accountsData?.accounts) {
+                setAccounts(accountsData.accounts);
             }
         } catch (err) {
             console.error('Error fetching analytics:', err);
@@ -77,7 +118,279 @@ const AnalyticsScreen = ({ navigation }) => {
         return `$${num.toFixed(0)}`;
     };
 
-    // Header Component
+    // Normalize category names for comparison (handles "Transfer" vs "Transfers", case differences)
+    const normalizeCategory = (cat) => {
+        if (!cat) return '';
+        return cat.toLowerCase()
+            .replace(/s$/, '')  // Remove trailing 's' for singular/plural match
+            .replace(/\s+/g, '') // Remove spaces
+            .replace(/[&]/g, 'and'); // Normalize '&' to 'and'
+    };
+
+    // Handle category click - fetch transactions for that category
+    const handleCategoryPress = async (category) => {
+        // Prevent double-triggering if already loading
+        if (loadingTransactions || categoryModalVisible) return;
+
+        // Clear previous transactions immediately and show modal with loading
+        setCategoryTransactions([]);
+        setSelectedCategory(category);
+        setLoadingTransactions(true);
+        setCategoryModalVisible(true);
+
+        try {
+            const response = await api.getTransactions(`?limit=500`);
+            // Backend returns { success: true, data: [...transactions...] }
+            if (response?.success && response?.data) {
+                const targetCategory = normalizeCategory(category.category);
+
+                const filtered = response.data.filter(tx => {
+                    // Only include expenses (positive amounts in Plaid's convention)
+                    if (parseFloat(tx.amount) <= 0) return false;
+
+                    // Get the transaction's category
+                    let txCategoryName;
+                    if (tx.category && tx.category.length > 0 && tx.category[0]) {
+                        txCategoryName = tx.category[0];
+                    } else {
+                        const categorized = categorizeTransaction(tx);
+                        txCategoryName = categorized.category;
+                    }
+
+                    // Normalize and compare - handles "Transfer" vs "Transfers" etc.
+                    return normalizeCategory(txCategoryName) === targetCategory;
+                });
+
+                // Sort by date descending
+                filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+                setCategoryTransactions(filtered);
+            }
+        } catch (err) {
+            console.error('Error fetching category transactions:', err);
+        } finally {
+            setLoadingTransactions(false);
+        }
+    };
+
+    // Memoize category data to prevent unnecessary re-renders
+    const categoryData = useMemo(() => {
+        const breakdown = analytics?.charts?.categoryBreakdown || [];
+        const total = breakdown.reduce((sum, cat) => sum + cat.amount, 0);
+
+        return breakdown.slice(0, 10).map((cat, index) => ({
+            ...cat,
+            percentage: total > 0 ? (cat.amount / total * 100) : 0,
+            // Always use frontend colors to ensure visibility
+            color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+        }));
+    }, [analytics?.charts?.categoryBreakdown]);
+
+    // Horizontal Stacked Bar Chart - more reliable than SVG
+    const CategoryBarChart = ({ data }) => {
+        const [activeCategory, setActiveCategory] = useState(null);
+
+        if (!data || data.length === 0) {
+            return (
+                <View style={styles.emptyChart}>
+                    <Ionicons name="bar-chart-outline" size={48} color={COLORS.TEXT_MUTED} />
+                    <Text style={styles.emptyChartText}>No spending data</Text>
+                </View>
+            );
+        }
+
+        const total = data.reduce((sum, cat) => sum + cat.amount, 0);
+
+        return (
+            <View style={styles.barChartContainer}>
+                {/* Stacked horizontal bar */}
+                <View style={styles.stackedBar}>
+                    {data.map((cat, index) => (
+                        <TouchableOpacity
+                            key={cat.category}
+                            style={[
+                                styles.barSegment,
+                                {
+                                    flex: cat.percentage,
+                                    backgroundColor: cat.color,
+                                    opacity: activeCategory && activeCategory !== cat.category ? 0.4 : 1,
+                                    borderTopLeftRadius: index === 0 ? 8 : 0,
+                                    borderBottomLeftRadius: index === 0 ? 8 : 0,
+                                    borderTopRightRadius: index === data.length - 1 ? 8 : 0,
+                                    borderBottomRightRadius: index === data.length - 1 ? 8 : 0,
+                                }
+                            ]}
+                            onPress={() => setActiveCategory(activeCategory === cat.category ? null : cat.category)}
+                            activeOpacity={0.8}
+                        />
+                    ))}
+                </View>
+
+                {/* Selected category tooltip */}
+                {activeCategory ? (
+                    <View style={[
+                        styles.categoryTooltip,
+                        { backgroundColor: data.find(c => c.category === activeCategory)?.color || COLORS.GOLD }
+                    ]}>
+                        <Text style={styles.categoryTooltipText}>
+                            {activeCategory}: {formatCompactCurrency(data.find(c => c.category === activeCategory)?.amount || 0)}
+                        </Text>
+                    </View>
+                ) : (
+                    <View style={styles.categoryTooltipPlaceholder}>
+                        <Text style={styles.categoryTooltipPlaceholderText}>Tap a segment</Text>
+                    </View>
+                )}
+
+                {/* Total amount */}
+                <Text style={styles.barChartTotal}>
+                    Total: {formatCurrency(total)}
+                </Text>
+            </View>
+        );
+    };
+
+    // Category Breakdown Card with Donut Chart and List
+    const CategoryBreakdownCard = () => {
+        const total = categoryData.reduce((sum, cat) => sum + cat.amount, 0);
+
+        return (
+            <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Spending by Category</Text>
+
+                {/* Category Bar Chart */}
+                <CategoryBarChart data={categoryData} />
+
+                {/* Category List */}
+                <View style={styles.categoryList}>
+                    {categoryData.map((cat, index) => (
+                        <TouchableOpacity
+                            key={cat.category}
+                            style={styles.categoryRow}
+                            onPress={() => handleCategoryPress(cat)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={[styles.categoryDot, { backgroundColor: cat.color }]} />
+                            <View style={styles.categoryInfo}>
+                                <Text style={styles.categoryName}>{cat.category}</Text>
+                                <Text style={styles.categoryCount}>{cat.count} transactions</Text>
+                            </View>
+                            <View style={styles.categoryAmountContainer}>
+                                <Text style={styles.categoryAmount}>{formatCurrency(cat.amount)}</Text>
+                                <Text style={styles.categoryPercentage}>{cat.percentage.toFixed(1)}%</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={16} color={COLORS.TEXT_MUTED} />
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </View>
+        );
+    };
+
+    // Category Transactions Modal
+    const CategoryTransactionsModal = () => (
+        <Modal
+            visible={categoryModalVisible}
+            animationType="slide"
+            transparent={true}
+            onRequestClose={() => setCategoryModalVisible(false)}
+        >
+            <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                    {/* Modal Header */}
+                    <View style={styles.modalHeader}>
+                        <View style={styles.modalTitleRow}>
+                            <View style={[
+                                styles.modalCategoryDot,
+                                { backgroundColor: selectedCategory?.color || COLORS.GOLD }
+                            ]} />
+                            <Text style={styles.modalTitle}>
+                                {selectedCategory?.category || 'Category'}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => setCategoryModalVisible(false)}
+                            style={styles.modalCloseButton}
+                        >
+                            <Ionicons name="close" size={24} color={COLORS.WHITE} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Summary */}
+                    <View style={styles.modalSummary}>
+                        <Text style={styles.modalSummaryAmount}>
+                            {formatCurrency(selectedCategory?.amount || 0)}
+                        </Text>
+                        <Text style={styles.modalSummaryLabel}>
+                            {loadingTransactions ? 'Loading...' : `${categoryTransactions.length} transactions in this period`}
+                        </Text>
+                    </View>
+
+                    {/* Transaction List */}
+                    {loadingTransactions ? (
+                        <View style={styles.modalLoading}>
+                            <ActivityIndicator size="small" color={COLORS.GOLD} />
+                        </View>
+                    ) : (
+                        <FlatList
+                            data={categoryTransactions}
+                            keyExtractor={(item, index) => item.id?.toString() || item.transaction_id || `tx-${index}`}
+                            renderItem={({ item }) => {
+                                // Get account color based on account type or id
+                                const getAccountColor = () => {
+                                    const account = accounts.find(a => a.account_id === item.account_id);
+                                    if (account) {
+                                        return ACCOUNT_COLORS[account.subtype] ||
+                                            ACCOUNT_COLORS[account.type] ||
+                                            ACCOUNT_COLORS.default;
+                                    }
+                                    return ACCOUNT_COLORS.default;
+                                };
+                                const accountColor = getAccountColor();
+
+                                return (
+                                    <View style={styles.transactionRow}>
+                                        <View style={[styles.transactionIcon, { borderLeftWidth: 3, borderLeftColor: accountColor }]}>
+                                            <Ionicons
+                                                name="receipt-outline"
+                                                size={16}
+                                                color={accountColor}
+                                            />
+                                        </View>
+                                        <View style={styles.transactionInfo}>
+                                            <Text style={styles.transactionName} numberOfLines={1}>
+                                                {item.merchant_name || item.name}
+                                            </Text>
+                                            <Text style={styles.transactionDate}>
+                                                {new Date(item.date).toLocaleDateString('en-US', {
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                    year: 'numeric'
+                                                })}
+                                            </Text>
+                                        </View>
+                                        <Text style={[styles.transactionAmount, { color: COLORS.RED }]}>
+                                            -${Math.abs(item.amount).toFixed(2)}
+                                        </Text>
+                                    </View>
+                                );
+                            }}
+                            style={styles.transactionList}
+                            contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
+                            showsVerticalScrollIndicator={true}
+                            ListEmptyComponent={
+                                <View style={styles.emptyTransactions}>
+                                    <Ionicons name="document-text-outline" size={40} color={COLORS.TEXT_MUTED} />
+                                    <Text style={styles.emptyTransactionsText}>
+                                        No transactions found for this category
+                                    </Text>
+                                </View>
+                            }
+                        />
+                    )}
+                </View>
+            </View>
+        </Modal>
+    );
     const Header = () => (
         <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -127,38 +440,133 @@ const AnalyticsScreen = ({ navigation }) => {
         const changePercent = wealthNarrative?.netWorthChange || 0;
         const isPositive = changePercent >= 0;
 
-        // Simple line chart using Views
-        const renderLineChart = () => {
+        // Smooth area chart using SVG with interactive touch points
+        const [selectedDataPoint, setSelectedDataPoint] = useState(null);
+
+        const renderAreaChart = () => {
             if (netWorthTrend.length < 2) return null;
 
-            const values = netWorthTrend.map(d => d.value);
+            const data = netWorthTrend.slice(-20);
+            const values = data.map(d => d.value);
             const minValue = Math.min(...values);
             const maxValue = Math.max(...values);
             const range = maxValue - minValue || 1;
 
+            const chartWidth = 340;
+            const chartHeight = 120;
+            const tooltipHeight = 25;
+            const padding = 10;
+
+            // Generate smooth path points
+            const points = data.map((point, index) => {
+                const x = padding + (index / (data.length - 1)) * (chartWidth - 2 * padding);
+                const y = tooltipHeight + chartHeight - padding - ((point.value - minValue) / range) * (chartHeight - 2 * padding);
+                return { x, y, value: point.value, date: point.date };
+            });
+
+            // Create smooth curve path using quadratic bezier
+            let linePath = `M ${points[0].x} ${points[0].y}`;
+            for (let i = 1; i < points.length; i++) {
+                const prev = points[i - 1];
+                const curr = points[i];
+                const midX = (prev.x + curr.x) / 2;
+                linePath += ` Q ${prev.x} ${prev.y} ${midX} ${(prev.y + curr.y) / 2}`;
+            }
+            const lastPoint = points[points.length - 1];
+            linePath += ` T ${lastPoint.x} ${lastPoint.y}`;
+
+            // Area path (same as line but closes to bottom)
+            const areaPath = linePath +
+                ` L ${lastPoint.x} ${tooltipHeight + chartHeight} L ${points[0].x} ${tooltipHeight + chartHeight} Z`;
+
+            // Baseline (average line)
+            const avgY = tooltipHeight + chartHeight - padding - (0.3 * (chartHeight - 2 * padding));
+
             return (
-                <View style={styles.lineChartContainer}>
-                    <View style={styles.lineChart}>
-                        {netWorthTrend.slice(-20).map((point, index, arr) => {
-                            const height = ((point.value - minValue) / range) * 80 + 10;
-                            const prevPoint = arr[index - 1];
-                            return (
-                                <View key={point.date} style={styles.chartPointWrapper}>
-                                    <View
-                                        style={[
-                                            styles.chartPoint,
-                                            { height: height, backgroundColor: COLORS.TEAL }
-                                        ]}
-                                    />
-                                </View>
-                            );
-                        })}
-                    </View>
-                    {/* Chart gradient overlay */}
-                    <LinearGradient
-                        colors={['rgba(78, 205, 196, 0.3)', 'transparent']}
-                        style={styles.chartGradient}
-                    />
+                <View style={styles.areaChartContainer}>
+                    <Svg width={chartWidth} height={chartHeight + tooltipHeight}>
+                        <Defs>
+                            <SvgLinearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                                <Stop offset="0%" stopColor={COLORS.TEAL} stopOpacity="0.4" />
+                                <Stop offset="100%" stopColor={COLORS.TEAL} stopOpacity="0.05" />
+                            </SvgLinearGradient>
+                        </Defs>
+
+                        {/* Gradient fill area */}
+                        <Path
+                            d={areaPath}
+                            fill="url(#areaGradient)"
+                        />
+
+                        {/* Dashed baseline */}
+                        <Path
+                            d={`M ${padding} ${avgY} L ${chartWidth - padding} ${avgY}`}
+                            stroke={COLORS.TEXT_MUTED}
+                            strokeWidth="1"
+                            strokeDasharray="4,4"
+                            fill="none"
+                        />
+
+                        {/* Main line */}
+                        <Path
+                            d={linePath}
+                            stroke={COLORS.TEAL}
+                            strokeWidth="2.5"
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+
+                        {/* Selected point indicator */}
+                        {selectedDataPoint !== null && points[selectedDataPoint] && (
+                            <>
+                                <Path
+                                    d={`M ${points[selectedDataPoint].x} ${points[selectedDataPoint].y} L ${points[selectedDataPoint].x} ${tooltipHeight + chartHeight}`}
+                                    stroke={COLORS.TEAL}
+                                    strokeWidth="1"
+                                    strokeDasharray="3,3"
+                                    fill="none"
+                                />
+                                <Circle
+                                    cx={points[selectedDataPoint].x}
+                                    cy={points[selectedDataPoint].y}
+                                    r={6}
+                                    fill={COLORS.TEAL}
+                                    stroke={COLORS.WHITE}
+                                    strokeWidth={2}
+                                />
+                            </>
+                        )}
+                    </Svg>
+
+                    {/* TouchableOpacity overlay for interaction */}
+                    {points.map((point, index) => (
+                        <TouchableOpacity
+                            key={index}
+                            style={{
+                                position: 'absolute',
+                                left: point.x - 15,
+                                top: point.y - 15,
+                                width: 30,
+                                height: 30,
+                                borderRadius: 15,
+                            }}
+                            onPress={() => setSelectedDataPoint(selectedDataPoint === index ? null : index)}
+                            activeOpacity={0.7}
+                        />
+                    ))}
+
+                    {/* Tooltip above chart */}
+                    {selectedDataPoint !== null && points[selectedDataPoint] && (
+                        <View style={[styles.chartTooltip, { left: Math.max(10, Math.min(points[selectedDataPoint].x - 50, chartWidth - 110)) }]}>
+                            <Text style={styles.chartTooltipAmount}>
+                                {formatCompactCurrency(points[selectedDataPoint].value)}
+                            </Text>
+                            <Text style={styles.chartTooltipDate}>
+                                {new Date(points[selectedDataPoint].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </Text>
+                        </View>
+                    )}
                 </View>
             );
         };
@@ -189,7 +597,7 @@ const AnalyticsScreen = ({ navigation }) => {
                     {formatCurrency(wealthNarrative?.netWorth || 0)}
                 </Text>
 
-                {renderLineChart()}
+                {renderAreaChart()}
 
                 <Text style={styles.narrativeText}>
                     {wealthNarrative?.narrative || 'Loading wealth narrative...'}
@@ -402,11 +810,15 @@ const AnalyticsScreen = ({ navigation }) => {
                 <TimePeriodToggle />
                 <NetWorthCard />
                 <BurnRateCard />
+                <CategoryBreakdownCard />
                 <AiTipCard />
                 <SpendingByIntentCard />
                 <TopLeakageCard />
                 <AiInsightFooter />
             </ScrollView>
+
+            {/* Category Transactions Modal */}
+            <CategoryTransactionsModal />
         </View>
     );
 };
@@ -521,6 +933,35 @@ const styles = StyleSheet.create({
         fontSize: 32,
         fontWeight: 'bold',
         marginBottom: SPACING.MEDIUM,
+    },
+    // Area Chart
+    areaChartContainer: {
+        marginVertical: SPACING.MEDIUM,
+        alignItems: 'center',
+        overflow: 'visible',
+        position: 'relative',
+    },
+    chartTooltip: {
+        position: 'absolute',
+        top: 0,
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        borderWidth: 1,
+        borderColor: COLORS.TEAL,
+    },
+    chartTooltipAmount: {
+        color: COLORS.TEAL,
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
+    chartTooltipDate: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 12,
     },
     lineChartContainer: {
         height: 100,
@@ -748,6 +1189,213 @@ const styles = StyleSheet.create({
         color: COLORS.TEXT_SECONDARY,
         fontSize: 13,
         lineHeight: 18,
+    },
+
+    // Bar Chart
+    barChartContainer: {
+        alignItems: 'center',
+        marginVertical: SPACING.MEDIUM,
+        paddingHorizontal: SPACING.SMALL,
+    },
+    stackedBar: {
+        flexDirection: 'row',
+        width: '100%',
+        height: 32,
+        borderRadius: 8,
+        overflow: 'hidden',
+        backgroundColor: COLORS.CARD_BORDER,
+    },
+    barSegment: {
+        height: '100%',
+    },
+    barChartTotal: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 14,
+        fontWeight: '600',
+        marginTop: SPACING.MEDIUM,
+    },
+    categoryTooltip: {
+        marginTop: SPACING.SMALL,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        minWidth: 100,
+        alignItems: 'center',
+    },
+    categoryTooltipText: {
+        color: COLORS.WHITE,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    categoryTooltipPlaceholder: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        minWidth: 100,
+        alignItems: 'center',
+        backgroundColor: COLORS.CARD_BORDER,
+    },
+    categoryTooltipPlaceholderText: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 12,
+    },
+    emptyChart: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: SPACING.XL,
+    },
+    emptyChartText: {
+        color: COLORS.TEXT_MUTED,
+        marginTop: SPACING.SMALL,
+    },
+
+
+    // Category List
+    categoryList: {
+        marginTop: SPACING.SMALL,
+    },
+    categoryRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: SPACING.SMALL + 2,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.CARD_BORDER,
+    },
+    categoryDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        marginRight: SPACING.SMALL,
+    },
+    categoryInfo: {
+        flex: 1,
+    },
+    categoryName: {
+        color: COLORS.WHITE,
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    categoryCount: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 11,
+        marginTop: 2,
+    },
+    categoryAmountContainer: {
+        alignItems: 'flex-end',
+        marginRight: SPACING.SMALL,
+    },
+    categoryAmount: {
+        color: COLORS.WHITE,
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    categoryPercentage: {
+        color: COLORS.GOLD,
+        fontSize: 11,
+        marginTop: 2,
+    },
+
+    // Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: COLORS.CARD_BG,
+        borderTopLeftRadius: BORDER_RADIUS.XL,
+        borderTopRightRadius: BORDER_RADIUS.XL,
+        maxHeight: '80%',
+        paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: SPACING.MEDIUM,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.CARD_BORDER,
+    },
+    modalTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    modalCategoryDot: {
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        marginRight: SPACING.SMALL,
+    },
+    modalTitle: {
+        color: COLORS.WHITE,
+        fontSize: 18,
+        fontWeight: '600',
+    },
+    modalCloseButton: {
+        padding: SPACING.SMALL,
+    },
+    modalSummary: {
+        padding: SPACING.MEDIUM,
+        alignItems: 'center',
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.CARD_BORDER,
+    },
+    modalSummaryAmount: {
+        color: COLORS.WHITE,
+        fontSize: 28,
+        fontWeight: 'bold',
+    },
+    modalSummaryLabel: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 13,
+        marginTop: 4,
+    },
+    modalLoading: {
+        padding: SPACING.XL,
+        alignItems: 'center',
+    },
+    transactionList: {
+        paddingHorizontal: SPACING.MEDIUM,
+    },
+    transactionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: SPACING.SMALL + 4,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.CARD_BORDER,
+    },
+    transactionIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: COLORS.BACKGROUND,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: SPACING.SMALL,
+    },
+    transactionInfo: {
+        flex: 1,
+    },
+    transactionName: {
+        color: COLORS.WHITE,
+        fontSize: 14,
+    },
+    transactionDate: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 12,
+        marginTop: 2,
+    },
+    transactionAmount: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    emptyTransactions: {
+        padding: SPACING.XL,
+        alignItems: 'center',
+    },
+    emptyTransactionsText: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 14,
     },
 });
 
