@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import api from '../services/api';
+import cache from '../services/cache';
 import { categorizeTransaction } from '../utils/categorization';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -145,8 +146,10 @@ const AnalyticsScreen = ({ navigation }) => {
         setCategoryModalVisible(true);
 
         try {
-            const response = await api.getTransactions(`?limit=500`);
-            // Backend returns { success: true, data: [...transactions...] }
+            // Use cached transactions instead of API call for consistency
+            const cachedTransactions = await cache.getCachedTransactions();
+            const response = { success: !!cachedTransactions, data: cachedTransactions || [] };
+
             if (response?.success && response?.data) {
                 const targetCategory = normalizeCategory(category.category);
 

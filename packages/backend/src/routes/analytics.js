@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/db');
+const plaidService = require('../services/plaid');
 const { authenticateToken } = require('../middleware/auth');
 const { categorizeTransaction, getCategoryBreakdown } = require('../services/categorization');
 
@@ -176,7 +177,36 @@ router.get('/', authenticateToken, async (req, res) => {
 
     try {
         const userId = req.user.id;
-        const { period = '30' } = req.query; // Default to 30 days
+        const { period = '30', refresh } = req.query; // Default to 30 days
+        const forceRefresh = refresh === 'true';
+
+        // Sync from Plaid if needed (same logic as transactions endpoint)
+        const needsSync = forceRefresh || await db.shouldSync(userId, 'last_transaction_sync', 24);
+
+        if (needsSync) {
+            console.log('   🔄 [Analytics] Syncing transactions from Plaid first...');
+            const accessToken = req.user.plaidAccessToken || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
+
+            if (accessToken) {
+                try {
+                    const plaidTransactions = await plaidService.getTransactions(accessToken);
+                    await db.upsertTransactions(userId, plaidTransactions);
+
+                    // Also refresh accounts
+                    try {
+                        const plaidAccounts = await plaidService.getAccounts(accessToken);
+                        await db.upsertAccounts(userId, plaidAccounts);
+                    } catch (accErr) {
+                        console.warn('   ⚠️ Could not fetch accounts:', accErr.message);
+                    }
+
+                    await db.updateSyncTime(userId, 'last_transaction_sync');
+                    console.log(`   ✅ [Analytics] Synced ${plaidTransactions.length} transactions from Plaid`);
+                } catch (plaidError) {
+                    console.warn(`   ⚠️ [Analytics] Plaid sync failed: ${plaidError.message}`);
+                }
+            }
+        }
 
         // Get transactions and accounts
         const [transactions, accounts] = await Promise.all([

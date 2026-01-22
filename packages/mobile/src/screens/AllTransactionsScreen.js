@@ -14,6 +14,7 @@ import {
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import api from '../services/api';
+import cache from '../services/cache';
 
 // Category icon mapping
 const CATEGORY_ICONS = {
@@ -51,27 +52,43 @@ const AllTransactionsScreen = ({ navigation }) => {
     const [selectedTransaction, setSelectedTransaction] = useState(null);
     const [showTransactionModal, setShowTransactionModal] = useState(false);
 
-    const fetchData = useCallback(async () => {
-        try {
-            // Fetch transactions and accounts in parallel
-            const [transactionsData, accountsData] = await Promise.all([
-                api.getTransactions(),
-                api.getAccounts()
-            ]);
+    const formatTransactionsData = (rawTransactions) => {
+        return (rawTransactions || []).map((tx, index) => ({
+            id: tx.transaction_id || index,
+            merchant: tx.name,
+            category: tx.category?.[0] || 'Other',
+            amount: tx.amount * -1,
+            date: tx.date,
+            formattedDate: formatDate(tx.date),
+            account_id: tx.account_id,
+        }));
+    };
 
-            if (transactionsData?.success) {
-                const formattedTransactions = (transactionsData.data || []).map((tx, index) => ({
-                    id: tx.transaction_id || index,
-                    merchant: tx.name,
-                    category: tx.category?.[0] || 'Other',
-                    amount: tx.amount * -1,
-                    date: tx.date,
-                    formattedDate: formatDate(tx.date),
-                    account_id: tx.account_id,
-                }));
-                setTransactions(formattedTransactions);
+    const fetchData = useCallback(async (forceRefresh = false) => {
+        try {
+            // STEP 1: Load from cache first (instant display)
+            if (!forceRefresh) {
+                const cachedTransactions = await cache.getCachedTransactions();
+                if (cachedTransactions && cachedTransactions.length > 0) {
+                    const formattedTransactions = formatTransactionsData(cachedTransactions);
+                    setTransactions(formattedTransactions);
+                    setLoading(false);
+                }
             }
 
+            // STEP 2: Fetch fresh data from API if force refresh
+            if (forceRefresh) {
+                const transactionsData = await api.getTransactions('?refresh=true');
+                if (transactionsData?.success) {
+                    const formattedTransactions = formatTransactionsData(transactionsData.data);
+                    setTransactions(formattedTransactions);
+                    // Update the cache so other screens get the fresh data
+                    await cache.setCachedTransactions(transactionsData.data);
+                }
+            }
+
+            // STEP 3: Always fetch accounts for color coding
+            const accountsData = await api.getAccounts();
             if (accountsData?.success) {
                 setAccounts(accountsData.accounts || []);
             }
@@ -84,12 +101,12 @@ const AllTransactionsScreen = ({ navigation }) => {
     }, []);
 
     useEffect(() => {
-        fetchData();
+        fetchData(false); // Initial load from cache
     }, [fetchData]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        fetchData();
+        fetchData(true); // Force refresh from API
     }, [fetchData]);
 
     const formatDate = (dateStr) => {
