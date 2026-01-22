@@ -112,62 +112,79 @@ const ConnectBankScreen = ({ navigation, route }) => {
             const linkTokenResponse = await api.createLinkToken();
 
             if (!linkTokenResponse.link_token) {
+                console.error('❌ No link token in response:', linkTokenResponse);
                 throw new Error('Failed to get link token');
             }
 
-            console.log('✅ Got link token, creating Plaid Link...');
+            console.log('✅ Got link token:', linkTokenResponse.link_token.substring(0, 30) + '...');
 
-            // Step 2: Create and open Plaid Link
-            await create({
-                token: linkTokenResponse.link_token,
-            });
+            // Step 2: Create Plaid Link configuration
+            console.log('🔧 Creating Plaid Link configuration...');
+            try {
+                await create({
+                    token: linkTokenResponse.link_token,
+                });
+                console.log('✅ Plaid Link created successfully');
+            } catch (createError) {
+                console.error('❌ Plaid Link create() failed:', createError);
+                throw createError;
+            }
 
-            const result = await open({
-                onSuccess: async (success) => {
-                    console.log('🎉 Plaid Link success:', success.publicToken);
-                    try {
-                        // Step 3: Exchange public_token for access_token via backend
-                        const exchangeResponse = await api.exchangePublicToken(success.publicToken);
+            // Step 3: Open Plaid Link
+            console.log('🚀 Opening Plaid Link...');
+            try {
+                const result = await open({
+                    onSuccess: async (success) => {
+                        console.log('🎉 Plaid Link success:', success.publicToken);
+                        try {
+                            // Exchange public_token for access_token via backend
+                            const exchangeResponse = await api.exchangePublicToken(success.publicToken);
 
-                        if (exchangeResponse.success) {
-                            console.log('✅ Bank connected successfully!');
+                            if (exchangeResponse.success) {
+                                console.log('✅ Bank connected successfully!');
 
-                            // Update cached user to reflect Plaid linked status
-                            const cachedUser = await cache.getCachedUser();
-                            if (cachedUser) {
-                                cachedUser.hasPlaidLinked = true;
-                                await cache.setCachedUser(cachedUser);
-                            }
+                                // Update cached user to reflect Plaid linked status
+                                const cachedUser = await cache.getCachedUser();
+                                if (cachedUser) {
+                                    cachedUser.hasPlaidLinked = true;
+                                    await cache.setCachedUser(cachedUser);
+                                }
 
-                            // Navigate based on context
-                            if (isOnboarding) {
-                                navigation.reset({
-                                    index: 0,
-                                    routes: [{ name: 'Main' }],
-                                });
+                                // Navigate based on context
+                                if (isOnboarding) {
+                                    navigation.reset({
+                                        index: 0,
+                                        routes: [{ name: 'Main' }],
+                                    });
+                                } else {
+                                    // Show custom success modal
+                                    setSuccessModalVisible(true);
+                                }
                             } else {
-                                // Show custom success modal
-                                setSuccessModalVisible(true);
+                                throw new Error(exchangeResponse.message || 'Failed to save bank connection');
                             }
-                        } else {
-                            throw new Error(exchangeResponse.message || 'Failed to save bank connection');
+                        } catch (exchangeError) {
+                            console.error('Exchange error:', exchangeError);
+                            Alert.alert('Connection Error', 'Connected to bank but failed to save. Please try again.');
                         }
-                    } catch (exchangeError) {
-                        console.error('Exchange error:', exchangeError);
-                        Alert.alert('Connection Error', 'Connected to bank but failed to save. Please try again.');
-                    }
-                    setLoading(false);
-                },
-                onExit: (exit) => {
-                    console.log('📤 Plaid Link exited:', exit?.error?.displayMessage || 'User cancelled');
-                    if (exit?.error) {
-                        Alert.alert('Connection Error', exit.error.displayMessage || 'Failed to connect to your bank.');
-                    }
-                    setLoading(false);
-                },
-            });
+                        setLoading(false);
+                    },
+                    onExit: (exit) => {
+                        console.log('📤 Plaid Link exited:', JSON.stringify(exit));
+                        if (exit?.error) {
+                            console.error('❌ Plaid Link exit error:', exit.error);
+                            Alert.alert('Connection Error', exit.error.displayMessage || 'Failed to connect to your bank.');
+                        }
+                        setLoading(false);
+                    },
+                });
+                console.log('📋 Plaid Link open() returned:', result);
+            } catch (openError) {
+                console.error('❌ Plaid Link open() failed:', openError);
+                throw openError;
+            }
         } catch (error) {
-            console.error('Bank connection error:', error);
+            console.error('❌ Bank connection error:', error);
             Alert.alert('Connection Error', error.message || 'Failed to connect to your bank. Please try again.');
             setLoading(false);
         }

@@ -17,13 +17,23 @@ class PlaidService {
     async createLinkToken(userId) {
         if (!process.env.PLAID_CLIENT_ID) throw new Error("Missing Plaid Keys");
         try {
-            const response = await client.linkTokenCreate({
+            console.log('🔧 Creating link token with PLAID_ENV:', process.env.PLAID_ENV);
+
+            const request = {
                 user: { client_user_id: userId || 'test_user' },
                 client_name: 'IndusWealth',
                 products: ['transactions'],
                 country_codes: ['CA'],
                 language: 'en',
-            });
+            };
+
+            // Add Android package name for OAuth redirect (required for production)
+            if (process.env.PLAID_ENV === 'production' || process.env.PLAID_ENV === 'development') {
+                request.android_package_name = 'com.induswealth.app'; // Your Android package name
+                console.log('📱 Added Android package name for OAuth');
+            }
+
+            const response = await client.linkTokenCreate(request);
             return response.data;
         } catch (error) {
             console.error('Error creating link token:', error.response ? error.response.data : error.message);
@@ -43,13 +53,21 @@ class PlaidService {
 
         try {
             console.log('🔄 Creating update mode link token for user:', userId);
-            const response = await client.linkTokenCreate({
+
+            const request = {
                 user: { client_user_id: userId || 'test_user' },
                 client_name: 'IndusWealth',
                 access_token: accessToken, // This triggers update mode
                 country_codes: ['CA'],
                 language: 'en',
-            });
+            };
+
+            // Add Android package name for OAuth redirect (required for production)
+            if (process.env.PLAID_ENV === 'production' || process.env.PLAID_ENV === 'development') {
+                request.android_package_name = 'com.induswealth.app';
+            }
+
+            const response = await client.linkTokenCreate(request);
             console.log('✅ Update mode link token created');
             return response.data;
         } catch (error) {
