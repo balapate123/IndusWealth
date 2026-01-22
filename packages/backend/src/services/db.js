@@ -33,11 +33,21 @@ pool.query('SELECT NOW()')
 // Initialize Database Schema
 const initDb = async () => {
     try {
+        // Run initial schema
         const initSqlPath = path.join(__dirname, '../../db/init.sql');
         const initSql = fs.readFileSync(initSqlPath, 'utf8');
         console.log('🔄 Initializing database schema...');
         await pool.query(initSql);
-        console.log('✅ Database schema initialized');
+
+        // Run custom debts migration
+        const debSqlPath = path.join(__dirname, '../../db/add_custom_debts.sql');
+        if (fs.existsSync(debSqlPath)) {
+            const debSql = fs.readFileSync(debSqlPath, 'utf8');
+            console.log('🔄 Running custom debts migration...');
+            await pool.query(debSql);
+        }
+
+        console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);
     }
