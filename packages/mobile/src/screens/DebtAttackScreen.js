@@ -55,6 +55,8 @@ const DebtAttackScreen = () => {
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [editingDebt, setEditingDebt] = useState(null);
     const [reAuthModalVisible, setReAuthModalVisible] = useState(false);
+    const [importModalVisible, setImportModalVisible] = useState(false);
+    const [linkedAccounts, setLinkedAccounts] = useState([]);
 
     // Form states
     const [formName, setFormName] = useState('');
@@ -67,7 +69,12 @@ const DebtAttackScreen = () => {
     const fetchData = useCallback(async () => {
         try {
             setError(null);
-            const data = await api.getDebtOverview();
+
+            // Fetch debt overview and accounts in parallel
+            const [data, accountsData] = await Promise.all([
+                api.getDebtOverview(),
+                api.getAccounts()
+            ]);
 
             if (data?.success) {
                 setAnalysis(data.analysis);
@@ -80,6 +87,16 @@ const DebtAttackScreen = () => {
                 setDebts(allDebts);
             } else {
                 setError('Failed to load debt data.');
+            }
+
+            // Store linked accounts (filter for credit accounts)
+            if (accountsData?.success && accountsData?.accounts) {
+                const creditAccounts = accountsData.accounts.filter(acc =>
+                    acc.type === 'credit' ||
+                    acc.subtype === 'credit card' ||
+                    acc.type === 'loan'
+                );
+                setLinkedAccounts(creditAccounts);
             }
         } catch (err) {
             console.error('Error fetching debt data:', err);
@@ -287,6 +304,34 @@ const DebtAttackScreen = () => {
     // Close re-auth error modal
     const closeReAuthModal = () => {
         setReAuthModalVisible(false);
+    };
+
+    // Import a linked account as a custom debt
+    const handleImportAccount = async (account) => {
+        setFormSubmitting(true);
+        try {
+            const debt = {
+                name: account.name || account.officialName || 'Credit Card',
+                balance: Math.abs(account.balance || 0),
+                apr: DEFAULT_APRS.credit_card, // Default APR for credit cards
+                min_payment: Math.abs(account.balance || 0) * 0.02, // Estimate 2% minimum payment
+                debt_type: 'credit_card',
+            };
+
+            console.log('📥 Importing account as debt:', debt);
+            const result = await api.addCustomDebt(debt);
+
+            if (result?.success) {
+                setImportModalVisible(false);
+                fetchData(); // Refresh all data
+            } else {
+                console.error('Failed to import account:', result?.message);
+            }
+        } catch (err) {
+            console.error('Error importing account:', err);
+        } finally {
+            setFormSubmitting(false);
+        }
     };
 
     // Get display values from analysis
@@ -513,9 +558,14 @@ const DebtAttackScreen = () => {
                     <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Debt Attack Plan</Text>
-                <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-                    <Ionicons name="add" size={24} color={COLORS.GOLD} />
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                    <TouchableOpacity style={styles.headerButton} onPress={() => setImportModalVisible(true)}>
+                        <Ionicons name="download-outline" size={22} color={COLORS.TEXT_SECONDARY} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
+                        <Ionicons name="add" size={24} color={COLORS.GOLD} />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <ScrollView
@@ -750,6 +800,70 @@ const DebtAttackScreen = () => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Import Accounts Modal */}
+            <Modal
+                visible={importModalVisible}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setImportModalVisible(false)}
+            >
+                <View style={styles.importModalOverlay}>
+                    <View style={styles.importModalContent}>
+                        <View style={styles.importModalHeader}>
+                            <Text style={styles.importModalTitle}>Import Account as Debt</Text>
+                            <TouchableOpacity onPress={() => setImportModalVisible(false)}>
+                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.importModalSubtitle}>
+                            Select a linked credit account to track as a debt
+                        </Text>
+
+                        {linkedAccounts.length > 0 ? (
+                            <ScrollView style={styles.importAccountList}>
+                                {linkedAccounts.map((account, index) => (
+                                    <TouchableOpacity
+                                        key={account.id || index}
+                                        style={styles.importAccountItem}
+                                        onPress={() => handleImportAccount(account)}
+                                        disabled={formSubmitting}
+                                    >
+                                        <View style={styles.importAccountIcon}>
+                                            <Ionicons name="card" size={20} color={COLORS.GOLD} />
+                                        </View>
+                                        <View style={styles.importAccountInfo}>
+                                            <Text style={styles.importAccountName}>
+                                                {account.name || account.officialName}
+                                            </Text>
+                                            <Text style={styles.importAccountType}>
+                                                {account.subtype || account.type}
+                                            </Text>
+                                        </View>
+                                        <Text style={styles.importAccountBalance}>
+                                            ${Math.abs(account.balance || 0).toLocaleString()}
+                                        </Text>
+                                        {formSubmitting ? (
+                                            <ActivityIndicator size="small" color={COLORS.GOLD} />
+                                        ) : (
+                                            <Ionicons name="add-circle" size={24} color={COLORS.GOLD} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        ) : (
+                            <View style={styles.importEmptyState}>
+                                <Ionicons name="card-outline" size={48} color={COLORS.TEXT_MUTED} />
+                                <Text style={styles.importEmptyText}>No credit accounts found</Text>
+                                <Text style={styles.importEmptySubtext}>
+                                    Link a bank with credit cards to import them as debts
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -789,6 +903,14 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     addButton: {
+        padding: SPACING.SMALL,
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+    },
+    headerButton: {
         padding: SPACING.SMALL,
     },
 
@@ -1046,12 +1168,14 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: SPACING.SMALL,
+        flexWrap: 'nowrap',
     },
     debtName: {
         color: COLORS.WHITE,
         fontSize: 15,
         fontWeight: '600',
         marginBottom: 2,
+        flexShrink: 1,
     },
     customBadge: {
         backgroundColor: 'rgba(59, 130, 246, 0.2)',
@@ -1296,6 +1420,91 @@ const styles = StyleSheet.create({
     reAuthModalButtonPrimaryText: {
         color: COLORS.BACKGROUND,
         fontWeight: '700',
+    },
+
+    // Import Modal Styles
+    importModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        justifyContent: 'flex-end',
+    },
+    importModalContent: {
+        backgroundColor: COLORS.CARD_BG,
+        borderTopLeftRadius: BORDER_RADIUS.XL,
+        borderTopRightRadius: BORDER_RADIUS.XL,
+        padding: SPACING.LARGE,
+        maxHeight: '70%',
+    },
+    importModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.MEDIUM,
+    },
+    importModalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: COLORS.WHITE,
+    },
+    importModalSubtitle: {
+        fontSize: 14,
+        color: COLORS.TEXT_SECONDARY,
+        marginBottom: SPACING.LARGE,
+    },
+    importAccountList: {
+        maxHeight: 300,
+    },
+    importAccountItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: SPACING.MEDIUM,
+        backgroundColor: COLORS.BACKGROUND,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        marginBottom: SPACING.SMALL,
+    },
+    importAccountIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(212, 175, 55, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: SPACING.MEDIUM,
+    },
+    importAccountInfo: {
+        flex: 1,
+    },
+    importAccountName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: COLORS.WHITE,
+    },
+    importAccountType: {
+        fontSize: 12,
+        color: COLORS.TEXT_SECONDARY,
+        textTransform: 'capitalize',
+    },
+    importAccountBalance: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: COLORS.WHITE,
+        marginRight: SPACING.SMALL,
+    },
+    importEmptyState: {
+        alignItems: 'center',
+        paddingVertical: SPACING.XL,
+    },
+    importEmptyText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: COLORS.TEXT_SECONDARY,
+        marginTop: SPACING.MEDIUM,
+    },
+    importEmptySubtext: {
+        fontSize: 13,
+        color: COLORS.TEXT_MUTED,
+        textAlign: 'center',
+        marginTop: SPACING.SMALL,
     },
 });
 

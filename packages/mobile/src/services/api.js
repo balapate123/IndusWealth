@@ -212,7 +212,8 @@ export const api = {
     disconnectAccount: (accountId) => apiRequest(`/plaid/account/${accountId}`, { method: 'DELETE' }),
 
     // Analytics
-    getAnalytics: (period = 30) => apiRequest(`/analytics?period=${period}`),
+    getAnalytics: (period = 30, forceRefresh = false) =>
+        apiRequest(`/analytics?period=${period}${forceRefresh ? '&refresh=true' : ''}`),
     getMonthlyAnalytics: () => apiRequest('/analytics/monthly'),
 
     // Account-specific transactions

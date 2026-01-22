@@ -106,6 +106,18 @@ const ConnectBankScreen = ({ navigation, route }) => {
         }
 
         setLoading(true);
+
+        // Timeout fallback - if Plaid Link doesn't respond in 15 seconds, stop loading
+        const timeoutId = setTimeout(() => {
+            console.log('⏱️ Plaid Link timeout - resetting loading state');
+            setLoading(false);
+            Alert.alert(
+                'Connection Timeout',
+                'Plaid Link did not open. Please try again. If the issue persists, you may need to use a development build instead of Expo Go.',
+                [{ text: 'OK' }]
+            );
+        }, 15000);
+
         try {
             // Step 1: Get link_token from backend
             console.log('🔗 Fetching link token from backend...');
@@ -113,6 +125,7 @@ const ConnectBankScreen = ({ navigation, route }) => {
 
             if (!linkTokenResponse.link_token) {
                 console.error('❌ No link token in response:', linkTokenResponse);
+                clearTimeout(timeoutId);
                 throw new Error('Failed to get link token');
             }
 
@@ -127,14 +140,16 @@ const ConnectBankScreen = ({ navigation, route }) => {
                 console.log('✅ Plaid Link created successfully');
             } catch (createError) {
                 console.error('❌ Plaid Link create() failed:', createError);
+                clearTimeout(timeoutId);
                 throw createError;
             }
 
             // Step 3: Open Plaid Link
             console.log('🚀 Opening Plaid Link...');
             try {
-                const result = await open({
+                open({
                     onSuccess: async (success) => {
+                        clearTimeout(timeoutId);
                         console.log('🎉 Plaid Link success:', success.publicToken);
                         try {
                             // Exchange public_token for access_token via backend
@@ -170,6 +185,7 @@ const ConnectBankScreen = ({ navigation, route }) => {
                         setLoading(false);
                     },
                     onExit: (exit) => {
+                        clearTimeout(timeoutId);
                         console.log('📤 Plaid Link exited:', JSON.stringify(exit));
                         if (exit?.error) {
                             console.error('❌ Plaid Link exit error:', exit.error);
@@ -178,12 +194,14 @@ const ConnectBankScreen = ({ navigation, route }) => {
                         setLoading(false);
                     },
                 });
-                console.log('📋 Plaid Link open() returned:', result);
+                console.log('📋 Plaid Link open() called');
             } catch (openError) {
                 console.error('❌ Plaid Link open() failed:', openError);
+                clearTimeout(timeoutId);
                 throw openError;
             }
         } catch (error) {
+            clearTimeout(timeoutId);
             console.error('❌ Bank connection error:', error);
             Alert.alert('Connection Error', error.message || 'Failed to connect to your bank. Please try again.');
             setLoading(false);

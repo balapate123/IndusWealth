@@ -65,11 +65,17 @@ const AnalyticsScreen = ({ navigation }) => {
         'default': '#FFEAA7'
     };
 
-    const fetchAnalytics = useCallback(async () => {
+    const fetchAnalytics = useCallback(async (forceRefresh = false) => {
         try {
+            // If refreshing, first trigger a transactions sync
+            if (forceRefresh) {
+                console.log('🔄 Force refreshing transactions before analytics...');
+                await api.getTransactions('?refresh=true&limit=100');
+            }
+
             // Fetch both analytics and accounts in parallel
             const [analyticsData, accountsData] = await Promise.all([
-                api.getAnalytics(selectedPeriod),
+                api.getAnalytics(selectedPeriod, forceRefresh),
                 api.getAccounts()
             ]);
 
@@ -88,12 +94,12 @@ const AnalyticsScreen = ({ navigation }) => {
     }, [selectedPeriod]);
 
     useEffect(() => {
-        fetchAnalytics();
+        fetchAnalytics(false);
     }, [fetchAnalytics]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        fetchAnalytics();
+        fetchAnalytics(true); // Force refresh when pull-to-refresh
     }, [fetchAnalytics]);
 
     const formatCurrency = (amount) => {

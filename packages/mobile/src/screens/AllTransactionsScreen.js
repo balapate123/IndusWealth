@@ -9,6 +9,7 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     RefreshControl,
+    Modal,
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
@@ -30,25 +31,49 @@ const CATEGORY_ICONS = {
     'default': { icon: 'wallet', library: 'Ionicons', color: '#9E9E9E' },
 };
 
+// Account colors for color-coding transactions
+const ACCOUNT_COLORS = [
+    '#4CAF50', // Green
+    '#2196F3', // Blue
+    '#FF9800', // Orange
+    '#9C27B0', // Purple
+    '#E91E63', // Pink
+    '#00BCD4', // Cyan
+    '#FF5722', // Deep Orange
+    '#607D8B', // Blue Grey
+];
+
 const AllTransactionsScreen = ({ navigation }) => {
     const [transactions, setTransactions] = useState([]);
+    const [accounts, setAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [selectedTransaction, setSelectedTransaction] = useState(null);
+    const [showTransactionModal, setShowTransactionModal] = useState(false);
 
     const fetchData = useCallback(async () => {
         try {
-            const data = await api.getTransactions();
+            // Fetch transactions and accounts in parallel
+            const [transactionsData, accountsData] = await Promise.all([
+                api.getTransactions(),
+                api.getAccounts()
+            ]);
 
-            if (data?.success) {
-                const formattedTransactions = (data.data || []).map((tx, index) => ({
+            if (transactionsData?.success) {
+                const formattedTransactions = (transactionsData.data || []).map((tx, index) => ({
                     id: tx.transaction_id || index,
                     merchant: tx.name,
                     category: tx.category?.[0] || 'Other',
                     amount: tx.amount * -1,
                     date: tx.date,
                     formattedDate: formatDate(tx.date),
+                    account_id: tx.account_id,
                 }));
                 setTransactions(formattedTransactions);
+            }
+
+            if (accountsData?.success) {
+                setAccounts(accountsData.accounts || []);
             }
         } catch (err) {
             console.error('Error fetching transactions:', err);
@@ -80,6 +105,20 @@ const AllTransactionsScreen = ({ navigation }) => {
         return CATEGORY_ICONS[category] || CATEGORY_ICONS.default;
     };
 
+    // Get color for an account based on its index in the accounts array
+    const getAccountColor = (accountId) => {
+        if (!accountId || accounts.length === 0) return ACCOUNT_COLORS[0];
+        const realAccounts = accounts.filter(acc => acc.id !== 'all' && acc.type !== 'aggregate');
+        const accountIndex = realAccounts.findIndex(acc => acc.id === accountId);
+        if (accountIndex === -1) return ACCOUNT_COLORS[0];
+        return ACCOUNT_COLORS[accountIndex % ACCOUNT_COLORS.length];
+    };
+
+    const openTransactionDetails = (item) => {
+        setSelectedTransaction(item);
+        setShowTransactionModal(true);
+    };
+
     const renderTransactionIcon = (category, isIncome) => {
         if (isIncome) {
             return (
@@ -105,23 +144,33 @@ const AllTransactionsScreen = ({ navigation }) => {
         );
     };
 
-    const renderTransaction = ({ item }) => (
-        <View style={styles.transactionItem}>
-            {renderTransactionIcon(item.category, item.amount > 0)}
-            <View style={styles.transactionContent}>
-                <Text style={styles.transactionMerchant} numberOfLines={1}>{item.merchant}</Text>
-                <Text style={styles.transactionCategory}>{item.category} • {item.formattedDate}</Text>
-            </View>
-            <View style={styles.transactionRight}>
-                <Text style={[
-                    styles.transactionAmount,
-                    { color: item.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
-                ]}>
-                    {item.amount > 0 ? '+' : '-'}${Math.abs(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </Text>
-            </View>
-        </View>
-    );
+    const renderTransaction = ({ item }) => {
+        const accountColor = getAccountColor(item.account_id);
+
+        return (
+            <TouchableOpacity
+                style={styles.transactionItem}
+                onPress={() => openTransactionDetails(item)}
+                activeOpacity={0.7}
+            >
+                {/* Account color indicator */}
+                <View style={[styles.accountColorIndicator, { backgroundColor: accountColor }]} />
+                {renderTransactionIcon(item.category, item.amount > 0)}
+                <View style={styles.transactionContent}>
+                    <Text style={styles.transactionMerchant} numberOfLines={1}>{item.merchant}</Text>
+                    <Text style={styles.transactionCategory}>{item.category} • {item.formattedDate}</Text>
+                </View>
+                <View style={styles.transactionRight}>
+                    <Text style={[
+                        styles.transactionAmount,
+                        { color: item.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
+                    ]}>
+                        {item.amount > 0 ? '+' : '-'}${Math.abs(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                </View>
+            </TouchableOpacity>
+        );
+    };
 
     if (loading) {
         return (
@@ -172,6 +221,101 @@ const AllTransactionsScreen = ({ navigation }) => {
                     </View>
                 }
             />
+
+            {/* Transaction Details Modal */}
+            <Modal
+                visible={showTransactionModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowTransactionModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.transactionModalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Transaction Details</Text>
+                            <TouchableOpacity
+                                style={styles.modalCloseButton}
+                                onPress={() => setShowTransactionModal(false)}
+                            >
+                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {selectedTransaction && (
+                            <View style={styles.transactionDetails}>
+                                {/* Amount */}
+                                <View style={styles.detailAmountRow}>
+                                    <Text style={[
+                                        styles.detailAmount,
+                                        { color: selectedTransaction.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
+                                    ]}>
+                                        {selectedTransaction.amount > 0 ? '+' : '-'}${Math.abs(selectedTransaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </Text>
+                                    <View style={[
+                                        styles.amountBadge,
+                                        { backgroundColor: selectedTransaction.amount > 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 107, 107, 0.2)' }
+                                    ]}>
+                                        <Text style={[
+                                            styles.amountBadgeText,
+                                            { color: selectedTransaction.amount > 0 ? COLORS.GREEN : '#FF6B6B' }
+                                        ]}>
+                                            {selectedTransaction.amount > 0 ? 'Income' : 'Expense'}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                {/* Detail Rows */}
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Merchant</Text>
+                                    <Text style={styles.detailValue}>{selectedTransaction.merchant}</Text>
+                                </View>
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Category</Text>
+                                    <Text style={styles.detailValue}>{selectedTransaction.category}</Text>
+                                </View>
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Date</Text>
+                                    <Text style={styles.detailValue}>
+                                        {selectedTransaction.date
+                                            ? new Date(selectedTransaction.date + 'T12:00:00').toLocaleDateString('en-US', {
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric'
+                                            })
+                                            : 'N/A'}
+                                    </Text>
+                                </View>
+
+                                {selectedTransaction.account_id && (
+                                    <View style={styles.detailRow}>
+                                        <Text style={styles.detailLabel}>Account</Text>
+                                        <View style={styles.accountIndicator}>
+                                            <View style={[styles.accountDot, { backgroundColor: getAccountColor(selectedTransaction.account_id) }]} />
+                                            <Text style={styles.detailValue}>
+                                                {accounts.find(a => a.id === selectedTransaction.account_id)?.name || 'N/A'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                )}
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Transaction ID</Text>
+                                    <Text style={[styles.detailValue, styles.transactionId]}>{selectedTransaction.id}</Text>
+                                </View>
+                            </View>
+                        )}
+
+                        <TouchableOpacity
+                            style={styles.modalDoneButton}
+                            onPress={() => setShowTransactionModal(false)}
+                        >
+                            <Text style={styles.modalDoneText}>Done</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -229,6 +373,16 @@ const styles = StyleSheet.create({
         padding: SPACING.MEDIUM,
         borderRadius: BORDER_RADIUS.LARGE,
         marginBottom: SPACING.SMALL,
+        overflow: 'hidden',
+    },
+    accountColorIndicator: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 4,
+        borderTopLeftRadius: BORDER_RADIUS.LARGE,
+        borderBottomLeftRadius: BORDER_RADIUS.LARGE,
     },
     transactionIcon: {
         width: 44,
@@ -237,6 +391,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: SPACING.MEDIUM,
+        marginLeft: SPACING.SMALL,
     },
     transactionContent: {
         flex: 1,
@@ -268,6 +423,104 @@ const styles = StyleSheet.create({
     emptyText: {
         color: COLORS.TEXT_MUTED,
         marginTop: SPACING.MEDIUM,
+    },
+
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'flex-end',
+    },
+    transactionModalContent: {
+        backgroundColor: COLORS.CARD_BG,
+        borderTopLeftRadius: BORDER_RADIUS.XL,
+        borderTopRightRadius: BORDER_RADIUS.XL,
+        padding: SPACING.LARGE,
+        paddingBottom: 40,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.LARGE,
+    },
+    modalTitle: {
+        color: COLORS.WHITE,
+        fontSize: 20,
+        fontWeight: '600',
+    },
+    modalCloseButton: {
+        padding: SPACING.SMALL,
+    },
+    transactionDetails: {
+        gap: SPACING.MEDIUM,
+    },
+    detailAmountRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+    },
+    detailAmount: {
+        fontSize: 32,
+        fontWeight: 'bold',
+    },
+    amountBadge: {
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingVertical: SPACING.SMALL,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+    },
+    amountBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    detailRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: SPACING.SMALL,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.CARD_BORDER,
+    },
+    detailLabel: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 14,
+    },
+    detailValue: {
+        color: COLORS.WHITE,
+        fontSize: 14,
+        fontWeight: '500',
+        textAlign: 'right',
+        flex: 1,
+        marginLeft: SPACING.MEDIUM,
+    },
+    transactionId: {
+        fontSize: 11,
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+    accountIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    accountDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        marginRight: SPACING.SMALL,
+    },
+    modalDoneButton: {
+        backgroundColor: COLORS.GOLD,
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        alignItems: 'center',
+        marginTop: SPACING.LARGE,
+    },
+    modalDoneText: {
+        color: COLORS.BACKGROUND,
+        fontSize: 16,
+        fontWeight: '600',
     },
 });
 
