@@ -192,6 +192,9 @@ export const api = {
     // Plaid Link
     createLinkToken: () => apiRequest('/plaid/create_link_token', { method: 'POST' }),
 
+    // Plaid Link Update Mode (for re-authentication)
+    createUpdateLinkToken: () => apiRequest('/plaid/create_update_link_token', { method: 'POST' }),
+
     exchangePublicToken: (publicToken) =>
         apiRequest('/plaid/exchange_public_token', {
             method: 'POST',

@@ -9,10 +9,45 @@ const { authenticateToken } = require('../middleware/auth');
 router.post('/create_link_token', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
+        console.log('📥 [POST /plaid/create_link_token] Creating link token for user:', userId);
         const data = await plaidService.createLinkToken(userId.toString());
+        console.log('✅ Link token created successfully');
         res.json(data);
     } catch (error) {
-        console.error('Error creating link token:', error);
+        console.error('❌ Error creating link token:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /plaid/create_update_link_token
+// Creates a Plaid Link token in UPDATE MODE for re-authentication
+// Use this when ITEM_LOGIN_REQUIRED error occurs
+router.post('/create_update_link_token', authenticateToken, async (req, res) => {
+    console.log('📥 [POST /plaid/create_update_link_token] Request received');
+    console.log('   👤 User ID:', req.user.id);
+
+    try {
+        const userId = req.user.id;
+        const accessToken = req.user.plaidAccessToken;
+
+        if (!accessToken) {
+            console.warn('   ⚠️ No Plaid access token found for user');
+            return res.status(400).json({
+                error: 'No bank connection found. Please link a bank account first.',
+                code: 'NO_CONNECTION'
+            });
+        }
+
+        console.log('   🔄 Creating update mode link token...');
+        const data = await plaidService.createUpdateLinkToken(userId.toString(), accessToken);
+
+        console.log('   ✅ Update link token created successfully');
+        res.json({
+            success: true,
+            ...data
+        });
+    } catch (error) {
+        console.error('❌ Error creating update link token:', error);
         res.status(500).json({ error: error.message });
     }
 });

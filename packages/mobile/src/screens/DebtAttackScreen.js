@@ -47,6 +47,8 @@ const DebtAttackScreen = () => {
     const [calculating, setCalculating] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
+    const [plaidStatus, setPlaidStatus] = useState('unknown'); // 'success', 'login_required', 'no_token', etc.
+    const [reAuthLoading, setReAuthLoading] = useState(false);
 
     // Modal states
     const [addModalVisible, setAddModalVisible] = useState(false);
@@ -70,6 +72,7 @@ const DebtAttackScreen = () => {
                 setAnalysis(data.analysis);
                 setRawLiabilities(data.raw_liabilities);
                 setCustomDebts(data.custom_debts || []);
+                setPlaidStatus(data.plaid_status || 'unknown');
 
                 // Combine all debts for display
                 const allDebts = data.analysis?.debts || [];
@@ -235,6 +238,32 @@ const DebtAttackScreen = () => {
                 },
             ]
         );
+    };
+
+    // Handle Plaid re-authentication
+    const handleReAuthenticate = async () => {
+        setReAuthLoading(true);
+        try {
+            // Get update mode link token
+            const result = await api.createUpdateLinkToken();
+            if (result?.link_token) {
+                // The user should be redirected to Plaid Link with this token
+                // For now, we'll show instructions since Plaid Link integration 
+                // depends on how it's implemented in the app
+                Alert.alert(
+                    'Re-authenticate Bank',
+                    'Your bank connection needs to be refreshed. Please go to your Profile > Bank Connections to re-link your account.',
+                    [{ text: 'OK' }]
+                );
+            } else {
+                Alert.alert('Error', 'Failed to initiate re-authentication. Please try again.');
+            }
+        } catch (err) {
+            console.error('Re-auth error:', err);
+            Alert.alert('Error', 'Failed to re-authenticate. Please try again.');
+        } finally {
+            setReAuthLoading(false);
+        }
     };
 
     // Get display values from analysis
@@ -486,6 +515,30 @@ const DebtAttackScreen = () => {
                     </View>
                 )}
 
+                {/* Re-authentication Banner */}
+                {plaidStatus === 'login_required' && (
+                    <TouchableOpacity
+                        style={styles.reAuthBanner}
+                        onPress={handleReAuthenticate}
+                        disabled={reAuthLoading}
+                    >
+                        <View style={styles.reAuthContent}>
+                            <Ionicons name="alert-circle" size={24} color="#FFA726" />
+                            <View style={styles.reAuthTextContainer}>
+                                <Text style={styles.reAuthTitle}>Bank Connection Expired</Text>
+                                <Text style={styles.reAuthSubtitle}>
+                                    Tap to re-authenticate and sync your credit accounts
+                                </Text>
+                            </View>
+                        </View>
+                        {reAuthLoading ? (
+                            <ActivityIndicator size="small" color="#FFA726" />
+                        ) : (
+                            <Ionicons name="chevron-forward" size={20} color="#FFA726" />
+                        )}
+                    </TouchableOpacity>
+                )}
+
                 {/* Main Results Card */}
                 <View style={styles.resultsCard}>
                     <View style={styles.debtFreeSection}>
@@ -687,6 +740,39 @@ const styles = StyleSheet.create({
     errorText: {
         color: '#F44336',
         flex: 1,
+    },
+
+    // Re-authentication Banner
+    reAuthBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        margin: SPACING.MEDIUM,
+        marginTop: 0,
+        padding: SPACING.MEDIUM,
+        backgroundColor: 'rgba(255, 167, 38, 0.1)',
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 167, 38, 0.3)',
+    },
+    reAuthContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    reAuthTextContainer: {
+        marginLeft: SPACING.SMALL,
+        flex: 1,
+    },
+    reAuthTitle: {
+        color: '#FFA726',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    reAuthSubtitle: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 12,
+        marginTop: 2,
     },
 
     // Results Card

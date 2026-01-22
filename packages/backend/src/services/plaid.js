@@ -31,6 +31,33 @@ class PlaidService {
         }
     }
 
+    /**
+     * Create a Link token for update mode (re-authentication)
+     * Used when ITEM_LOGIN_REQUIRED error occurs
+     * @param {string} userId - User ID
+     * @param {string} accessToken - Existing Plaid access token that needs refresh
+     */
+    async createUpdateLinkToken(userId, accessToken) {
+        if (!process.env.PLAID_CLIENT_ID) throw new Error("Missing Plaid Keys");
+        if (!accessToken) throw new Error("Access token required for update mode");
+
+        try {
+            console.log('🔄 Creating update mode link token for user:', userId);
+            const response = await client.linkTokenCreate({
+                user: { client_user_id: userId || 'test_user' },
+                client_name: 'IndusWealth',
+                access_token: accessToken, // This triggers update mode
+                country_codes: ['CA'],
+                language: 'en',
+            });
+            console.log('✅ Update mode link token created');
+            return response.data;
+        } catch (error) {
+            console.error('Error creating update link token:', error.response ? error.response.data : error.message);
+            throw error;
+        }
+    }
+
     async exchangePublicToken(publicToken) {
         try {
             const response = await client.itemPublicTokenExchange({
