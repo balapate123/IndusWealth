@@ -21,6 +21,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
         let transactions = [];
         let dataSource = 'DATABASE';
+        let plaidStatus = 'unknown'; // Track Plaid connection status
 
         if (needsSync) {
             console.log('   🔄 Cache stale or force refresh - syncing from Plaid...');
@@ -49,15 +50,26 @@ router.get('/', authenticateToken, async (req, res) => {
 
                     console.log(`   ✅ [DATA SOURCE: PLAID API] Synced ${plaidTransactions.length} transactions`);
                     dataSource = 'PLAID_API';
+                    plaidStatus = 'success';
                 } catch (plaidError) {
+                    // Check for specific Plaid error codes
+                    const errorCode = plaidError.response?.data?.error_code;
+                    if (errorCode === 'ITEM_LOGIN_REQUIRED') {
+                        plaidStatus = 'login_required';
+                        console.warn('   🔒 User needs to re-authenticate via Plaid Link update mode');
+                    } else {
+                        plaidStatus = 'error';
+                    }
                     console.warn(`   ⚠️ Plaid sync failed: ${plaidError.message}`);
                     console.log('   📦 Falling back to database cache');
                 }
             } else {
                 console.log('   🔒 No Plaid access token available');
+                plaidStatus = 'no_token';
             }
         } else {
             console.log('   ⏱️ Cache is fresh (<24h), serving from database');
+            plaidStatus = 'cached';
         }
 
         // Get transactions from database
@@ -107,6 +119,7 @@ router.get('/', authenticateToken, async (req, res) => {
             data: categorizedTransactions,
             categoryBreakdown,
             analysis: leakageAnalysis,
+            plaid_status: plaidStatus,
             _meta: {
                 source: dataSource,
                 cached: dataSource === 'DATABASE',

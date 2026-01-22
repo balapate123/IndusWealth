@@ -11,11 +11,11 @@ import {
     RefreshControl,
     Modal,
     TextInput,
-    Alert,
     KeyboardAvoidingView,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { create, open } from 'react-native-plaid-link-sdk';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import api from '../services/api';
 
@@ -54,6 +54,7 @@ const DebtAttackScreen = () => {
     const [addModalVisible, setAddModalVisible] = useState(false);
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [editingDebt, setEditingDebt] = useState(null);
+    const [reAuthModalVisible, setReAuthModalVisible] = useState(false);
 
     // Form states
     const [formName, setFormName] = useState('');
@@ -240,30 +241,52 @@ const DebtAttackScreen = () => {
         );
     };
 
-    // Handle Plaid re-authentication
+    // Handle Plaid re-authentication - opens Plaid Link in update mode
     const handleReAuthenticate = async () => {
         setReAuthLoading(true);
         try {
-            // Get update mode link token
+            // Get update mode link token from backend
+            console.log('🔄 Getting update mode link token...');
             const result = await api.createUpdateLinkToken();
-            if (result?.link_token) {
-                // The user should be redirected to Plaid Link with this token
-                // For now, we'll show instructions since Plaid Link integration 
-                // depends on how it's implemented in the app
-                Alert.alert(
-                    'Re-authenticate Bank',
-                    'Your bank connection needs to be refreshed. Please go to your Profile > Bank Connections to re-link your account.',
-                    [{ text: 'OK' }]
-                );
-            } else {
-                Alert.alert('Error', 'Failed to initiate re-authentication. Please try again.');
+
+            if (!result?.link_token) {
+                console.error('Failed to get update link token');
+                setReAuthModalVisible(true);
+                return;
             }
+
+            console.log('✅ Got update link token, opening Plaid Link...');
+
+            // Create and open Plaid Link in update mode
+            await create({
+                token: result.link_token,
+            });
+
+            await open({
+                onSuccess: async (success) => {
+                    console.log('🎉 Plaid Link update success!');
+                    // Refresh data after successful re-authentication
+                    fetchData();
+                    setReAuthLoading(false);
+                },
+                onExit: (exit) => {
+                    console.log('📤 Plaid Link exited:', exit?.error?.displayMessage || 'User cancelled');
+                    if (exit?.error) {
+                        setReAuthModalVisible(true);
+                    }
+                    setReAuthLoading(false);
+                },
+            });
         } catch (err) {
             console.error('Re-auth error:', err);
-            Alert.alert('Error', 'Failed to re-authenticate. Please try again.');
-        } finally {
+            setReAuthModalVisible(true);
             setReAuthLoading(false);
         }
+    };
+
+    // Close re-auth error modal
+    const closeReAuthModal = () => {
+        setReAuthModalVisible(false);
     };
 
     // Get display values from analysis
@@ -685,6 +708,48 @@ const DebtAttackScreen = () => {
             {/* Modals */}
             {renderFormModal(false)}
             {renderFormModal(true)}
+
+            {/* Re-authentication Error Modal */}
+            <Modal
+                visible={reAuthModalVisible}
+                animationType="fade"
+                transparent={true}
+                onRequestClose={closeReAuthModal}
+            >
+                <View style={styles.reAuthModalOverlay}>
+                    <View style={styles.reAuthModalContent}>
+                        {/* Warning Icon */}
+                        <View style={styles.reAuthModalIcon}>
+                            <Ionicons name="alert-circle" size={48} color="#FFA726" />
+                        </View>
+
+                        {/* Title and Message */}
+                        <Text style={styles.reAuthModalTitle}>Re-authentication Failed</Text>
+                        <Text style={styles.reAuthModalMessage}>
+                            We couldn't refresh your bank connection. Please try again or go to Profile to re-link your account.
+                        </Text>
+
+                        {/* Action Buttons */}
+                        <View style={styles.reAuthModalButtons}>
+                            <TouchableOpacity
+                                style={styles.reAuthModalButtonSecondary}
+                                onPress={closeReAuthModal}
+                            >
+                                <Text style={styles.reAuthModalButtonSecondaryText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.reAuthModalButtonPrimary}
+                                onPress={() => {
+                                    closeReAuthModal();
+                                    handleReAuthenticate();
+                                }}
+                            >
+                                <Text style={styles.reAuthModalButtonPrimaryText}>Try Again</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -1167,6 +1232,70 @@ const styles = StyleSheet.create({
         color: COLORS.WHITE,
         marginLeft: SPACING.SMALL,
         fontWeight: '600',
+    },
+
+    // Re-Authentication Error Modal
+    reAuthModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: SPACING.LARGE,
+    },
+    reAuthModalContent: {
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: BORDER_RADIUS.XL,
+        padding: SPACING.XL,
+        alignItems: 'center',
+        width: '100%',
+        maxWidth: 340,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 167, 38, 0.3)',
+    },
+    reAuthModalIcon: {
+        marginBottom: SPACING.MEDIUM,
+    },
+    reAuthModalTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: COLORS.WHITE,
+        marginBottom: SPACING.SMALL,
+        textAlign: 'center',
+    },
+    reAuthModalMessage: {
+        fontSize: 14,
+        color: COLORS.TEXT_SECONDARY,
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: SPACING.LARGE,
+    },
+    reAuthModalButtons: {
+        flexDirection: 'row',
+        gap: SPACING.MEDIUM,
+        width: '100%',
+    },
+    reAuthModalButtonSecondary: {
+        flex: 1,
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+        alignItems: 'center',
+    },
+    reAuthModalButtonSecondaryText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontWeight: '600',
+    },
+    reAuthModalButtonPrimary: {
+        flex: 1,
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        backgroundColor: '#FFA726',
+        alignItems: 'center',
+    },
+    reAuthModalButtonPrimaryText: {
+        color: COLORS.BACKGROUND,
+        fontWeight: '700',
     },
 });
 
