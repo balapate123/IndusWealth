@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
@@ -10,6 +10,7 @@ import {
     ActivityIndicator,
     RefreshControl,
     Modal,
+    TextInput,
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
@@ -51,6 +52,7 @@ const AllTransactionsScreen = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState(null);
     const [showTransactionModal, setShowTransactionModal] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     const formatTransactionsData = (rawTransactions) => {
         return (rawTransactions || []).map((tx, index) => ({
@@ -66,25 +68,37 @@ const AllTransactionsScreen = ({ navigation }) => {
 
     const fetchData = useCallback(async (forceRefresh = false) => {
         try {
+            console.log('📱 [AllTransactions] fetchData called, forceRefresh:', forceRefresh);
+
             // STEP 1: Load from cache first (instant display)
-            if (!forceRefresh) {
-                const cachedTransactions = await cache.getCachedTransactions();
-                if (cachedTransactions && cachedTransactions.length > 0) {
-                    const formattedTransactions = formatTransactionsData(cachedTransactions);
-                    setTransactions(formattedTransactions);
-                    setLoading(false);
-                }
+            const cachedTransactions = await cache.getCachedTransactions();
+            console.log('📱 [AllTransactions] Cache returned:', cachedTransactions?.length || 0, 'transactions');
+
+            if (cachedTransactions && cachedTransactions.length > 0) {
+                const dates = cachedTransactions.slice(0, 3).map(t => t.date);
+                console.log('📱 [AllTransactions] First 3 dates in cache:', dates);
+
+                const formattedTransactions = formatTransactionsData(cachedTransactions);
+                setTransactions(formattedTransactions);
+                setLoading(false);
             }
 
-            // STEP 2: Fetch fresh data from API if force refresh
-            if (forceRefresh) {
-                const transactionsData = await api.getTransactions('?refresh=true');
-                if (transactionsData?.success) {
-                    const formattedTransactions = formatTransactionsData(transactionsData.data);
-                    setTransactions(formattedTransactions);
-                    // Update the cache so other screens get the fresh data
-                    await cache.setCachedTransactions(transactionsData.data);
-                }
+            // STEP 2: ALWAYS fetch fresh data from API (ensures consistency with HomeScreen)
+            // This fetches in background after showing cached data
+            const refreshParam = forceRefresh ? '?refresh=true' : '';
+            console.log('📱 [AllTransactions] Fetching fresh data from API...');
+            const transactionsData = await api.getTransactions(refreshParam);
+            console.log('📱 [AllTransactions] API returned:', transactionsData?.data?.length || 0, 'transactions');
+
+            if (transactionsData?.success) {
+                const firstDates = transactionsData.data.slice(0, 3).map(t => t.date);
+                console.log('📱 [AllTransactions] First 3 API dates:', firstDates);
+
+                const formattedTransactions = formatTransactionsData(transactionsData.data);
+                setTransactions(formattedTransactions);
+                // Update the cache so other screens get the fresh data
+                await cache.setCachedTransactions(transactionsData.data);
+                console.log('📱 [AllTransactions] Cache updated with fresh data');
             }
 
             // STEP 3: Always fetch accounts for color coding
@@ -110,7 +124,8 @@ const AllTransactionsScreen = ({ navigation }) => {
     }, [fetchData]);
 
     const formatDate = (dateStr) => {
-        const date = new Date(dateStr);
+        // Add T12:00:00 to prevent timezone shift (UTC midnight -> local = previous day)
+        const date = new Date(dateStr + 'T12:00:00');
         return date.toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
@@ -189,6 +204,26 @@ const AllTransactionsScreen = ({ navigation }) => {
         );
     };
 
+    // Filter and sort transactions
+    const filteredTransactions = useMemo(() => {
+        let result = [...transactions];
+
+        // Apply search filter
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase().trim();
+            result = result.filter(tx =>
+                tx.merchant?.toLowerCase().includes(query) ||
+                tx.category?.toLowerCase().includes(query) ||
+                Math.abs(tx.amount).toFixed(2).includes(query)
+            );
+        }
+
+        // Sort by date descending
+        result.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        return result;
+    }, [transactions, searchQuery]);
+
     if (loading) {
         return (
             <View style={[styles.container, styles.centerContent]}>
@@ -212,13 +247,34 @@ const AllTransactionsScreen = ({ navigation }) => {
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>All Transactions</Text>
                 <View style={styles.headerRight}>
-                    <Text style={styles.countText}>{transactions.length} items</Text>
+                    <Text style={styles.countText}>
+                        {searchQuery ? `${filteredTransactions.length} of ${transactions.length}` : `${transactions.length} items`}
+                    </Text>
                 </View>
+            </View>
+
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+                <Ionicons name="search" size={20} color={COLORS.TEXT_MUTED} style={styles.searchIcon} />
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search transactions..."
+                    placeholderTextColor={COLORS.TEXT_MUTED}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                />
+                {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                        <Ionicons name="close-circle" size={20} color={COLORS.TEXT_MUTED} />
+                    </TouchableOpacity>
+                )}
             </View>
 
             {/* Transaction List */}
             <FlatList
-                data={transactions}
+                data={filteredTransactions}
                 renderItem={renderTransaction}
                 keyExtractor={(item) => item.id.toString()}
                 contentContainerStyle={styles.listContent}
@@ -233,8 +289,10 @@ const AllTransactionsScreen = ({ navigation }) => {
                 }
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <Ionicons name="receipt-outline" size={48} color={COLORS.TEXT_MUTED} />
-                        <Text style={styles.emptyText}>No transactions found</Text>
+                        <Ionicons name={searchQuery ? "search-outline" : "receipt-outline"} size={48} color={COLORS.TEXT_MUTED} />
+                        <Text style={styles.emptyText}>
+                            {searchQuery ? `No results for "${searchQuery}"` : 'No transactions found'}
+                        </Text>
                     </View>
                 }
             />
@@ -374,6 +432,31 @@ const styles = StyleSheet.create({
     countText: {
         color: COLORS.TEXT_SECONDARY,
         fontSize: 13,
+    },
+
+    // Search Bar
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.CARD_BG,
+        marginHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+        paddingHorizontal: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    searchIcon: {
+        marginRight: SPACING.SMALL,
+    },
+    searchInput: {
+        flex: 1,
+        color: COLORS.WHITE,
+        fontSize: 16,
+        paddingVertical: SPACING.MEDIUM,
+    },
+    clearButton: {
+        padding: SPACING.SMALL,
     },
 
     // List

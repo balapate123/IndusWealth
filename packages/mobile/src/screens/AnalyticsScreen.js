@@ -370,7 +370,7 @@ const AnalyticsScreen = ({ navigation }) => {
                                                 {item.merchant_name || item.name}
                                             </Text>
                                             <Text style={styles.transactionDate}>
-                                                {new Date(item.date).toLocaleDateString('en-US', {
+                                                {new Date(item.date + 'T12:00:00').toLocaleDateString('en-US', {
                                                     month: 'short',
                                                     day: 'numeric',
                                                     year: 'numeric'
@@ -572,7 +572,7 @@ const AnalyticsScreen = ({ navigation }) => {
                                 {formatCompactCurrency(points[selectedDataPoint].value)}
                             </Text>
                             <Text style={styles.chartTooltipDate}>
-                                {new Date(points[selectedDataPoint].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                {new Date(points[selectedDataPoint].date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </Text>
                         </View>
                     )}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
@@ -9,6 +9,8 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     RefreshControl,
+    Modal,
+    TextInput,
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
@@ -36,6 +38,9 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [totals, setTotals] = useState({ income: 0, expenses: 0 });
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedTransaction, setSelectedTransaction] = useState(null);
+    const [showTransactionModal, setShowTransactionModal] = useState(false);
 
     const fetchTransactions = useCallback(async () => {
         try {
@@ -79,12 +84,35 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
     }, [fetchTransactions]);
 
     const formatDate = (dateStr) => {
-        const date = new Date(dateStr);
+        // Add T12:00:00 to prevent timezone shift
+        const date = new Date(dateStr + 'T12:00:00');
         return date.toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
             year: 'numeric'
         });
+    };
+
+    // Filter and sort transactions
+    const filteredTransactions = useMemo(() => {
+        let result = [...transactions];
+
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase().trim();
+            result = result.filter(tx =>
+                tx.merchant?.toLowerCase().includes(query) ||
+                tx.category?.toLowerCase().includes(query) ||
+                Math.abs(tx.amount).toFixed(2).includes(query)
+            );
+        }
+
+        result.sort((a, b) => new Date(b.date) - new Date(a.date));
+        return result;
+    }, [transactions, searchQuery]);
+
+    const openTransactionDetails = (item) => {
+        setSelectedTransaction(item);
+        setShowTransactionModal(true);
     };
 
     const formatCurrency = (amount) => {
@@ -121,7 +149,11 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
     };
 
     const renderTransaction = ({ item }) => (
-        <View style={styles.transactionItem}>
+        <TouchableOpacity
+            style={styles.transactionItem}
+            onPress={() => openTransactionDetails(item)}
+            activeOpacity={0.7}
+        >
             {renderTransactionIcon(item.category, item.amount > 0)}
             <View style={styles.transactionContent}>
                 <Text style={styles.transactionMerchant} numberOfLines={1}>{item.merchant}</Text>
@@ -135,7 +167,7 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                     {item.amount > 0 ? '+' : '-'}{formatCurrency(item.amount)}
                 </Text>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 
     if (loading) {
@@ -209,15 +241,36 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                 </View>
             </View>
 
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+                <Ionicons name="search" size={20} color={COLORS.TEXT_MUTED} style={styles.searchIcon} />
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search transactions..."
+                    placeholderTextColor={COLORS.TEXT_MUTED}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                />
+                {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                        <Ionicons name="close-circle" size={20} color={COLORS.TEXT_MUTED} />
+                    </TouchableOpacity>
+                )}
+            </View>
+
             {/* Transactions Header */}
             <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Transactions</Text>
-                <Text style={styles.countText}>{transactions.length} items</Text>
+                <Text style={styles.countText}>
+                    {searchQuery ? `${filteredTransactions.length} of ${transactions.length}` : `${transactions.length} items`}
+                </Text>
             </View>
 
             {/* Transaction List */}
             <FlatList
-                data={transactions}
+                data={filteredTransactions}
                 renderItem={renderTransaction}
                 keyExtractor={(item) => item.id.toString()}
                 contentContainerStyle={styles.listContent}
@@ -232,11 +285,101 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                 }
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <Ionicons name="receipt-outline" size={48} color={COLORS.TEXT_MUTED} />
-                        <Text style={styles.emptyText}>No transactions found for this account</Text>
+                        <Ionicons name={searchQuery ? "search-outline" : "receipt-outline"} size={48} color={COLORS.TEXT_MUTED} />
+                        <Text style={styles.emptyText}>
+                            {searchQuery ? `No results for "${searchQuery}"` : 'No transactions found for this account'}
+                        </Text>
                     </View>
                 }
             />
+
+            {/* Transaction Details Modal */}
+            <Modal
+                visible={showTransactionModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowTransactionModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.transactionModalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Transaction Details</Text>
+                            <TouchableOpacity
+                                style={styles.modalCloseButton}
+                                onPress={() => setShowTransactionModal(false)}
+                            >
+                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {selectedTransaction && (
+                            <View style={styles.transactionDetails}>
+                                {/* Amount */}
+                                <View style={styles.detailAmountRow}>
+                                    <Text style={[
+                                        styles.detailAmount,
+                                        { color: selectedTransaction.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
+                                    ]}>
+                                        {selectedTransaction.amount > 0 ? '+' : '-'}{formatCurrency(selectedTransaction.amount)}
+                                    </Text>
+                                    <View style={[
+                                        styles.amountBadge,
+                                        { backgroundColor: selectedTransaction.amount > 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 107, 107, 0.2)' }
+                                    ]}>
+                                        <Text style={[
+                                            styles.amountBadgeText,
+                                            { color: selectedTransaction.amount > 0 ? COLORS.GREEN : '#FF6B6B' }
+                                        ]}>
+                                            {selectedTransaction.amount > 0 ? 'Income' : 'Expense'}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                {/* Detail Rows */}
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Merchant</Text>
+                                    <Text style={styles.detailValue}>{selectedTransaction.merchant}</Text>
+                                </View>
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Category</Text>
+                                    <Text style={styles.detailValue}>{selectedTransaction.category}</Text>
+                                </View>
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Date</Text>
+                                    <Text style={styles.detailValue}>
+                                        {selectedTransaction.date
+                                            ? new Date(selectedTransaction.date + 'T12:00:00').toLocaleDateString('en-US', {
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric'
+                                            })
+                                            : 'N/A'}
+                                    </Text>
+                                </View>
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Account</Text>
+                                    <Text style={styles.detailValue}>{account.name}</Text>
+                                </View>
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Transaction ID</Text>
+                                    <Text style={[styles.detailValue, styles.transactionId]}>{selectedTransaction.id}</Text>
+                                </View>
+                            </View>
+                        )}
+
+                        <TouchableOpacity
+                            style={styles.modalDoneButton}
+                            onPress={() => setShowTransactionModal(false)}
+                        >
+                            <Text style={styles.modalDoneText}>Done</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
