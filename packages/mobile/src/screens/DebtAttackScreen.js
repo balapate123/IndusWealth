@@ -9,22 +9,57 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     RefreshControl,
+    Modal,
+    TextInput,
+    Alert,
+    KeyboardAvoidingView,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import api from '../services/api';
 
+// Default APR by debt type
+const DEFAULT_APRS = {
+    credit_card: 22.00,
+    line_of_credit: 11.00,
+    personal_loan: 10.00,
+    student_loan: 6.00,
+    other: 15.00
+};
+
+const DEBT_TYPES = [
+    { key: 'credit_card', label: 'Credit Card', icon: 'card' },
+    { key: 'line_of_credit', label: 'Line of Credit', icon: 'trending-up' },
+    { key: 'personal_loan', label: 'Personal Loan', icon: 'cash' },
+    { key: 'student_loan', label: 'Student Loan', icon: 'school' },
+    { key: 'other', label: 'Other', icon: 'ellipsis-horizontal' },
+];
+
 const DebtAttackScreen = () => {
     const [extraPayment, setExtraPayment] = useState(0);
     const [strategy, setStrategy] = useState('snowball');
     const [debts, setDebts] = useState([]);
+    const [customDebts, setCustomDebts] = useState([]);
     const [rawLiabilities, setRawLiabilities] = useState(null);
     const [analysis, setAnalysis] = useState(null);
     const [loading, setLoading] = useState(true);
     const [calculating, setCalculating] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
+
+    // Modal states
+    const [addModalVisible, setAddModalVisible] = useState(false);
+    const [editModalVisible, setEditModalVisible] = useState(false);
+    const [editingDebt, setEditingDebt] = useState(null);
+
+    // Form states
+    const [formName, setFormName] = useState('');
+    const [formBalance, setFormBalance] = useState('');
+    const [formApr, setFormApr] = useState('');
+    const [formMinPayment, setFormMinPayment] = useState('');
+    const [formDebtType, setFormDebtType] = useState('credit_card');
+    const [formSubmitting, setFormSubmitting] = useState(false);
 
     const fetchData = useCallback(async () => {
         try {
@@ -34,22 +69,17 @@ const DebtAttackScreen = () => {
             if (data?.success) {
                 setAnalysis(data.analysis);
                 setRawLiabilities(data.raw_liabilities);
+                setCustomDebts(data.custom_debts || []);
 
-                // Extract debts from analysis for display
-                if (data.raw_liabilities?.credit) {
-                    const formattedDebts = data.raw_liabilities.credit.map((d, index) => ({
-                        id: index + 1,
-                        name: d.name || 'Credit Card',
-                        apr: d.aprs?.find(a => a.apr_type === 'purchase_apr')?.apr_percentage || 19.99,
-                        balance: d.last_statement_balance || 0,
-                        payoffMonths: 12, // Will be updated by calculation
-                    }));
-                    setDebts(formattedDebts);
-                }
+                // Combine all debts for display
+                const allDebts = data.analysis?.debts || [];
+                setDebts(allDebts);
+            } else {
+                setError('Failed to load debt data.');
             }
         } catch (err) {
             console.error('Error fetching debt data:', err);
-            setError('Failed to load debt data. Pull to refresh.');
+            setError('Unable to connect. Pull to refresh.');
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -69,19 +99,142 @@ const DebtAttackScreen = () => {
     const handleSliderChange = async (value) => {
         setExtraPayment(value);
 
-        if (!rawLiabilities) return;
-
         setCalculating(true);
         try {
-            const data = await api.calculateDebt(value, rawLiabilities);
+            const data = await api.calculateDebt(value, rawLiabilities, customDebts);
             if (data?.success) {
                 setAnalysis(data.analysis);
+                if (data.analysis?.debts) {
+                    setDebts(data.analysis.debts);
+                }
             }
         } catch (err) {
             console.error('Error calculating debt:', err);
         } finally {
             setCalculating(false);
         }
+    };
+
+    // Open add modal
+    const openAddModal = () => {
+        setFormName('');
+        setFormBalance('');
+        setFormApr(DEFAULT_APRS.credit_card.toString());
+        setFormMinPayment('');
+        setFormDebtType('credit_card');
+        setAddModalVisible(true);
+    };
+
+    // Open edit modal
+    const openEditModal = (debt) => {
+        // Extract numeric ID from custom_X format
+        const numericId = debt.id.replace('custom_', '');
+        setEditingDebt({ ...debt, numericId });
+        setFormName(debt.name);
+        setFormBalance(debt.balance.toString());
+        setFormApr(debt.apr.toString());
+        setFormMinPayment(debt.min_payment?.toString() || '');
+        setFormDebtType(debt.debt_type || 'other');
+        setEditModalVisible(true);
+    };
+
+    // Handle debt type change (updates default APR)
+    const handleDebtTypeChange = (type) => {
+        setFormDebtType(type);
+        // Only update APR if it's still set to a default value
+        const currentApr = parseFloat(formApr);
+        const isDefaultApr = Object.values(DEFAULT_APRS).includes(currentApr);
+        if (isDefaultApr || !formApr) {
+            setFormApr(DEFAULT_APRS[type].toString());
+        }
+    };
+
+    // Add new debt
+    const handleAddDebt = async () => {
+        if (!formName.trim() || !formBalance) {
+            Alert.alert('Error', 'Please enter a name and balance');
+            return;
+        }
+
+        setFormSubmitting(true);
+        try {
+            const debt = {
+                name: formName.trim(),
+                balance: parseFloat(formBalance),
+                apr: parseFloat(formApr) || DEFAULT_APRS[formDebtType],
+                min_payment: parseFloat(formMinPayment) || 0,
+                debt_type: formDebtType,
+            };
+
+            const result = await api.addCustomDebt(debt);
+            if (result?.success) {
+                setAddModalVisible(false);
+                fetchData(); // Refresh all data
+            } else {
+                Alert.alert('Error', result?.message || 'Failed to add debt');
+            }
+        } catch (err) {
+            Alert.alert('Error', 'Failed to add debt. Please try again.');
+        } finally {
+            setFormSubmitting(false);
+        }
+    };
+
+    // Update existing debt
+    const handleUpdateDebt = async () => {
+        if (!formName.trim() || !formBalance) {
+            Alert.alert('Error', 'Please enter a name and balance');
+            return;
+        }
+
+        setFormSubmitting(true);
+        try {
+            const debt = {
+                name: formName.trim(),
+                balance: parseFloat(formBalance),
+                apr: parseFloat(formApr),
+                min_payment: parseFloat(formMinPayment) || 0,
+                debt_type: formDebtType,
+            };
+
+            const result = await api.updateCustomDebt(editingDebt.numericId, debt);
+            if (result?.success) {
+                setEditModalVisible(false);
+                fetchData();
+            } else {
+                Alert.alert('Error', result?.message || 'Failed to update debt');
+            }
+        } catch (err) {
+            Alert.alert('Error', 'Failed to update debt. Please try again.');
+        } finally {
+            setFormSubmitting(false);
+        }
+    };
+
+    // Delete debt
+    const handleDeleteDebt = () => {
+        Alert.alert(
+            'Delete Debt',
+            `Are you sure you want to delete "${editingDebt?.name}"?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const result = await api.deleteCustomDebt(editingDebt.numericId);
+                            if (result?.success) {
+                                setEditModalVisible(false);
+                                fetchData();
+                            }
+                        } catch (err) {
+                            Alert.alert('Error', 'Failed to delete debt');
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     // Get display values from analysis
@@ -104,31 +257,189 @@ const DebtAttackScreen = () => {
             ? new Date(strategyData.payoff_date + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
             : 'N/A';
 
+        const interestSavedKey = strategy === 'snowball'
+            ? 'interest_saved_snowball'
+            : 'interest_saved_avalanche';
+        const monthsSavedKey = strategy === 'snowball'
+            ? 'months_saved_snowball'
+            : 'months_saved_avalanche';
+
         return {
             debtFreeDate: payoffDate,
-            monthsSooner: statusQuo?.months_to_payoff - strategyData?.months_to_payoff || 0,
-            interestSaved: Math.round(statusQuo?.total_interest - strategyData?.total_interest) || 0,
+            monthsSooner: analysis.savings?.[monthsSavedKey] || 0,
+            interestSaved: analysis.savings?.[interestSavedKey] || 0,
         };
     };
 
     const { debtFreeDate, monthsSooner, interestSaved } = getStrategyData();
-    const basePayment = 400;
-    const totalPayment = basePayment + extraPayment;
+    const totalMinPayment = analysis?.total_min_payment || 0;
+    const totalPayment = totalMinPayment + extraPayment;
 
-    const renderDebtItem = (item, index) => (
-        <View key={item.id} style={styles.debtItem}>
-            <View style={styles.debtRank}>
-                <Text style={styles.debtRankText}>#{index + 1}</Text>
-            </View>
-            <View style={styles.debtContent}>
-                <Text style={styles.debtName}>{item.name}</Text>
-                <Text style={styles.debtApr}>{item.apr.toFixed(2)}% APR</Text>
-            </View>
-            <View style={styles.debtRight}>
-                <Text style={styles.debtBalance}>${item.balance.toLocaleString()}</Text>
-                <Text style={styles.debtPayoff}>Payoff: {item.payoffMonths} mo</Text>
-            </View>
-        </View>
+    const renderDebtItem = (item, index) => {
+        const isCustom = item.is_custom;
+        const payoffText = item.solo_payoff_months === 999
+            ? 'Never (at min)'
+            : `${item.solo_payoff_months} mo`;
+
+        return (
+            <TouchableOpacity
+                key={item.id}
+                style={styles.debtItem}
+                onPress={() => isCustom && openEditModal(item)}
+                activeOpacity={isCustom ? 0.7 : 1}
+            >
+                <View style={styles.debtRank}>
+                    <Text style={styles.debtRankText}>#{index + 1}</Text>
+                </View>
+                <View style={styles.debtContent}>
+                    <View style={styles.debtNameRow}>
+                        <Text style={styles.debtName}>{item.name}</Text>
+                        {isCustom && (
+                            <View style={styles.customBadge}>
+                                <Text style={styles.customBadgeText}>Manual</Text>
+                            </View>
+                        )}
+                    </View>
+                    <Text style={styles.debtApr}>{item.apr.toFixed(1)}% APR</Text>
+                </View>
+                <View style={styles.debtRight}>
+                    <Text style={styles.debtBalance}>${item.balance.toLocaleString()}</Text>
+                    <Text style={styles.debtPayoff}>Payoff: {payoffText}</Text>
+                </View>
+                {isCustom && (
+                    <Ionicons name="chevron-forward" size={16} color={COLORS.TEXT_MUTED} />
+                )}
+            </TouchableOpacity>
+        );
+    };
+
+    // Debt form modal content
+    const renderFormModal = (isEdit = false) => (
+        <Modal
+            visible={isEdit ? editModalVisible : addModalVisible}
+            animationType="slide"
+            transparent={true}
+            onRequestClose={() => isEdit ? setEditModalVisible(false) : setAddModalVisible(false)}
+        >
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.modalOverlay}
+            >
+                <View style={styles.modalContent}>
+                    <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>
+                            {isEdit ? 'Edit Debt' : 'Add New Debt'}
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => isEdit ? setEditModalVisible(false) : setAddModalVisible(false)}
+                        >
+                            <Ionicons name="close" size={24} color={COLORS.WHITE} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Debt Type Selector */}
+                    <Text style={styles.inputLabel}>Debt Type</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeSelector}>
+                        {DEBT_TYPES.map((type) => (
+                            <TouchableOpacity
+                                key={type.key}
+                                style={[
+                                    styles.typeButton,
+                                    formDebtType === type.key && styles.typeButtonActive
+                                ]}
+                                onPress={() => handleDebtTypeChange(type.key)}
+                            >
+                                <Ionicons
+                                    name={type.icon}
+                                    size={16}
+                                    color={formDebtType === type.key ? COLORS.WHITE : COLORS.TEXT_SECONDARY}
+                                />
+                                <Text style={[
+                                    styles.typeButtonText,
+                                    formDebtType === type.key && styles.typeButtonTextActive
+                                ]}>
+                                    {type.label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+
+                    {/* Form Fields */}
+                    <Text style={styles.inputLabel}>Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        value={formName}
+                        onChangeText={setFormName}
+                        placeholder="e.g. Chase Sapphire"
+                        placeholderTextColor={COLORS.TEXT_MUTED}
+                    />
+
+                    <View style={styles.inputRow}>
+                        <View style={styles.inputHalf}>
+                            <Text style={styles.inputLabel}>Balance ($)</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={formBalance}
+                                onChangeText={setFormBalance}
+                                placeholder="5000"
+                                placeholderTextColor={COLORS.TEXT_MUTED}
+                                keyboardType="numeric"
+                            />
+                        </View>
+                        <View style={styles.inputHalf}>
+                            <Text style={styles.inputLabel}>APR (%)</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={formApr}
+                                onChangeText={setFormApr}
+                                placeholder="22.0"
+                                placeholderTextColor={COLORS.TEXT_MUTED}
+                                keyboardType="numeric"
+                            />
+                        </View>
+                    </View>
+
+                    <Text style={styles.inputLabel}>Min Payment ($/mo) - Optional</Text>
+                    <TextInput
+                        style={styles.input}
+                        value={formMinPayment}
+                        onChangeText={setFormMinPayment}
+                        placeholder="Auto-calculated if empty"
+                        placeholderTextColor={COLORS.TEXT_MUTED}
+                        keyboardType="numeric"
+                    />
+
+                    {/* Action Buttons */}
+                    <View style={styles.modalActions}>
+                        {isEdit && (
+                            <TouchableOpacity
+                                style={styles.deleteButton}
+                                onPress={handleDeleteDebt}
+                            >
+                                <Ionicons name="trash" size={18} color="#FF4444" />
+                                <Text style={styles.deleteButtonText}>Delete</Text>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                            style={[styles.saveButton, formSubmitting && styles.saveButtonDisabled]}
+                            onPress={isEdit ? handleUpdateDebt : handleAddDebt}
+                            disabled={formSubmitting}
+                        >
+                            {formSubmitting ? (
+                                <ActivityIndicator size="small" color={COLORS.WHITE} />
+                            ) : (
+                                <>
+                                    <Ionicons name="checkmark" size={18} color={COLORS.WHITE} />
+                                    <Text style={styles.saveButtonText}>
+                                        {isEdit ? 'Update' : 'Add Debt'}
+                                    </Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </KeyboardAvoidingView>
+        </Modal>
     );
 
     if (loading) {
@@ -150,8 +461,8 @@ const DebtAttackScreen = () => {
                     <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Debt Attack Plan</Text>
-                <TouchableOpacity style={styles.saveButton}>
-                    <Text style={styles.saveText}>Save</Text>
+                <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
+                    <Ionicons name="add" size={24} color={COLORS.GOLD} />
                 </TouchableOpacity>
             </View>
 
@@ -170,6 +481,7 @@ const DebtAttackScreen = () => {
                 {/* Error Message */}
                 {error && (
                     <View style={styles.errorContainer}>
+                        <Ionicons name="warning" size={20} color="#F44336" />
                         <Text style={styles.errorText}>{error}</Text>
                     </View>
                 )}
@@ -217,7 +529,7 @@ const DebtAttackScreen = () => {
                     <View style={styles.paymentRow}>
                         <Text style={styles.paymentAmount}>+${extraPayment}</Text>
                         <Text style={styles.paymentSuffix}>/mo</Text>
-                        <Text style={styles.totalPayment}>Total: ${totalPayment}/mo</Text>
+                        <Text style={styles.totalPayment}>Total: ${Math.round(totalPayment)}/mo</Text>
                     </View>
                     <Slider
                         style={styles.slider}
@@ -292,25 +604,34 @@ const DebtAttackScreen = () => {
 
                 {/* Debts List */}
                 <View style={styles.debtsSection}>
-                    <Text style={styles.sectionTitle}>Your Debts</Text>
+                    <View style={styles.debtsSectionHeader}>
+                        <Text style={styles.sectionTitle}>Your Debts</Text>
+                        <Text style={styles.totalDebtLabel}>
+                            Total: ${(analysis?.total_debt || 0).toLocaleString()}
+                        </Text>
+                    </View>
                     {debts.length > 0 ? (
                         debts.map((debt, index) => renderDebtItem(debt, index))
                     ) : (
                         <View style={styles.emptyState}>
-                            <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.GREEN} />
-                            <Text style={styles.emptyText}>No debts found. You're debt free!</Text>
+                            <Ionicons name="add-circle-outline" size={48} color={COLORS.GOLD} />
+                            <Text style={styles.emptyText}>No debts added yet</Text>
+                            <TouchableOpacity style={styles.emptyAddButton} onPress={openAddModal}>
+                                <Text style={styles.emptyAddButtonText}>Add Your First Debt</Text>
+                            </TouchableOpacity>
                         </View>
                     )}
                 </View>
             </ScrollView>
 
-            {/* Bottom Action Button */}
-            <View style={styles.bottomAction}>
-                <TouchableOpacity style={styles.applyButton}>
-                    <Ionicons name="checkmark-circle" size={20} color={COLORS.WHITE} />
-                    <Text style={styles.applyText}>Apply This Plan</Text>
-                </TouchableOpacity>
-            </View>
+            {/* Add Debt FAB */}
+            <TouchableOpacity style={styles.fab} onPress={openAddModal}>
+                <Ionicons name="add" size={28} color={COLORS.WHITE} />
+            </TouchableOpacity>
+
+            {/* Modals */}
+            {renderFormModal(false)}
+            {renderFormModal(true)}
         </View>
     );
 };
@@ -349,25 +670,23 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '600',
     },
-    saveButton: {
+    addButton: {
         padding: SPACING.SMALL,
-    },
-    saveText: {
-        color: '#3B82F6',
-        fontSize: 16,
-        fontWeight: '600',
     },
 
     // Error
     errorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
         margin: SPACING.MEDIUM,
         padding: SPACING.MEDIUM,
         backgroundColor: 'rgba(244, 67, 54, 0.1)',
         borderRadius: BORDER_RADIUS.MEDIUM,
+        gap: SPACING.SMALL,
     },
     errorText: {
         color: '#F44336',
-        textAlign: 'center',
+        flex: 1,
     },
 
     // Results Card
@@ -537,6 +856,16 @@ const styles = StyleSheet.create({
     debtsSection: {
         paddingHorizontal: SPACING.MEDIUM,
     },
+    debtsSectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.MEDIUM,
+    },
+    totalDebtLabel: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 14,
+    },
     debtItem: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -562,11 +891,27 @@ const styles = StyleSheet.create({
     debtContent: {
         flex: 1,
     },
+    debtNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+    },
     debtName: {
         color: COLORS.WHITE,
         fontSize: 15,
         fontWeight: '600',
         marginBottom: 2,
+    },
+    customBadge: {
+        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    customBadgeText: {
+        color: '#3B82F6',
+        fontSize: 10,
+        fontWeight: '600',
     },
     debtApr: {
         color: COLORS.TEXT_SECONDARY,
@@ -574,6 +919,7 @@ const styles = StyleSheet.create({
     },
     debtRight: {
         alignItems: 'flex-end',
+        marginRight: SPACING.SMALL,
     },
     debtBalance: {
         color: COLORS.WHITE,
@@ -596,30 +942,145 @@ const styles = StyleSheet.create({
         marginTop: SPACING.MEDIUM,
         textAlign: 'center',
     },
-
-    // Bottom Action
-    bottomAction: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        padding: SPACING.MEDIUM,
-        paddingBottom: SPACING.LARGE,
-        backgroundColor: COLORS.BACKGROUND,
+    emptyAddButton: {
+        marginTop: SPACING.MEDIUM,
+        paddingVertical: SPACING.SMALL,
+        paddingHorizontal: SPACING.LARGE,
+        backgroundColor: COLORS.GOLD,
+        borderRadius: BORDER_RADIUS.LARGE,
     },
-    applyButton: {
+    emptyAddButtonText: {
+        color: COLORS.BACKGROUND,
+        fontWeight: '600',
+    },
+
+    // FAB
+    fab: {
+        position: 'absolute',
+        bottom: 100,
+        right: SPACING.MEDIUM,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#2563EB',
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+    },
+
+    // Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: COLORS.CARD_BG,
+        borderTopLeftRadius: BORDER_RADIUS.XL,
+        borderTopRightRadius: BORDER_RADIUS.XL,
+        padding: SPACING.LARGE,
+        maxHeight: '90%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.LARGE,
+    },
+    modalTitle: {
+        color: COLORS.WHITE,
+        fontSize: 20,
+        fontWeight: '600',
+    },
+
+    // Type Selector
+    typeSelector: {
+        marginBottom: SPACING.MEDIUM,
+    },
+    typeButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: SPACING.SMALL,
+        paddingHorizontal: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        backgroundColor: COLORS.BACKGROUND,
+        marginRight: SPACING.SMALL,
+    },
+    typeButtonActive: {
+        backgroundColor: '#2563EB',
+    },
+    typeButtonText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 13,
+        marginLeft: SPACING.TINY,
+    },
+    typeButtonTextActive: {
+        color: COLORS.WHITE,
+    },
+
+    // Form
+    inputLabel: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 12,
+        marginBottom: SPACING.TINY,
+        marginTop: SPACING.SMALL,
+    },
+    input: {
+        backgroundColor: COLORS.BACKGROUND,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        padding: SPACING.MEDIUM,
+        color: COLORS.WHITE,
+        fontSize: 16,
+    },
+    inputRow: {
+        flexDirection: 'row',
+        gap: SPACING.MEDIUM,
+    },
+    inputHalf: {
+        flex: 1,
+    },
+
+    // Modal Actions
+    modalActions: {
+        flexDirection: 'row',
+        marginTop: SPACING.LARGE,
+        gap: SPACING.MEDIUM,
+    },
+    deleteButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#2563EB',
+        paddingVertical: SPACING.MEDIUM,
+        paddingHorizontal: SPACING.LARGE,
+        borderRadius: BORDER_RADIUS.LARGE,
+        borderWidth: 1,
+        borderColor: '#FF4444',
+    },
+    deleteButtonText: {
+        color: '#FF4444',
+        marginLeft: SPACING.SMALL,
+        fontWeight: '600',
+    },
+    saveButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
         paddingVertical: SPACING.MEDIUM,
         borderRadius: BORDER_RADIUS.LARGE,
+        backgroundColor: '#2563EB',
     },
-    applyText: {
+    saveButtonDisabled: {
+        opacity: 0.6,
+    },
+    saveButtonText: {
         color: COLORS.WHITE,
-        fontSize: 16,
-        fontWeight: '600',
         marginLeft: SPACING.SMALL,
+        fontWeight: '600',
     },
 });
 

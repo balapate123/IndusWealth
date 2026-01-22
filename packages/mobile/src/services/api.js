@@ -154,13 +154,39 @@ export const api = {
     // Debt
     getDebtOverview: () => apiRequest('/debt'),
 
-    calculateDebt: (extraPayment, liabilities) =>
+    calculateDebt: (extraPayment, liabilities, customDebts) =>
         apiRequest('/debt/calculate', {
             method: 'POST',
             body: JSON.stringify({
                 extra_payment: extraPayment,
-                liabilities
+                liabilities,
+                custom_debts: customDebts
             }),
+        }),
+
+    // Custom Debts CRUD
+    addCustomDebt: (debt) =>
+        apiRequest('/debt/custom', {
+            method: 'POST',
+            body: JSON.stringify(debt),
+        }),
+
+    updateCustomDebt: (id, debt) =>
+        apiRequest(`/debt/custom/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(debt),
+        }),
+
+    deleteCustomDebt: (id) =>
+        apiRequest(`/debt/custom/${id}`, {
+            method: 'DELETE',
+        }),
+
+    // APR Override for Plaid accounts
+    saveAprOverride: (plaidAccountId, apr) =>
+        apiRequest('/debt/apr-override', {
+            method: 'PUT',
+            body: JSON.stringify({ plaid_account_id: plaidAccountId, apr }),
         }),
 
     // Plaid Link
