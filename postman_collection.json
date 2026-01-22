@@ -1,0 +1,132 @@
+{
+    "info": {
+        "name": "IndusWealth API Debug",
+        "_postman_id": "induswealth-debug",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Login (Get Token)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"email\": \"YOUR_EMAIL\",\n  \"password\": \"YOUR_PASSWORD\"\n}"
+                },
+                "url": {
+                    "raw": "https://induswealth.onrender.com/users/login",
+                    "protocol": "https",
+                    "host": [
+                        "induswealth",
+                        "onrender",
+                        "com"
+                    ],
+                    "path": [
+                        "users",
+                        "login"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Get Transactions (Force Refresh)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "url": {
+                    "raw": "https://induswealth.onrender.com/transactions?refresh=true",
+                    "protocol": "https",
+                    "host": [
+                        "induswealth",
+                        "onrender",
+                        "com"
+                    ],
+                    "path": [
+                        "transactions"
+                    ],
+                    "query": [
+                        {
+                            "key": "refresh",
+                            "value": "true"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Get Transactions (From Cache)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "url": {
+                    "raw": "https://induswealth.onrender.com/transactions",
+                    "protocol": "https",
+                    "host": [
+                        "induswealth",
+                        "onrender",
+                        "com"
+                    ],
+                    "path": [
+                        "transactions"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Get Analytics (Force Refresh)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "url": {
+                    "raw": "https://induswealth.onrender.com/analytics?period=30&refresh=true",
+                    "protocol": "https",
+                    "host": [
+                        "induswealth",
+                        "onrender",
+                        "com"
+                    ],
+                    "path": [
+                        "analytics"
+                    ],
+                    "query": [
+                        {
+                            "key": "period",
+                            "value": "30"
+                        },
+                        {
+                            "key": "refresh",
+                            "value": "true"
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "token",
+            "value": "PASTE_YOUR_JWT_TOKEN_HERE"
+        }
+    ]
+}

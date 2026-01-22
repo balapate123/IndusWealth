@@ -110,13 +110,26 @@ class PlaidService {
             const endDate = new Date().toISOString().slice(0, 10);
             const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+            console.log(`   📅 [Plaid] Querying transactions from ${startDate} to ${endDate}`);
+
             const response = await client.transactionsGet({
                 access_token: accessToken,
                 start_date: startDate,
                 end_date: endDate,
             });
 
-            return response.data.transactions;
+            const transactions = response.data.transactions;
+
+            // Log the date range of returned transactions
+            if (transactions.length > 0) {
+                const dates = transactions.map(t => t.date).sort();
+                console.log(`   📊 [Plaid] Returned ${transactions.length} transactions`);
+                console.log(`   📊 [Plaid] Date range: ${dates[0]} to ${dates[dates.length - 1]}`);
+            } else {
+                console.log(`   📊 [Plaid] Returned 0 transactions`);
+            }
+
+            return transactions;
         } catch (error) {
             console.error('Error fetching from Plaid:', error.response ? error.response.data : error.message);
             throw error; // Throw error instead of returning match
