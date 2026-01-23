@@ -185,10 +185,22 @@ const HomeScreen = ({ navigation }) => {
         loadData(false); // Initial load from cache
     }, [loadData]);
 
+    const [lastPullTime, setLastPullTime] = useState(0);
+
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        loadData(true); // Force refresh from API
-    }, [loadData]);
+        const now = Date.now();
+        // 3 seconds threshold for double-pull
+        if (now - lastPullTime < 3000) {
+            // Double pull detected - FORCE refresh from Plaid
+            loadData(true);
+        } else {
+            // Single pull - Refresh from backend cache (cheap)
+            // Backend will only sync if cache is stale (>24h)
+            loadData(false);
+            setLastPullTime(now);
+        }
+    }, [loadData, lastPullTime]);
 
     // Helper functions
     const isDateToday = (dateStr) => {

@@ -107,8 +107,14 @@ class PlaidService {
 
         try {
             // Fetch data for the last 30 days
-            const endDate = new Date().toISOString().slice(0, 10);
-            const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+            // extend endDate to tomorrow to ensure we capture all transactions from "today" 
+            // regardless of server timezone (UTC) vs user timezone (EST/PST)
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            const endDate = tomorrow.toISOString().slice(0, 10);
+            const startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
             console.log(`   📅 [Plaid] Querying transactions from ${startDate} to ${endDate}`);
 
