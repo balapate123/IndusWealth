@@ -122,6 +122,9 @@ class PlaidService {
                 access_token: accessToken,
                 start_date: startDate,
                 end_date: endDate,
+                options: {
+                    count: 500
+                }
             });
 
             const transactions = response.data.transactions;
@@ -129,7 +132,10 @@ class PlaidService {
             // Log the date range of returned transactions
             if (transactions.length > 0) {
                 const dates = transactions.map(t => t.date).sort();
-                console.log(`   📊 [Plaid] Returned ${transactions.length} transactions`);
+                const pendingCount = transactions.filter(t => t.pending).length;
+                const postedCount = transactions.length - pendingCount;
+
+                console.log(`   📊 [Plaid] Returned ${transactions.length} transactions (Posted: ${postedCount}, Pending: ${pendingCount})`);
                 console.log(`   📊 [Plaid] Date range: ${dates[0]} to ${dates[dates.length - 1]}`);
             } else {
                 console.log(`   📊 [Plaid] Returned 0 transactions`);
