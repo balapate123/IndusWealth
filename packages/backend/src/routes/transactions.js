@@ -39,7 +39,7 @@ router.get('/', authenticateToken, async (req, res, next) => {
             if (accessToken) {
                 try {
                     // Fetch from Plaid
-                    const plaidTransactions = await plaidService.getTransactions(accessToken);
+                    const plaidTransactions = await plaidService.getTransactions(accessToken, forceRefresh);
 
                     // Also fetch accounts for the account_id mapping
                     try {
