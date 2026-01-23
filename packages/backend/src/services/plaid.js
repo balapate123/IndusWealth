@@ -94,6 +94,7 @@ class PlaidService {
     }
 
     async getTransactions(accessToken, forceRefresh = false) {
+        console.log(`🔍 [Plaid] getTransactions called with forceRefresh=${forceRefresh}`);
         if (!accessToken) {
             console.log('Debug: No Access Token Passed. Env Override:', process.env.PLAID_ACCESS_TOKEN_OVERRIDE ? 'FOUND' : 'MISSING');
             console.warn('No Access Token provided. Please link a bank account or set PLAID_ACCESS_TOKEN_OVERRIDE.');
@@ -149,8 +150,13 @@ class PlaidService {
                 const pendingCount = transactions.filter(t => t.pending).length;
                 const postedCount = transactions.length - pendingCount;
 
+                // Determine latest transaction for debugging
+                const sortedByDate = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+                const latestTx = sortedByDate[0];
+
                 console.log(`   📊 [Plaid] Returned ${transactions.length} transactions (Posted: ${postedCount}, Pending: ${pendingCount})`);
                 console.log(`   📊 [Plaid] Date range: ${dates[0]} to ${dates[dates.length - 1]}`);
+                console.log(`   🧐 [Plaid] LATEST Transaction: ${latestTx.date} - ${latestTx.name} ($${latestTx.amount}) [Pending: ${latestTx.pending}]`);
             } else {
                 console.log(`   📊 [Plaid] Returned 0 transactions`);
             }
