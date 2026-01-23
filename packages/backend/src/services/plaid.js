@@ -93,7 +93,7 @@ class PlaidService {
         }
     }
 
-    async getTransactions(accessToken) {
+    async getTransactions(accessToken, forceRefresh = false) {
         if (!accessToken) {
             console.log('Debug: No Access Token Passed. Env Override:', process.env.PLAID_ACCESS_TOKEN_OVERRIDE ? 'FOUND' : 'MISSING');
             console.warn('No Access Token provided. Please link a bank account or set PLAID_ACCESS_TOKEN_OVERRIDE.');
@@ -106,6 +106,20 @@ class PlaidService {
         }
 
         try {
+            // If forced refresh is requested, explicitly tell Plaid to sync with the bank
+            if (forceRefresh) {
+                try {
+                    console.log('🔄 [Plaid] Force refresh requested - dispatching transactions/refresh');
+                    await client.transactionsRefresh({ access_token: accessToken });
+                    console.log('✅ [Plaid] transactions/refresh successful');
+                } catch (refreshError) {
+                    // Ignore errors here (e.g. rate limit, or product not supported for this item)
+                    // We still want to proceed to fetch whatever is available
+                    const errCode = refreshError.response?.data?.error_code || refreshError.message;
+                    console.warn(`⚠️ [Plaid] transactions/refresh failed (proceeding to fetch anyway): ${errCode}`);
+                }
+            }
+
             // Fetch data for the last 30 days
             // extend endDate to tomorrow to ensure we capture all transactions from "today" 
             // regardless of server timezone (UTC) vs user timezone (EST/PST)
