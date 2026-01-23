@@ -10,12 +10,12 @@ import {
     ActivityIndicator,
     RefreshControl,
     Modal,
-    Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import api from '../services/api';
 import { useFocusEffect } from '@react-navigation/native';
+import CustomAlert from '../components/CustomAlert';
 
 const AllAccountsScreen = ({ navigation }) => {
     const [accounts, setAccounts] = useState([]);
@@ -28,6 +28,24 @@ const AllAccountsScreen = ({ navigation }) => {
     const [accountToDelete, setAccountToDelete] = useState(null);
     const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
     const [deletingAccount, setDeletingAccount] = useState(false);
+
+    // Custom Alert state
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertConfig, setAlertConfig] = useState({
+        title: '',
+        message: '',
+        buttons: []
+    });
+
+    // Helper to show custom alert
+    const showAlert = (title, message, buttons = []) => {
+        setAlertConfig({
+            title,
+            message,
+            buttons: buttons.length > 0 ? buttons : [{ text: 'OK', onPress: () => setAlertVisible(false) }]
+        });
+        setAlertVisible(true);
+    };
 
     const loadAccounts = useCallback(async () => {
         try {
@@ -67,15 +85,20 @@ const AllAccountsScreen = ({ navigation }) => {
                 setAccounts([]);
                 setTotalBalance(0);
                 setLiquidCash(0);
-                Alert.alert(
+                showAlert(
                     'Success',
                     'All accounts have been disconnected.',
-                    [{ text: 'OK', onPress: () => navigation.navigate('Home') }]
+                    [{
+                        text: 'OK', onPress: () => {
+                            setAlertVisible(false);
+                            navigation.navigate('Home');
+                        }
+                    }]
                 );
             }
         } catch (error) {
             console.error('Error disconnecting:', error);
-            Alert.alert('Error', 'Failed to disconnect accounts. Please try again.');
+            showAlert('Error', 'Failed to disconnect accounts. Please try again.');
         } finally {
             setDisconnecting(false);
         }
@@ -380,6 +403,15 @@ const AllAccountsScreen = ({ navigation }) => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Custom Alert */}
+            <CustomAlert
+                visible={alertVisible}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                buttons={alertConfig.buttons}
+                onRequestClose={() => setAlertVisible(false)}
+            />
         </View>
     );
 };

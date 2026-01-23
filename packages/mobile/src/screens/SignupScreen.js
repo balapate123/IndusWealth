@@ -9,7 +9,6 @@ import {
     KeyboardAvoidingView,
     Platform,
     ScrollView,
-    Alert,
     ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import { api } from '../services/api';
 import cache from '../services/cache';
+import CustomAlert from '../components/CustomAlert';
 
 const SignupScreen = ({ navigation }) => {
     const [name, setName] = useState('');
@@ -27,19 +27,37 @@ const SignupScreen = ({ navigation }) => {
     const [showPassword, setShowPassword] = useState(false);
     const [agreeTerms, setAgreeTerms] = useState(false);
 
+    // Custom Alert state
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertConfig, setAlertConfig] = useState({
+        title: '',
+        message: '',
+        buttons: []
+    });
+
+    // Helper to show custom alert
+    const showAlert = (title, message, buttons = []) => {
+        setAlertConfig({
+            title,
+            message,
+            buttons: buttons.length > 0 ? buttons : [{ text: 'OK', onPress: () => setAlertVisible(false) }]
+        });
+        setAlertVisible(true);
+    };
+
     const handleSignup = async () => {
         if (!name || !email || !password || !confirmPassword) {
-            Alert.alert('Error', 'Please fill in all fields');
+            showAlert('Error', 'Please fill in all fields');
             return;
         }
 
         if (password !== confirmPassword) {
-            Alert.alert('Error', 'Passwords do not match');
+            showAlert('Error', 'Passwords do not match');
             return;
         }
 
         if (!agreeTerms) {
-            Alert.alert('Error', 'Please agree to Terms and Conditions');
+            showAlert('Error', 'Please agree to Terms and Conditions');
             return;
         }
 
@@ -56,20 +74,23 @@ const SignupScreen = ({ navigation }) => {
                 global.CURRENT_USER_ID = response.user.id;
 
                 // Show success and navigate to bank connection
-                Alert.alert(
+                showAlert(
                     'Welcome!',
                     'Your account has been created successfully. Let\'s connect your bank.',
                     [{
                         text: 'Connect Bank',
-                        onPress: () => navigation.navigate('ConnectBank', { isOnboarding: true })
+                        onPress: () => {
+                            setAlertVisible(false);
+                            navigation.navigate('ConnectBank', { isOnboarding: true });
+                        }
                     }]
                 );
             } else {
-                Alert.alert('Signup Failed', response.message || 'Could not create account');
+                showAlert('Signup Failed', response.message || 'Could not create account');
             }
         } catch (error) {
             console.error('Signup error:', error);
-            Alert.alert('Error', error.message || 'Something went wrong. Please try again.');
+            showAlert('Error', error.message || 'Something went wrong. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -227,6 +248,15 @@ const SignupScreen = ({ navigation }) => {
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
+
+            {/* Custom Alert */}
+            <CustomAlert
+                visible={alertVisible}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                buttons={alertConfig.buttons}
+                onRequestClose={() => setAlertVisible(false)}
+            />
         </View>
     );
 };

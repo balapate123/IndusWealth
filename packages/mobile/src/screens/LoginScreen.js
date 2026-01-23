@@ -10,14 +10,14 @@ import {
     KeyboardAvoidingView,
     Platform,
     Dimensions,
-    ActivityIndicator,
-    Alert
+    ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import { api } from '../services/api';
 import cache from '../services/cache';
+import CustomAlert from '../components/CustomAlert';
 
 const { width } = Dimensions.get('window');
 
@@ -27,9 +27,27 @@ const LoginScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
+    // Custom Alert state
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertConfig, setAlertConfig] = useState({
+        title: '',
+        message: '',
+        buttons: []
+    });
+
+    // Helper to show custom alert
+    const showAlert = (title, message, buttons = []) => {
+        setAlertConfig({
+            title,
+            message,
+            buttons: buttons.length > 0 ? buttons : [{ text: 'OK', onPress: () => setAlertVisible(false) }]
+        });
+        setAlertVisible(true);
+    };
+
     const handleLogin = async () => {
         if (!email || !password) {
-            Alert.alert('Error', 'Please enter email and password');
+            showAlert('Error', 'Please enter email and password');
             return;
         }
 
@@ -54,11 +72,11 @@ const LoginScreen = ({ navigation }) => {
                     routes: [{ name: 'Main' }],
                 });
             } else {
-                Alert.alert('Login Failed', response.message || 'Invalid credentials');
+                showAlert('Login Failed', response.message || 'Invalid credentials');
             }
         } catch (error) {
             console.error('Login error:', error);
-            Alert.alert('Error', error.message || 'Something went wrong. Please try again.');
+            showAlert('Error', error.message || 'Something went wrong. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -186,6 +204,15 @@ const LoginScreen = ({ navigation }) => {
                     </View>
                 </View>
             </KeyboardAvoidingView>
+
+            {/* Custom Alert */}
+            <CustomAlert
+                visible={alertVisible}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                buttons={alertConfig.buttons}
+                onRequestClose={() => setAlertVisible(false)}
+            />
         </View>
     );
 };

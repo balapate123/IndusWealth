@@ -568,6 +568,120 @@ const styles = StyleSheet.create({
         marginTop: SPACING.MEDIUM,
         textAlign: 'center',
     },
+
+    // Search Bar
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.CARD_BG,
+        marginHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+        paddingHorizontal: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    searchIcon: {
+        marginRight: SPACING.SMALL,
+    },
+    searchInput: {
+        flex: 1,
+        color: COLORS.WHITE,
+        fontSize: 16,
+        paddingVertical: SPACING.MEDIUM,
+    },
+    clearButton: {
+        padding: SPACING.SMALL,
+    },
+
+    // Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'flex-end',
+    },
+    transactionModalContent: {
+        backgroundColor: COLORS.CARD_BG,
+        borderTopLeftRadius: BORDER_RADIUS.XL,
+        borderTopRightRadius: BORDER_RADIUS.XL,
+        padding: SPACING.LARGE,
+        maxHeight: '80%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.LARGE,
+        paddingBottom: SPACING.MEDIUM,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.CARD_BORDER,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: COLORS.WHITE,
+    },
+    modalCloseButton: {
+        padding: SPACING.SMALL,
+    },
+    transactionDetails: {
+        marginBottom: SPACING.LARGE,
+    },
+    detailAmountRow: {
+        alignItems: 'center',
+        marginBottom: SPACING.XL,
+    },
+    detailAmount: {
+        fontSize: 36,
+        fontWeight: 'bold',
+        marginBottom: SPACING.SMALL,
+    },
+    amountBadge: {
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingVertical: 4,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+    },
+    amountBadgeText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    detailRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: SPACING.MEDIUM,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.CARD_BORDER,
+    },
+    detailLabel: {
+        fontSize: 16,
+        color: COLORS.TEXT_SECONDARY,
+    },
+    detailValue: {
+        fontSize: 16,
+        color: COLORS.WHITE,
+        fontWeight: '500',
+        flex: 1,
+        textAlign: 'right',
+        marginLeft: SPACING.MEDIUM,
+    },
+    transactionId: {
+        fontSize: 12,
+        color: COLORS.TEXT_MUTED,
+        fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    },
+    modalDoneButton: {
+        backgroundColor: COLORS.GOLD,
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        alignItems: 'center',
+        marginTop: SPACING.MEDIUM,
+    },
+    modalDoneText: {
+        color: COLORS.BACKGROUND,
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
 });
 
 export default AccountTransactionsScreen;

@@ -16,8 +16,10 @@ import {
 import Slider from '@react-native-community/slider';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { create, open } from 'react-native-plaid-link-sdk';
+import Svg, { Path, Defs, LinearGradient, Stop, Line, Circle, Text as SvgText } from 'react-native-svg';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import api from '../services/api';
+import CustomAlert from '../components/CustomAlert';
 
 // Default APR by debt type
 const DEFAULT_APRS = {
@@ -57,6 +59,16 @@ const DebtAttackScreen = () => {
     const [reAuthModalVisible, setReAuthModalVisible] = useState(false);
     const [importModalVisible, setImportModalVisible] = useState(false);
     const [linkedAccounts, setLinkedAccounts] = useState([]);
+    const [customPaymentModalVisible, setCustomPaymentModalVisible] = useState(false);
+    const [customPaymentValue, setCustomPaymentValue] = useState('');
+
+    // Custom Alert state
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertConfig, setAlertConfig] = useState({
+        title: '',
+        message: '',
+        buttons: []
+    });
 
     // Form states
     const [formName, setFormName] = useState('');
@@ -65,6 +77,16 @@ const DebtAttackScreen = () => {
     const [formMinPayment, setFormMinPayment] = useState('');
     const [formDebtType, setFormDebtType] = useState('credit_card');
     const [formSubmitting, setFormSubmitting] = useState(false);
+
+    // Helper to show custom alert
+    const showAlert = (title, message, buttons = []) => {
+        setAlertConfig({
+            title,
+            message,
+            buttons: buttons.length > 0 ? buttons : [{ text: 'OK', onPress: () => setAlertVisible(false) }]
+        });
+        setAlertVisible(true);
+    };
 
     const fetchData = useCallback(async () => {
         try {
@@ -173,7 +195,7 @@ const DebtAttackScreen = () => {
     // Add new debt
     const handleAddDebt = async () => {
         if (!formName.trim() || !formBalance) {
-            Alert.alert('Error', 'Please enter a name and balance');
+            showAlert('Error', 'Please enter a name and balance');
             return;
         }
 
@@ -192,10 +214,10 @@ const DebtAttackScreen = () => {
                 setAddModalVisible(false);
                 fetchData(); // Refresh all data
             } else {
-                Alert.alert('Error', result?.message || 'Failed to add debt');
+                showAlert('Error', result?.message || 'Failed to add debt');
             }
         } catch (err) {
-            Alert.alert('Error', 'Failed to add debt. Please try again.');
+            showAlert('Error', 'Failed to add debt. Please try again');
         } finally {
             setFormSubmitting(false);
         }
@@ -204,7 +226,7 @@ const DebtAttackScreen = () => {
     // Update existing debt
     const handleUpdateDebt = async () => {
         if (!formName.trim() || !formBalance) {
-            Alert.alert('Error', 'Please enter a name and balance');
+            showAlert('Error', 'Please enter a name and balance');
             return;
         }
 
@@ -223,10 +245,10 @@ const DebtAttackScreen = () => {
                 setEditModalVisible(false);
                 fetchData();
             } else {
-                Alert.alert('Error', result?.message || 'Failed to update debt');
+                showAlert('Error', result?.message || 'Failed to update debt');
             }
         } catch (err) {
-            Alert.alert('Error', 'Failed to update debt. Please try again.');
+            showAlert('Error', 'Failed to update debt. Please try again');
         } finally {
             setFormSubmitting(false);
         }
@@ -234,15 +256,16 @@ const DebtAttackScreen = () => {
 
     // Delete debt
     const handleDeleteDebt = () => {
-        Alert.alert(
+        showAlert(
             'Delete Debt',
             `Are you sure you want to delete "${editingDebt?.name}"?`,
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: 'Cancel', style: 'cancel', onPress: () => setAlertVisible(false) },
                 {
                     text: 'Delete',
                     style: 'destructive',
                     onPress: async () => {
+                        setAlertVisible(false);
                         try {
                             const result = await api.deleteCustomDebt(editingDebt.numericId);
                             if (result?.success) {
@@ -250,7 +273,7 @@ const DebtAttackScreen = () => {
                                 fetchData();
                             }
                         } catch (err) {
-                            Alert.alert('Error', 'Failed to delete debt');
+                            showAlert('Error', 'Failed to delete debt');
                         }
                     },
                 },
@@ -655,14 +678,24 @@ const DebtAttackScreen = () => {
                     <View style={styles.paymentRow}>
                         <Text style={styles.paymentAmount}>+${extraPayment}</Text>
                         <Text style={styles.paymentSuffix}>/mo</Text>
+                        <TouchableOpacity
+                            style={styles.customPaymentButton}
+                            onPress={() => {
+                                setCustomPaymentValue(extraPayment.toString());
+                                setCustomPaymentModalVisible(true);
+                            }}
+                        >
+                            <Ionicons name="pencil" size={14} color={COLORS.GOLD} />
+                            <Text style={styles.customPaymentButtonText}>Custom</Text>
+                        </TouchableOpacity>
                         <Text style={styles.totalPayment}>Total: ${Math.round(totalPayment)}/mo</Text>
                     </View>
                     <Slider
                         style={styles.slider}
                         minimumValue={0}
-                        maximumValue={1000}
-                        step={50}
-                        value={extraPayment}
+                        maximumValue={5000}
+                        step={100}
+                        value={extraPayment > 5000 ? 5000 : extraPayment}
                         onSlidingComplete={handleSliderChange}
                         onValueChange={setExtraPayment}
                         minimumTrackTintColor="#3B82F6"
@@ -671,9 +704,81 @@ const DebtAttackScreen = () => {
                     />
                     <View style={styles.sliderLabels}>
                         <Text style={styles.sliderLabelText}>+$0</Text>
-                        <Text style={styles.sliderLabelText}>+$1,000</Text>
+                        <Text style={styles.sliderLabelText}>+$5,000</Text>
                     </View>
                 </View>
+
+                {/* Payment Trend Chart */}
+                {analysis && debts.length > 0 && (
+                    <View style={styles.trendChartCard}>
+                        <Text style={styles.sectionTitle}>Payment Comparison</Text>
+                        <Text style={styles.trendChartSubtitle}>
+                            Minimum Payment vs Extra Payment Impact
+                        </Text>
+                        <View style={styles.trendChartContainer}>
+                            <Svg width="100%" height={160} viewBox="0 0 320 160">
+                                <Defs>
+                                    <LinearGradient id="minPaymentGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                        <Stop offset="0%" stopColor="#EF4444" stopOpacity="0.3" />
+                                        <Stop offset="100%" stopColor="#EF4444" stopOpacity="0" />
+                                    </LinearGradient>
+                                    <LinearGradient id="extraPaymentGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                        <Stop offset="0%" stopColor="#4CAF50" stopOpacity="0.3" />
+                                        <Stop offset="100%" stopColor="#4CAF50" stopOpacity="0" />
+                                    </LinearGradient>
+                                </Defs>
+
+                                {/* Minimum Payment Line (slower payoff) */}
+                                <Path
+                                    d="M 20 30 Q 80 35, 140 50 Q 200 70, 260 100 Q 290 120, 300 140"
+                                    stroke="#EF4444"
+                                    strokeWidth={2.5}
+                                    fill="none"
+                                    strokeLinecap="round"
+                                />
+
+                                {/* Extra Payment Line (faster payoff) */}
+                                <Path
+                                    d="M 20 30 Q 60 45, 100 80 Q 140 110, 180 130 Q 200 140, 220 140"
+                                    stroke="#4CAF50"
+                                    strokeWidth={2.5}
+                                    fill="none"
+                                    strokeLinecap="round"
+                                />
+
+                                {/* End points */}
+                                <Circle cx={300} cy={140} r={4} fill="#EF4444" />
+                                <Circle cx={220} cy={140} r={4} fill="#4CAF50" />
+
+                                {/* Labels */}
+                                <SvgText x={300} y={155} fontSize={10} fill={COLORS.TEXT_MUTED} textAnchor="end">
+                                    Min Payment
+                                </SvgText>
+                                <SvgText x={220} y={155} fontSize={10} fill="#4CAF50" textAnchor="middle">
+                                    +Extra
+                                </SvgText>
+                            </Svg>
+                        </View>
+                        <View style={styles.trendLegend}>
+                            <View style={styles.legendItem}>
+                                <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+                                <Text style={styles.legendText}>Minimum Payment Only</Text>
+                            </View>
+                            <View style={styles.legendItem}>
+                                <View style={[styles.legendDot, { backgroundColor: '#4CAF50' }]} />
+                                <Text style={styles.legendText}>With +${extraPayment}/mo Extra</Text>
+                            </View>
+                        </View>
+                        {monthsSooner > 0 && (
+                            <View style={styles.trendSavings}>
+                                <Ionicons name="flash" size={16} color={COLORS.GOLD} />
+                                <Text style={styles.trendSavingsText}>
+                                    Pay off {monthsSooner} months faster & save ${interestSaved.toLocaleString()} in interest
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                )}
 
                 {/* Strategy Section */}
                 <View style={styles.strategySection}>
@@ -864,6 +969,67 @@ const DebtAttackScreen = () => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Custom Payment Modal */}
+            <Modal
+                visible={customPaymentModalVisible}
+                animationType="fade"
+                transparent={true}
+                onRequestClose={() => setCustomPaymentModalVisible(false)}
+            >
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.customPaymentModalOverlay}
+                >
+                    <View style={styles.customPaymentModalContent}>
+                        <Text style={styles.customPaymentModalTitle}>Custom Extra Payment</Text>
+                        <Text style={styles.customPaymentModalSubtitle}>
+                            Enter an amount above $5,000/month
+                        </Text>
+                        <View style={styles.customPaymentInputContainer}>
+                            <Text style={styles.customPaymentDollarSign}>$</Text>
+                            <TextInput
+                                style={styles.customPaymentInput}
+                                value={customPaymentValue}
+                                onChangeText={setCustomPaymentValue}
+                                keyboardType="numeric"
+                                placeholder="0"
+                                placeholderTextColor={COLORS.TEXT_MUTED}
+                                autoFocus
+                            />
+                            <Text style={styles.customPaymentSuffix}>/mo</Text>
+                        </View>
+                        <View style={styles.customPaymentActions}>
+                            <TouchableOpacity
+                                style={styles.customPaymentCancelButton}
+                                onPress={() => setCustomPaymentModalVisible(false)}
+                            >
+                                <Text style={styles.customPaymentCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.customPaymentApplyButton}
+                                onPress={() => {
+                                    const value = parseInt(customPaymentValue) || 0;
+                                    setExtraPayment(value);
+                                    handleSliderChange(value);
+                                    setCustomPaymentModalVisible(false);
+                                }}
+                            >
+                                <Text style={styles.customPaymentApplyText}>Apply</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
+
+            {/* Custom Alert */}
+            <CustomAlert
+                visible={alertVisible}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                buttons={alertConfig.buttons}
+                onRequestClose={() => setAlertVisible(false)}
+            />
         </View>
     );
 };
@@ -1505,6 +1671,158 @@ const styles = StyleSheet.create({
         color: COLORS.TEXT_MUTED,
         textAlign: 'center',
         marginTop: SPACING.SMALL,
+    },
+
+    // Custom Payment Button
+    customPaymentButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(201, 162, 39, 0.15)',
+        paddingHorizontal: SPACING.SMALL,
+        paddingVertical: 4,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        marginLeft: SPACING.SMALL,
+        borderWidth: 1,
+        borderColor: COLORS.GOLD,
+    },
+    customPaymentButtonText: {
+        color: COLORS.GOLD,
+        fontSize: 12,
+        fontWeight: '600',
+        marginLeft: 4,
+    },
+
+    // Payment Trend Chart
+    trendChartCard: {
+        marginHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: BORDER_RADIUS.XL,
+        padding: SPACING.LARGE,
+    },
+    trendChartSubtitle: {
+        fontSize: 13,
+        color: COLORS.TEXT_SECONDARY,
+        marginBottom: SPACING.MEDIUM,
+    },
+    trendChartContainer: {
+        marginVertical: SPACING.SMALL,
+    },
+    trendLegend: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: SPACING.MEDIUM,
+    },
+    legendItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    legendDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginRight: SPACING.SMALL,
+    },
+    legendText: {
+        fontSize: 12,
+        color: COLORS.TEXT_SECONDARY,
+    },
+    trendSavings: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(201, 162, 39, 0.15)',
+        padding: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        marginTop: SPACING.MEDIUM,
+    },
+    trendSavingsText: {
+        color: COLORS.WHITE,
+        fontSize: 13,
+        marginLeft: SPACING.SMALL,
+        flex: 1,
+    },
+
+    // Custom Payment Modal
+    customPaymentModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: SPACING.LARGE,
+    },
+    customPaymentModalContent: {
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: BORDER_RADIUS.XL,
+        padding: SPACING.XL,
+        width: '100%',
+        maxWidth: 340,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    customPaymentModalTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: COLORS.WHITE,
+        textAlign: 'center',
+        marginBottom: SPACING.SMALL,
+    },
+    customPaymentModalSubtitle: {
+        fontSize: 14,
+        color: COLORS.TEXT_SECONDARY,
+        textAlign: 'center',
+        marginBottom: SPACING.LARGE,
+    },
+    customPaymentInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.BACKGROUND,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        padding: SPACING.MEDIUM,
+        marginBottom: SPACING.LARGE,
+    },
+    customPaymentDollarSign: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: COLORS.GOLD,
+        marginRight: SPACING.SMALL,
+    },
+    customPaymentInput: {
+        flex: 1,
+        fontSize: 24,
+        fontWeight: '700',
+        color: COLORS.WHITE,
+    },
+    customPaymentSuffix: {
+        fontSize: 16,
+        color: COLORS.TEXT_SECONDARY,
+        marginLeft: SPACING.SMALL,
+    },
+    customPaymentActions: {
+        flexDirection: 'row',
+        gap: SPACING.MEDIUM,
+    },
+    customPaymentCancelButton: {
+        flex: 1,
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+        alignItems: 'center',
+    },
+    customPaymentCancelText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontWeight: '600',
+    },
+    customPaymentApplyButton: {
+        flex: 1,
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        backgroundColor: COLORS.GOLD,
+        alignItems: 'center',
+    },
+    customPaymentApplyText: {
+        color: COLORS.BACKGROUND,
+        fontWeight: '700',
     },
 });
 

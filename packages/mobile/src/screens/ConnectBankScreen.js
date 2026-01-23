@@ -7,7 +7,7 @@ import {
     StatusBar,
     Platform,
     ScrollView,
-    Alert,
+    Alert, // Keeping generic Alert as fallback if needed, but primarily using CustomAlert
     ActivityIndicator,
     TextInput,
     Modal,
@@ -19,6 +19,7 @@ import { create, open, dismissLink, LinkSuccess, LinkExit } from 'react-native-p
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import { api } from '../services/api';
 import cache from '../services/cache';
+import CustomAlert from '../components/CustomAlert';
 
 // Canadian Banks Data
 const FEATURED_BANKS = [
@@ -78,12 +79,30 @@ const ConnectBankScreen = ({ navigation, route }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [successModalVisible, setSuccessModalVisible] = useState(false);
 
+    // Custom Alert State
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertConfig, setAlertConfig] = useState({
+        title: '',
+        message: '',
+        buttons: []
+    });
+
     // Detect if we're in onboarding flow or accessed from main app
     const isOnboarding = route?.params?.isOnboarding ?? false;
 
     const filteredBanks = ALL_BANKS.filter(bank =>
         bank.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    // Helper to show custom alert
+    const showAlert = (title, message, buttons = []) => {
+        setAlertConfig({
+            title,
+            message,
+            buttons
+        });
+        setAlertVisible(true);
+    };
 
     const handleBankSelect = (bank) => {
         if (bank.isSearch) {
@@ -101,7 +120,7 @@ const ConnectBankScreen = ({ navigation, route }) => {
 
     const handleContinue = async () => {
         if (!selectedBank) {
-            Alert.alert('Select a Bank', 'Please select your bank to continue.');
+            showAlert('Select a Bank', 'Please select your bank to continue.');
             return;
         }
 
@@ -111,10 +130,10 @@ const ConnectBankScreen = ({ navigation, route }) => {
         const timeoutId = setTimeout(() => {
             console.log('⏱️ Plaid Link timeout - resetting loading state');
             setLoading(false);
-            Alert.alert(
+            showAlert(
                 'Connection Timeout',
                 'Plaid Link did not open. Please try again. If the issue persists, you may need to use a development build instead of Expo Go.',
-                [{ text: 'OK' }]
+                [{ text: 'OK', onPress: () => setAlertVisible(false) }]
             );
         }, 15000);
 
@@ -180,7 +199,7 @@ const ConnectBankScreen = ({ navigation, route }) => {
                             }
                         } catch (exchangeError) {
                             console.error('Exchange error:', exchangeError);
-                            Alert.alert('Connection Error', 'Connected to bank but failed to save. Please try again.');
+                            showAlert('Connection Error', 'Connected to bank but failed to save. Please try again.');
                         }
                         setLoading(false);
                     },
@@ -189,7 +208,7 @@ const ConnectBankScreen = ({ navigation, route }) => {
                         console.log('📤 Plaid Link exited:', JSON.stringify(exit));
                         if (exit?.error) {
                             console.error('❌ Plaid Link exit error:', exit.error);
-                            Alert.alert('Connection Error', exit.error.displayMessage || 'Failed to connect to your bank.');
+                            showAlert('Connection Error', exit.error.displayMessage || 'Failed to connect to your bank.');
                         }
                         setLoading(false);
                     },
@@ -203,21 +222,26 @@ const ConnectBankScreen = ({ navigation, route }) => {
         } catch (error) {
             clearTimeout(timeoutId);
             console.error('❌ Bank connection error:', error);
-            Alert.alert('Connection Error', error.message || 'Failed to connect to your bank. Please try again.');
+            showAlert('Connection Error', error.message || 'Failed to connect to your bank. Please try again.');
             setLoading(false);
         }
     };
 
     const handleSkip = () => {
         if (isOnboarding) {
-            Alert.alert(
+            showAlert(
                 'Skip Bank Connection?',
                 'You can connect your bank later from the Profile settings.',
                 [
-                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Cancel',
+                        style: 'cancel',
+                        onPress: () => setAlertVisible(false)
+                    },
                     {
                         text: 'Skip for Now',
                         onPress: () => {
+                            setAlertVisible(false);
                             navigation.reset({
                                 index: 0,
                                 routes: [{ name: 'Main' }],
@@ -401,6 +425,15 @@ const ConnectBankScreen = ({ navigation, route }) => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Custom Alert */}
+            <CustomAlert
+                visible={alertVisible}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                buttons={alertConfig.buttons}
+                onRequestClose={() => setAlertVisible(false)}
+            />
 
             {/* Success Modal */}
             <Modal

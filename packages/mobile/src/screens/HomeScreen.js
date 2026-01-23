@@ -48,12 +48,12 @@ const BalanceChart = ({ width = 120, height = 40 }) => {
         <Svg width={width} height={height}>
             <Defs>
                 <LinearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <Stop offset="0%" stopColor="#4CAF50" stopOpacity="0.3" />
-                    <Stop offset="100%" stopColor="#4CAF50" stopOpacity="0" />
+                    <Stop offset="0%" stopColor="#C9A227" stopOpacity="0.3" />
+                    <Stop offset="100%" stopColor="#C9A227" stopOpacity="0" />
                 </LinearGradient>
             </Defs>
             <Path d={areaPath} fill="url(#areaGradient)" />
-            <Path d={linePath} stroke="#4CAF50" strokeWidth={2} fill="none" />
+            <Path d={linePath} stroke="#C9A227" strokeWidth={2} fill="none" />
         </Svg>
     );
 };
@@ -445,7 +445,7 @@ const HomeScreen = ({ navigation }) => {
                                         navigation.navigate('AccountTransactions', { account });
                                     }}
                                 >
-                                    <View style={styles.bankLogo}>
+                                    <View style={[styles.bankLogo, { backgroundColor: getAccountColor(account.id) }]}>
                                         <Text style={styles.bankLogoText}>{account.bank?.[0] || account.name?.[0] || 'A'}</Text>
                                     </View>
                                     <Text style={[
@@ -480,9 +480,10 @@ const HomeScreen = ({ navigation }) => {
 
                 {/* Transactions */}
                 <View style={styles.transactionsContainer}>
-                    {renderTransactionGroup('TODAY', todayTransactions)}
-                    {renderTransactionGroup('YESTERDAY', yesterdayTransactions)}
-                    {renderTransactionGroup('RECENT', olderTransactions.slice(0, 20), true)}
+                    {/* Logic to show "See All" button on the FIRST visible group */}
+                    {renderTransactionGroup('TODAY', todayTransactions, todayTransactions.length > 0)}
+                    {renderTransactionGroup('YESTERDAY', yesterdayTransactions, todayTransactions.length === 0 && yesterdayTransactions.length > 0)}
+                    {renderTransactionGroup('RECENT', olderTransactions.slice(0, 20), todayTransactions.length === 0 && yesterdayTransactions.length === 0)}
 
                     {transactions.length === 0 && !error && (
                         <View style={styles.emptyState}>
@@ -721,14 +722,14 @@ const styles = StyleSheet.create({
     growthBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(76, 175, 80, 0.15)',
+        backgroundColor: 'rgba(201, 162, 39, 0.15)',
         paddingHorizontal: SPACING.SMALL,
         paddingVertical: 4,
         borderRadius: BORDER_RADIUS.MEDIUM,
         marginBottom: SPACING.SMALL,
     },
     growthText: {
-        color: '#4CAF50',
+        color: '#C9A227',
         fontSize: 12,
         fontWeight: '600',
         marginLeft: 4,
@@ -778,7 +779,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: COLORS.GREEN,
+        backgroundColor: COLORS.GOLD,
         paddingVertical: SPACING.SMALL,
         paddingHorizontal: SPACING.MEDIUM,
         borderRadius: BORDER_RADIUS.LARGE,
@@ -833,7 +834,6 @@ const styles = StyleSheet.create({
         width: 20,
         height: 20,
         borderRadius: 10,
-        backgroundColor: COLORS.GREEN,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -894,7 +894,7 @@ const styles = StyleSheet.create({
     connectPromptButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: COLORS.GREEN,
+        backgroundColor: COLORS.GOLD,
         paddingVertical: SPACING.SMALL,
         paddingHorizontal: SPACING.MEDIUM,
         borderRadius: BORDER_RADIUS.MEDIUM,
