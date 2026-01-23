@@ -22,7 +22,7 @@ class PlaidService {
             const response = await client.linkTokenCreate({
                 user: { client_user_id: userId || 'test_user' },
                 client_name: 'IndusWealth',
-                products: ['transactions'],
+                products: ['transactions', 'balance'],
                 country_codes: ['CA'],
                 language: 'en',
             });
@@ -54,6 +54,10 @@ class PlaidService {
                 access_token: accessToken, // This triggers update mode
                 country_codes: ['CA'],
                 language: 'en',
+                // For update mode, products inference is usually automatic based on the item, 
+                // but we can try to request it if not present. However, Plaid often ignores products in update mode 
+                // if they weren't in the original item. The USER MUST create a NEW link (disconnect/connect) 
+                // to fundamentally change products if update mode fails to add them.
             });
 
             console.log('✅ Update mode link token created');
