@@ -114,10 +114,18 @@ class PlaidService {
                     await client.transactionsRefresh({ access_token: accessToken });
                     console.log('✅ [Plaid] transactions/refresh successful');
                 } catch (refreshError) {
-                    // Ignore errors here (e.g. rate limit, or product not supported for this item)
-                    // We still want to proceed to fetch whatever is available
                     const errCode = refreshError.response?.data?.error_code || refreshError.message;
-                    console.warn(`⚠️ [Plaid] transactions/refresh failed (proceeding to fetch anyway): ${errCode}`);
+                    console.warn(`⚠️ [Plaid] transactions/refresh failed: ${errCode}`);
+
+                    // Fallback: Try fetching real-time balances to trigger a sync
+                    try {
+                        console.log('🔄 [Plaid] Fallback: Fetching real-time balances to trigger sync...');
+                        await client.accountsBalanceGet({ access_token: accessToken });
+                        console.log('✅ [Plaid] Fallback balance check successful - this often triggers a transaction sync');
+                    } catch (balanceError) {
+                        const balanceErrCode = balanceError.response?.data?.error_code || balanceError.message;
+                        console.warn(`⚠️ [Plaid] Fallback balance check also failed: ${balanceErrCode}`);
+                    }
                 }
             }
 
