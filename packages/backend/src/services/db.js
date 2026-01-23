@@ -100,20 +100,32 @@ const updateUserPlaidToken = async (userId, accessToken, itemId) => {
 
 // ============ SYNC LOG OPERATIONS ============
 
+// Whitelist of valid sync type columns to prevent SQL injection
+const VALID_SYNC_TYPES = ['last_transaction_sync', 'last_account_sync', 'last_balance_sync'];
+
+const validateSyncType = (syncType) => {
+    if (!VALID_SYNC_TYPES.includes(syncType)) {
+        throw new Error(`Invalid sync type: ${syncType}. Must be one of: ${VALID_SYNC_TYPES.join(', ')}`);
+    }
+    return syncType;
+};
+
 const getLastSyncTime = async (userId, syncType = 'last_transaction_sync') => {
+    const validatedSyncType = validateSyncType(syncType);
     const result = await pool.query(
-        `SELECT ${syncType} FROM sync_log WHERE user_id = $1`,
+        `SELECT ${validatedSyncType} FROM sync_log WHERE user_id = $1`,
         [userId]
     );
-    return result.rows[0]?.[syncType] || null;
+    return result.rows[0]?.[validatedSyncType] || null;
 };
 
 const updateSyncTime = async (userId, syncType = 'last_transaction_sync') => {
+    const validatedSyncType = validateSyncType(syncType);
     await pool.query(
-        `INSERT INTO sync_log (user_id, ${syncType}, updated_at) 
+        `INSERT INTO sync_log (user_id, ${validatedSyncType}, updated_at)
          VALUES ($1, NOW(), NOW())
-         ON CONFLICT (user_id) 
-         DO UPDATE SET ${syncType} = NOW(), updated_at = NOW()`,
+         ON CONFLICT (user_id)
+         DO UPDATE SET ${validatedSyncType} = NOW(), updated_at = NOW()`,
         [userId]
     );
 };
@@ -292,18 +304,18 @@ const getTransactionsByAccount = async (userId, accountId, limit = 100) => {
 // Get spending by category for analytics
 const getCategorySpending = async (userId, days = 30, offsetDays = 0) => {
     const result = await pool.query(
-        `SELECT 
+        `SELECT
             COALESCE(category[1], 'Other') as category,
             SUM(ABS(amount)) as amount,
             COUNT(*) as count
          FROM transactions
-         WHERE user_id = $1 
-           AND amount > 0 
-           AND date >= CURRENT_DATE - INTERVAL '${days + offsetDays} days'
-           AND date < CURRENT_DATE - INTERVAL '${offsetDays} days'
+         WHERE user_id = $1
+           AND amount > 0
+           AND date >= CURRENT_DATE - INTERVAL '1 day' * $2
+           AND date < CURRENT_DATE - INTERVAL '1 day' * $3
          GROUP BY category[1]
          ORDER BY amount DESC`,
-        [userId]
+        [userId, days + offsetDays, offsetDays]
     );
     return result.rows;
 };
@@ -311,16 +323,16 @@ const getCategorySpending = async (userId, days = 30, offsetDays = 0) => {
 // Get daily spending totals
 const getDailySpending = async (userId, days = 30) => {
     const result = await pool.query(
-        `SELECT 
+        `SELECT
             date::text,
             SUM(ABS(amount)) as amount
          FROM transactions
-         WHERE user_id = $1 
-           AND amount > 0 
-           AND date >= CURRENT_DATE - INTERVAL '${days} days'
+         WHERE user_id = $1
+           AND amount > 0
+           AND date >= CURRENT_DATE - INTERVAL '1 day' * $2
          GROUP BY date
          ORDER BY date ASC`,
-        [userId]
+        [userId, days]
     );
     return result.rows;
 };
@@ -328,13 +340,13 @@ const getDailySpending = async (userId, days = 30) => {
 // Get income vs expenses
 const getIncomeVsExpenses = async (userId, days = 30) => {
     const result = await pool.query(
-        `SELECT 
+        `SELECT
             COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) as income,
             COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as expenses
          FROM transactions
-         WHERE user_id = $1 
-           AND date >= CURRENT_DATE - INTERVAL '${days} days'`,
-        [userId]
+         WHERE user_id = $1
+           AND date >= CURRENT_DATE - INTERVAL '1 day' * $2`,
+        [userId, days]
     );
     return result.rows[0] || { income: 0, expenses: 0 };
 };
@@ -342,16 +354,16 @@ const getIncomeVsExpenses = async (userId, days = 30) => {
 // Get monthly spending trends
 const getMonthlySpending = async (userId, months = 6) => {
     const result = await pool.query(
-        `SELECT 
+        `SELECT
             TO_CHAR(date, 'YYYY-MM') as month,
             COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as spending,
             COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) as income
          FROM transactions
-         WHERE user_id = $1 
-           AND date >= CURRENT_DATE - INTERVAL '${months} months'
+         WHERE user_id = $1
+           AND date >= CURRENT_DATE - INTERVAL '1 month' * $2
          GROUP BY TO_CHAR(date, 'YYYY-MM')
          ORDER BY month ASC`,
-        [userId]
+        [userId, months]
     );
     return result.rows;
 };

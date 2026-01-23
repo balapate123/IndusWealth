@@ -1,8 +1,15 @@
 const jwt = require('jsonwebtoken');
 const db = require('../services/db');
 
-// JWT Secret - must be set in environment
-const JWT_SECRET = process.env.JWT_SECRET || 'induswealth-dev-secret-change-in-production';
+// JWT Secret - must be set in environment for production
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('JWT_SECRET environment variable is required in production');
+    }
+    console.warn('⚠️  WARNING: JWT_SECRET not set. Using insecure default for development only.');
+}
+const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'dev-only-insecure-secret';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 /**
@@ -17,7 +24,7 @@ const generateToken = (user) => {
         name: user.name,
     };
 
-    return jwt.sign(payload, JWT_SECRET, {
+    return jwt.sign(payload, EFFECTIVE_JWT_SECRET, {
         expiresIn: JWT_EXPIRES_IN,
         issuer: 'induswealth-api',
     });
@@ -30,7 +37,7 @@ const generateToken = (user) => {
  */
 const verifyToken = (token) => {
     try {
-        return jwt.verify(token, JWT_SECRET);
+        return jwt.verify(token, EFFECTIVE_JWT_SECRET);
     } catch (error) {
         return null;
     }
@@ -128,6 +135,6 @@ module.exports = {
     verifyToken,
     authenticateToken,
     optionalAuth,
-    JWT_SECRET,
+    JWT_SECRET: EFFECTIVE_JWT_SECRET,
     JWT_EXPIRES_IN,
 };
