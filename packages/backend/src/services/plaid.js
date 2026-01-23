@@ -119,16 +119,10 @@ class PlaidService {
                     console.log('✅ [Plaid] transactions/refresh successful');
                 } catch (refreshError) {
                     const errCode = refreshError.response?.data?.error_code || refreshError.message;
-                    console.warn(`⚠️ [Plaid] transactions/refresh failed: ${errCode}`);
-
-                    // Fallback: Try fetching real-time balances to trigger a sync
-                    try {
-                        console.log('🔄 [Plaid] Fallback: Fetching real-time balances to trigger sync...');
-                        await client.accountsBalanceGet({ access_token: accessToken });
-                        console.log('✅ [Plaid] Fallback balance check successful - this often triggers a transaction sync');
-                    } catch (balanceError) {
-                        const balanceErrCode = balanceError.response?.data?.error_code || balanceError.message;
-                        console.warn(`⚠️ [Plaid] Fallback balance check also failed: ${balanceErrCode}`);
+                    if (errCode === 'INVALID_PRODUCT') {
+                        console.warn(`⚠️ [Plaid] Auto-refresh not supported by this bank (INVALID_PRODUCT). Data may be stale until nightly sync.`);
+                    } else {
+                        console.warn(`⚠️ [Plaid] transactions/refresh failed: ${errCode}`);
                     }
                 }
             }
