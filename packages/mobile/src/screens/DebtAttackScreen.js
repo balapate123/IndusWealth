@@ -855,10 +855,6 @@ const DebtAttackScreen = () => {
                 </View>
             </ScrollView>
 
-            {/* Add Debt FAB */}
-            <TouchableOpacity style={styles.fab} onPress={openAddModal}>
-                <Ionicons name="add" size={28} color={COLORS.WHITE} />
-            </TouchableOpacity>
 
             {/* Modals */}
             {renderFormModal(false)}
@@ -1344,13 +1340,13 @@ const styles = StyleSheet.create({
         flexShrink: 1,
     },
     customBadge: {
-        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+        backgroundColor: 'rgba(201, 162, 39, 0.2)',
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
     },
     customBadgeText: {
-        color: '#3B82F6',
+        color: COLORS.GOLD,
         fontSize: 10,
         fontWeight: '600',
     },
@@ -1369,7 +1365,7 @@ const styles = StyleSheet.create({
         marginBottom: 2,
     },
     debtPayoff: {
-        color: '#3B82F6',
+        color: COLORS.GOLD,
         fontSize: 12,
     },
 
