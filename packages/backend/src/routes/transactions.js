@@ -5,26 +5,33 @@ const watchdogService = require('../services/watchdog');
 const db = require('../services/db');
 const { authenticateToken } = require('../middleware/auth');
 const { categorizeTransaction, getCategoryBreakdown } = require('../services/categorization');
+const { createLogger } = require('../services/logger');
+const { PlaidError } = require('../errors/AppError');
+const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse, getPlaidStatusFromError } = require('../utils/responseHelper');
+
+const logger = createLogger('TRANSACTIONS');
 
 // GET /transactions
 // Fetches transactions from cache or Plaid (if stale)
 // Requires authentication
-router.get('/', authenticateToken, async (req, res) => {
-    console.log('\n📥 [GET /transactions] Request received');
+router.get('/', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    logger.info('Fetching transactions', ctx);
 
     try {
         const userId = req.user.id;
         const forceRefresh = req.query.refresh === 'true';
+        const accountId = req.query.account_id;
 
         // Check if we need to sync from Plaid (conservative: 24 hours)
         const needsSync = forceRefresh || await db.shouldSync(userId, 'last_transaction_sync', 24);
 
         let transactions = [];
-        let dataSource = 'DATABASE';
-        let plaidStatus = 'unknown'; // Track Plaid connection status
+        let dataSource = DATA_SOURCES.DATABASE;
+        let plaidStatus = PLAID_STATUS.UNKNOWN;
 
         if (needsSync) {
-            console.log('   🔄 Cache stale or force refresh - syncing from Plaid...');
+            logger.info('Cache stale or force refresh - syncing from Plaid', { ...ctx, forceRefresh });
 
             // Get user's Plaid access token from the authenticated user
             const accessToken = req.user.plaidAccessToken || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
@@ -38,8 +45,9 @@ router.get('/', authenticateToken, async (req, res) => {
                     try {
                         const plaidAccounts = await plaidService.getAccounts(accessToken);
                         await db.upsertAccounts(userId, plaidAccounts);
+                        logger.debug('Synced accounts from Plaid', { ...ctx, accountCount: plaidAccounts.length });
                     } catch (accErr) {
-                        console.warn('   ⚠️ Could not fetch accounts:', accErr.message);
+                        logger.warn('Could not fetch accounts', { ...ctx, error: accErr });
                     }
 
                     // Store in database
@@ -48,42 +56,43 @@ router.get('/', authenticateToken, async (req, res) => {
                     // Update sync time
                     await db.updateSyncTime(userId, 'last_transaction_sync');
 
-                    console.log(`   ✅ [DATA SOURCE: PLAID API] Synced ${plaidTransactions.length} transactions`);
-                    dataSource = 'PLAID_API';
-                    plaidStatus = 'success';
+                    logger.info('Synced transactions from Plaid', {
+                        ...ctx,
+                        count: plaidTransactions.length,
+                        dataSource: DATA_SOURCES.PLAID_API
+                    });
+                    dataSource = DATA_SOURCES.PLAID_API;
+                    plaidStatus = PLAID_STATUS.SUCCESS;
                 } catch (plaidError) {
-                    // Check for specific Plaid error codes
+                    // Determine Plaid error status
+                    plaidStatus = getPlaidStatusFromError(plaidError);
                     const errorCode = plaidError.response?.data?.error_code;
+
                     if (errorCode === 'ITEM_LOGIN_REQUIRED') {
-                        plaidStatus = 'login_required';
-                        console.warn('   🔒 User needs to re-authenticate via Plaid Link update mode');
+                        logger.warn('User needs to re-authenticate via Plaid Link update mode', { ...ctx, errorCode });
                     } else {
-                        plaidStatus = 'error';
+                        logger.warn('Plaid sync failed, falling back to database cache', {
+                            ...ctx,
+                            errorCode,
+                            error: plaidError
+                        });
                     }
-                    console.warn(`   ⚠️ Plaid sync failed: ${plaidError.message}`);
-                    console.log('   📦 Falling back to database cache');
                 }
             } else {
-                console.log('   🔒 No Plaid access token available');
-                plaidStatus = 'no_token';
+                logger.info('No Plaid access token available', ctx);
+                plaidStatus = PLAID_STATUS.NO_TOKEN;
             }
         } else {
-            console.log('   ⏱️ Cache is fresh (<24h), serving from database');
-            plaidStatus = 'cached';
+            logger.debug('Cache is fresh, serving from database', ctx);
+            plaidStatus = PLAID_STATUS.CACHED;
         }
 
-        // Get transactions from database
-        // Support filtering by account_id
-        const accountId = req.query.account_id;
+        // Get transactions from database - filter by account if specified
         if (accountId && accountId !== 'all') {
             transactions = await db.getTransactionsByAccount(userId, accountId, 100);
-            console.log(`   🔍 Filtering by account: ${accountId}`);
+            logger.debug('Filtered by account', { ...ctx, accountId, count: transactions.length });
         } else {
             transactions = await db.getTransactions(userId, 100);
-        }
-
-        if (transactions.length === 0 && !accountId) {
-            console.log('   📦 No transactions found for this user');
         }
 
         // Sort by date descending
@@ -111,23 +120,30 @@ router.get('/', authenticateToken, async (req, res) => {
         // Run Watchdog Analysis
         const leakageAnalysis = watchdogService.analyze(categorizedTransactions);
 
-        console.log(`   📤 Responding with ${categorizedTransactions.length} transactions (source: ${dataSource})\n`);
+        // Build response metadata
+        const meta = await createMeta(userId, dataSource, {
+            syncType: 'last_transaction_sync',
+            plaidStatus,
+            count: categorizedTransactions.length
+        });
 
-        res.json({
-            success: true,
+        logger.info('Returning transactions', {
+            ...ctx,
+            count: categorizedTransactions.length,
+            dataSource,
+            plaidStatus
+        });
+
+        successResponse(res, {
             count: categorizedTransactions.length,
             data: categorizedTransactions,
             categoryBreakdown,
             analysis: leakageAnalysis,
-            plaid_status: plaidStatus,
-            _meta: {
-                source: dataSource,
-                cached: dataSource === 'DATABASE',
-            }
-        });
+            plaid_status: plaidStatus
+        }, meta);
     } catch (error) {
-        console.error('Error fetching transactions:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
+        logger.error('Failed to fetch transactions', { ...ctx, error });
+        next(error);
     }
 });
 

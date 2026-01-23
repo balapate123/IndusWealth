@@ -2,12 +2,17 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/db');
 const { authenticateToken } = require('../middleware/auth');
+const { createLogger } = require('../services/logger');
+const { DATA_SOURCES, createMeta, successResponse } = require('../utils/responseHelper');
+
+const logger = createLogger('ACCOUNTS');
 
 // GET /accounts
 // Returns linked accounts with balances from database cache
 // Requires authentication
-router.get('/', authenticateToken, async (req, res) => {
-    console.log('\n📥 [GET /accounts] Request received');
+router.get('/', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    logger.info('Fetching accounts', ctx);
 
     try {
         const userId = req.user.id;
@@ -16,21 +21,22 @@ router.get('/', authenticateToken, async (req, res) => {
         const accounts = await db.getAccounts(userId);
 
         if (accounts.length === 0) {
-            console.log('   📦 No accounts linked for this user\n');
+            logger.info('No accounts linked for this user', ctx);
 
-            // Return empty accounts - user needs to connect a bank
-            return res.json({
-                success: true,
+            const meta = await createMeta(userId, DATA_SOURCES.EMPTY, {
+                syncType: 'last_account_sync'
+            });
+
+            return successResponse(res, {
                 accounts: [],
                 total_balance: 0,
                 liquid_cash: 0,
                 change_percent: 0,
-                needs_bank_connection: true,
-                _meta: { source: 'EMPTY' }
-            });
+                needs_bank_connection: true
+            }, meta);
         }
 
-        console.log(`   📦 [DATA SOURCE: DATABASE] Returning ${accounts.length} cached accounts\n`);
+        logger.info('Returning cached accounts', { ...ctx, count: accounts.length, dataSource: DATA_SOURCES.DATABASE });
 
         // Calculate total balance (all accounts)
         const totalBalance = accounts.reduce((sum, acc) => sum + parseFloat(acc.current_balance || 0), 0);
@@ -56,17 +62,20 @@ router.get('/', authenticateToken, async (req, res) => {
             }))
         ];
 
-        res.json({
-            success: true,
+        const meta = await createMeta(userId, DATA_SOURCES.DATABASE, {
+            syncType: 'last_account_sync',
+            count: formattedAccounts.length
+        });
+
+        successResponse(res, {
             accounts: formattedAccounts,
             total_balance: totalBalance,
             liquid_cash: liquidCash,
-            change_percent: 2.4, // TODO: Calculate from historical data
-            _meta: { source: 'DATABASE' }
-        });
+            change_percent: 2.4 // TODO: Calculate from historical data
+        }, meta);
     } catch (error) {
-        console.error('Error fetching accounts:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
+        logger.error('Failed to fetch accounts', { ...ctx, error });
+        next(error);
     }
 });
 

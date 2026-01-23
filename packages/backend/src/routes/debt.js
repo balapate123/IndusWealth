@@ -4,6 +4,11 @@ const plaidService = require('../services/plaid');
 const debtCalculator = require('../services/debt_calculator');
 const { authenticateToken } = require('../middleware/auth');
 const db = require('../db');
+const { createLogger } = require('../services/logger');
+const { ValidationError, NotFoundError } = require('../errors/AppError');
+const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse, getPlaidStatusFromError } = require('../utils/responseHelper');
+
+const logger = createLogger('DEBT');
 
 // Default APR by account/debt type
 const DEFAULT_APRS = {
@@ -22,51 +27,51 @@ const getDefaultApr = (type) => {
 
 // GET /debt
 // Fetches liabilities from Plaid + custom debts, runs calculation
-router.get('/', authenticateToken, async (req, res) => {
-    console.log('📥 [GET /debt] Request received');
-    console.log('   👤 User ID:', req.user.id);
+router.get('/', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    logger.info('Fetching debt overview', ctx);
 
     try {
         const userId = req.user.id;
 
         // 1. Fetch Plaid Liabilities (gracefully handle errors)
         let plaidLiabilities = { credit: [], student: [], mortgage: [] };
-        let plaidStatus = 'no_token';
+        let plaidStatus = PLAID_STATUS.NO_TOKEN;
+        let dataSource = DATA_SOURCES.DATABASE;
         const accessToken = req.user.plaidAccessToken || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
 
         if (accessToken) {
-            console.log('   🔑 Access token available, fetching Plaid liabilities...');
+            logger.debug('Access token available, fetching Plaid liabilities', ctx);
             try {
                 plaidLiabilities = await plaidService.getLiabilities(accessToken);
-                plaidStatus = 'success';
-                console.log('   ✅ Plaid liabilities fetched:', {
-                    credit_count: plaidLiabilities.credit?.length || 0,
-                    student_count: plaidLiabilities.student?.length || 0,
-                    mortgage_count: plaidLiabilities.mortgage?.length || 0
+                plaidStatus = PLAID_STATUS.SUCCESS;
+                dataSource = DATA_SOURCES.PLAID_API;
+                logger.info('Plaid liabilities fetched', {
+                    ...ctx,
+                    creditCount: plaidLiabilities.credit?.length || 0,
+                    studentCount: plaidLiabilities.student?.length || 0,
+                    mortgageCount: plaidLiabilities.mortgage?.length || 0,
+                    dataSource: DATA_SOURCES.PLAID_API
                 });
             } catch (plaidError) {
-                const errorDetails = plaidError.response?.data || plaidError.message;
-                console.warn('   ⚠️ Plaid liabilities error:', errorDetails);
+                plaidStatus = getPlaidStatusFromError(plaidError);
+                const errorCode = plaidError.response?.data?.error_code;
 
-                // Check for specific Plaid error codes
-                if (errorDetails?.error_code === 'ITEM_LOGIN_REQUIRED') {
-                    plaidStatus = 'login_required';
-                    console.warn('   🔒 User needs to re-authenticate via Plaid Link update mode');
-                } else if (errorDetails?.error_code === 'PRODUCTS_NOT_SUPPORTED') {
-                    plaidStatus = 'not_supported';
-                    console.warn('   ℹ️ Liabilities product not supported for this institution');
+                if (errorCode === 'ITEM_LOGIN_REQUIRED') {
+                    logger.warn('User needs to re-authenticate via Plaid Link update mode', { ...ctx, errorCode });
+                } else if (errorCode === 'PRODUCTS_NOT_SUPPORTED') {
+                    logger.info('Liabilities product not supported for this institution', { ...ctx, errorCode });
                 } else {
-                    plaidStatus = 'error';
+                    logger.warn('Plaid liabilities error', { ...ctx, errorCode, error: plaidError });
                 }
             }
         } else {
-            console.log('   🔒 No Plaid access token available');
+            logger.debug('No Plaid access token available', ctx);
         }
 
         // 2. Fetch APR overrides for Plaid accounts
         let aprOverrides = {};
         try {
-            console.log('   📊 Fetching APR overrides...');
             const overridesResult = await db.query(
                 'SELECT plaid_account_id, apr FROM debt_apr_overrides WHERE user_id = $1',
                 [userId]
@@ -74,15 +79,14 @@ router.get('/', authenticateToken, async (req, res) => {
             overridesResult.rows.forEach(row => {
                 aprOverrides[row.plaid_account_id] = parseFloat(row.apr);
             });
-            console.log('   ✅ Found', overridesResult.rows.length, 'APR overrides');
+            logger.debug('Fetched APR overrides', { ...ctx, count: overridesResult.rows.length });
         } catch (err) {
-            console.warn('   ⚠️ Could not fetch APR overrides (table might be missing):', err.message);
+            logger.debug('Could not fetch APR overrides (table might be missing)', { ...ctx, error: err.message });
         }
 
         // 3. Fetch custom debts from database
         let customDebts = [];
         try {
-            console.log('   📋 Fetching custom debts...');
             const customDebtsResult = await db.query(
                 'SELECT * FROM custom_debts WHERE user_id = $1 ORDER BY created_at DESC',
                 [userId]
@@ -96,9 +100,9 @@ router.get('/', authenticateToken, async (req, res) => {
                 debt_type: d.debt_type,
                 is_custom: true
             }));
-            console.log('   ✅ Found', customDebts.length, 'custom debts');
+            logger.debug('Fetched custom debts', { ...ctx, count: customDebts.length });
         } catch (err) {
-            console.warn('   ⚠️ Could not fetch custom debts (table might be missing):', err.message);
+            logger.debug('Could not fetch custom debts (table might be missing)', { ...ctx, error: err.message });
         }
 
         // 4. Merge Plaid liabilities with APR overrides and defaults
@@ -116,34 +120,41 @@ router.get('/', authenticateToken, async (req, res) => {
         };
 
         // 5. Run Calculator (Status Quo - zero extra payment)
-        console.log('   🧮 Running debt calculator...');
+        logger.debug('Running debt calculator', ctx);
         const analysis = debtCalculator.calculate(mergedLiabilities, 0, customDebts);
-        console.log('   ✅ Calculation complete:', {
-            total_debt: analysis.total_debt,
-            debt_count: analysis.debt_count
+
+        const meta = await createMeta(userId, dataSource, {
+            plaidStatus,
+            count: analysis.debt_count
         });
 
-        console.log('   📤 [GET /debt] Response sent successfully');
-        res.json({
-            success: true,
+        logger.info('Returning debt analysis', {
+            ...ctx,
+            totalDebt: analysis.total_debt,
+            debtCount: analysis.debt_count,
+            dataSource,
+            plaidStatus
+        });
+
+        successResponse(res, {
             plaid_status: plaidStatus,
             analysis: analysis,
             raw_liabilities: mergedLiabilities,
             custom_debts: customDebts,
             default_aprs: DEFAULT_APRS
-        });
+        }, meta);
     } catch (error) {
-        console.error('❌ [GET /debt] Error:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
+        logger.error('Failed to fetch debt overview', { ...ctx, error });
+        next(error);
     }
 });
 
 // POST /debt/calculate
 // Recalculates based on user input (Extra Payment)
-router.post('/calculate', authenticateToken, async (req, res) => {
-    console.log('📥 [POST /debt/calculate] Request received');
-    console.log('   👤 User ID:', req.user.id);
-    console.log('   💰 Extra payment:', req.body.extra_payment);
+router.post('/calculate', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    const extraPayment = req.body.extra_payment;
+    logger.info('Calculating debt payoff', { ...ctx, extraPayment });
 
     try {
         const userId = req.user.id;
@@ -152,28 +163,26 @@ router.post('/calculate', authenticateToken, async (req, res) => {
         // Use provided liabilities or fetch fresh
         let debtsData = liabilities;
         if (!debtsData) {
-            console.log('   🔄 No liabilities provided, fetching from Plaid...');
+            logger.debug('No liabilities provided, fetching from Plaid', ctx);
             const accessToken = req.user.plaidAccessToken || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
             if (accessToken) {
                 try {
                     debtsData = await plaidService.getLiabilities(accessToken);
-                    console.log('   ✅ Fetched liabilities from Plaid');
+                    logger.debug('Fetched liabilities from Plaid', ctx);
                 } catch (err) {
-                    console.warn('   ⚠️ Plaid fetch failed:', err.message);
+                    logger.warn('Plaid fetch failed, using empty liabilities', { ...ctx, error: err });
                     debtsData = { credit: [], student: [], mortgage: [] };
                 }
             } else {
-                console.log('   🔒 No access token, using empty liabilities');
+                logger.debug('No access token, using empty liabilities', ctx);
                 debtsData = { credit: [], student: [], mortgage: [] };
             }
-        } else {
-            console.log('   📦 Using provided liabilities');
         }
 
         // Fetch custom debts if not provided
         let customDebtsArray = custom_debts;
         if (!customDebtsArray) {
-            console.log('   📋 No custom debts provided, fetching from database...');
+            logger.debug('No custom debts provided, fetching from database', ctx);
             try {
                 const result = await db.query(
                     'SELECT * FROM custom_debts WHERE user_id = $1',
@@ -188,53 +197,48 @@ router.post('/calculate', authenticateToken, async (req, res) => {
                     debt_type: d.debt_type,
                     is_custom: true
                 }));
-                console.log('   ✅ Found', customDebtsArray.length, 'custom debts');
+                logger.debug('Fetched custom debts', { ...ctx, count: customDebtsArray.length });
             } catch (err) {
-                console.warn('   ⚠️ Could not fetch custom debts:', err.message);
+                logger.warn('Could not fetch custom debts', { ...ctx, error: err });
                 customDebtsArray = [];
             }
-        } else {
-            console.log('   📦 Using provided custom debts:', customDebtsArray.length);
         }
 
-        console.log('   🧮 Running debt calculator with extra payment:', extra_payment);
         const analysis = debtCalculator.calculate(debtsData, extra_payment || 0, customDebtsArray);
 
-        console.log('   📤 [POST /debt/calculate] Response sent');
-        res.json({
-            success: true,
-            analysis: analysis
+        logger.info('Debt calculation complete', {
+            ...ctx,
+            extraPayment: extra_payment,
+            totalDebt: analysis.total_debt
         });
 
+        successResponse(res, { analysis }, {
+            source: DATA_SOURCES.COMPUTED,
+            timestamp: new Date().toISOString()
+        });
     } catch (error) {
-        console.error('❌ [POST /debt/calculate] Error:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
+        logger.error('Failed to calculate debt payoff', { ...ctx, error });
+        next(error);
     }
 });
 
 // ==================== CUSTOM DEBTS CRUD ====================
 
 // POST /debt/custom - Create a new custom debt
-router.post('/custom', authenticateToken, async (req, res) => {
-    console.log('📥 [POST /debt/custom] Request received');
-    console.log('   👤 User ID:', req.user.id);
-    console.log('   📝 Debt data:', req.body);
+router.post('/custom', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    logger.info('Creating custom debt', { ...ctx, debtName: req.body.name });
 
     try {
         const userId = req.user.id;
         const { name, balance, apr, min_payment, debt_type } = req.body;
 
         if (!name || balance === undefined) {
-            console.warn('   ⚠️ Validation failed: name and balance required');
-            return res.status(400).json({
-                success: false,
-                message: 'Name and balance are required'
-            });
+            throw new ValidationError('Name and balance are required', { fields: ['name', 'balance'] });
         }
 
         // Use default APR if not provided
         const effectiveApr = apr ?? getDefaultApr(debt_type);
-        console.log('   💹 Using APR:', effectiveApr, '(type:', debt_type || 'other', ')');
 
         const result = await db.query(
             `INSERT INTO custom_debts (user_id, name, balance, apr, min_payment, debt_type)
@@ -243,27 +247,25 @@ router.post('/custom', authenticateToken, async (req, res) => {
             [userId, name, balance, effectiveApr, min_payment || 0, debt_type || 'other']
         );
 
-        console.log('   ✅ Custom debt created with ID:', result.rows[0].id);
-        res.json({
-            success: true,
+        logger.info('Custom debt created', { ...ctx, debtId: result.rows[0].id });
+
+        successResponse(res, {
             debt: {
                 id: `custom_${result.rows[0].id}`,
                 ...result.rows[0],
                 is_custom: true
             }
-        });
+        }, { source: DATA_SOURCES.DATABASE, timestamp: new Date().toISOString() });
     } catch (error) {
-        console.error('❌ [POST /debt/custom] Error:', error);
-        res.status(500).json({ success: false, message: 'Failed to create debt' });
+        logger.error('Failed to create custom debt', { ...ctx, error });
+        next(error);
     }
 });
 
 // PUT /debt/custom/:id - Update a custom debt
-router.put('/custom/:id', authenticateToken, async (req, res) => {
-    console.log('📥 [PUT /debt/custom/:id] Request received');
-    console.log('   👤 User ID:', req.user.id);
-    console.log('   🔢 Debt ID:', req.params.id);
-    console.log('   📝 Update data:', req.body);
+router.put('/custom/:id', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id, debtId: req.params.id };
+    logger.info('Updating custom debt', ctx);
 
     try {
         const userId = req.user.id;
@@ -271,7 +273,7 @@ router.put('/custom/:id', authenticateToken, async (req, res) => {
         const { name, balance, apr, min_payment, debt_type } = req.body;
 
         const result = await db.query(
-            `UPDATE custom_debts 
+            `UPDATE custom_debts
              SET name = COALESCE($1, name),
                  balance = COALESCE($2, balance),
                  apr = COALESCE($3, apr),
@@ -284,30 +286,28 @@ router.put('/custom/:id', authenticateToken, async (req, res) => {
         );
 
         if (result.rows.length === 0) {
-            console.warn('   ⚠️ Debt not found or unauthorized');
-            return res.status(404).json({ success: false, message: 'Debt not found' });
+            throw new NotFoundError('Debt');
         }
 
-        console.log('   ✅ Custom debt updated');
-        res.json({
-            success: true,
+        logger.info('Custom debt updated', ctx);
+
+        successResponse(res, {
             debt: {
                 id: `custom_${result.rows[0].id}`,
                 ...result.rows[0],
                 is_custom: true
             }
-        });
+        }, { source: DATA_SOURCES.DATABASE, timestamp: new Date().toISOString() });
     } catch (error) {
-        console.error('❌ [PUT /debt/custom/:id] Error:', error);
-        res.status(500).json({ success: false, message: 'Failed to update debt' });
+        logger.error('Failed to update custom debt', { ...ctx, error });
+        next(error);
     }
 });
 
 // DELETE /debt/custom/:id - Delete a custom debt
-router.delete('/custom/:id', authenticateToken, async (req, res) => {
-    console.log('📥 [DELETE /debt/custom/:id] Request received');
-    console.log('   👤 User ID:', req.user.id);
-    console.log('   🔢 Debt ID:', req.params.id);
+router.delete('/custom/:id', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id, debtId: req.params.id };
+    logger.info('Deleting custom debt', ctx);
 
     try {
         const userId = req.user.id;
@@ -319,51 +319,49 @@ router.delete('/custom/:id', authenticateToken, async (req, res) => {
         );
 
         if (result.rows.length === 0) {
-            console.warn('   ⚠️ Debt not found or unauthorized');
-            return res.status(404).json({ success: false, message: 'Debt not found' });
+            throw new NotFoundError('Debt');
         }
 
-        console.log('   ✅ Custom debt deleted');
-        res.json({ success: true, message: 'Debt deleted' });
+        logger.info('Custom debt deleted', ctx);
+
+        res.json({ success: true, message: 'Debt deleted', requestId: req.requestId });
     } catch (error) {
-        console.error('❌ [DELETE /debt/custom/:id] Error:', error);
-        res.status(500).json({ success: false, message: 'Failed to delete debt' });
+        logger.error('Failed to delete custom debt', { ...ctx, error });
+        next(error);
     }
 });
 
 // ==================== APR OVERRIDE ====================
 
 // PUT /debt/apr-override - Save APR override for a Plaid account
-router.put('/apr-override', authenticateToken, async (req, res) => {
-    console.log('📥 [PUT /debt/apr-override] Request received');
-    console.log('   👤 User ID:', req.user.id);
-    console.log('   📝 Override data:', req.body);
+router.put('/apr-override', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    logger.info('Saving APR override', { ...ctx, accountId: req.body.plaid_account_id, apr: req.body.apr });
 
     try {
         const userId = req.user.id;
         const { plaid_account_id, apr } = req.body;
 
         if (!plaid_account_id || apr === undefined) {
-            console.warn('   ⚠️ Validation failed: plaid_account_id and apr required');
-            return res.status(400).json({
-                success: false,
-                message: 'plaid_account_id and apr are required'
+            throw new ValidationError('plaid_account_id and apr are required', {
+                fields: ['plaid_account_id', 'apr']
             });
         }
 
         await db.query(
             `INSERT INTO debt_apr_overrides (user_id, plaid_account_id, apr)
              VALUES ($1, $2, $3)
-             ON CONFLICT (user_id, plaid_account_id) 
+             ON CONFLICT (user_id, plaid_account_id)
              DO UPDATE SET apr = $3, updated_at = CURRENT_TIMESTAMP`,
             [userId, plaid_account_id, apr]
         );
 
-        console.log('   ✅ APR override saved');
-        res.json({ success: true, message: 'APR override saved' });
+        logger.info('APR override saved', ctx);
+
+        res.json({ success: true, message: 'APR override saved', requestId: req.requestId });
     } catch (error) {
-        console.error('❌ [PUT /debt/apr-override] Error:', error);
-        res.status(500).json({ success: false, message: 'Failed to save APR override' });
+        logger.error('Failed to save APR override', { ...ctx, error });
+        next(error);
     }
 });
 

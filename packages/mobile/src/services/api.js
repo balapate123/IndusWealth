@@ -10,6 +10,130 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://induswealth.onr
 // In-memory token for faster access
 let cachedToken = null;
 
+// Error categories for UI handling
+export const ERROR_CODES = {
+    NETWORK_ERROR: 'NETWORK_ERROR',
+    AUTH_EXPIRED: 'AUTH_EXPIRED',
+    PLAID_REAUTH: 'PLAID_REAUTH',
+    VALIDATION: 'VALIDATION_ERROR',
+    SERVER_ERROR: 'SERVER_ERROR',
+    NOT_FOUND: 'NOT_FOUND',
+};
+
+/**
+ * Parse API error into user-friendly format
+ * @param {Error} error - Error object
+ * @param {Object} responseData - Response data from server
+ * @returns {Object} Parsed error with code, message, action
+ */
+export const parseApiError = (error, responseData) => {
+    // Network error - no response received
+    if (!responseData && error.message?.includes('fetch')) {
+        return {
+            code: ERROR_CODES.NETWORK_ERROR,
+            message: 'Unable to connect. Please check your internet connection.',
+            action: 'Tap to retry',
+            recoverable: true,
+        };
+    }
+
+    if (!responseData) {
+        return {
+            code: ERROR_CODES.SERVER_ERROR,
+            message: error.message || 'Something went wrong.',
+            action: 'Please try again later',
+            recoverable: true,
+        };
+    }
+
+    const errorCode = responseData.code;
+
+    // Auth errors
+    if (errorCode === 'TOKEN_INVALID' || errorCode === 'TOKEN_REQUIRED' || errorCode === 'AUTH_ERROR') {
+        return {
+            code: ERROR_CODES.AUTH_EXPIRED,
+            message: 'Your session has expired.',
+            action: 'Please log in again',
+            recoverable: false,
+        };
+    }
+
+    // Plaid re-authentication needed
+    if (responseData._meta?.plaidStatus === 'login_required' || errorCode === 'PLAID_ERROR') {
+        return {
+            code: ERROR_CODES.PLAID_REAUTH,
+            message: responseData.message || 'Your bank connection needs to be refreshed.',
+            action: 'Tap to reconnect',
+            recoverable: true,
+        };
+    }
+
+    // Validation errors
+    if (errorCode === 'VALIDATION_ERROR') {
+        return {
+            code: ERROR_CODES.VALIDATION,
+            message: responseData.message || 'Please check your input.',
+            action: 'Review and try again',
+            recoverable: true,
+            details: responseData.details,
+        };
+    }
+
+    // Generic server error
+    return {
+        code: ERROR_CODES.SERVER_ERROR,
+        message: responseData.message || 'Something went wrong.',
+        action: 'Please try again later',
+        requestId: responseData.requestId,
+        recoverable: true,
+    };
+};
+
+/**
+ * Extract data freshness information from response metadata
+ * @param {Object} meta - Response _meta object
+ * @returns {Object|null} Data freshness info
+ */
+export const getDataFreshness = (meta) => {
+    if (!meta) return null;
+
+    return {
+        source: meta.source,
+        isCached: meta.cached,
+        dataAge: meta.dataAge || null,
+        lastSync: meta.lastSync ? new Date(meta.lastSync) : null,
+        plaidStatus: meta.plaidStatus,
+        timestamp: meta.timestamp ? new Date(meta.timestamp) : new Date(),
+    };
+};
+
+/**
+ * Get human-readable freshness text
+ * @param {Object} freshness - Data freshness object
+ * @returns {string} Human-readable freshness description
+ */
+export const getFreshnessText = (freshness) => {
+    if (!freshness) return '';
+
+    if (freshness.plaidStatus === 'login_required') {
+        return 'Bank reconnection needed';
+    }
+
+    if (freshness.dataAge) {
+        return `Updated ${freshness.dataAge}`;
+    }
+
+    if (freshness.source === 'PLAID_API') {
+        return 'Just synced from bank';
+    }
+
+    if (freshness.source === 'DATABASE' && freshness.isCached) {
+        return 'From cache';
+    }
+
+    return '';
+};
+
 // Initialize token from storage on app start
 export const initializeAuth = async () => {
     cachedToken = await cache.getAuthToken();
@@ -33,6 +157,8 @@ export const clearToken = async () => {
 
 // Helper for making API requests with JWT authentication
 const apiRequest = async (endpoint, options = {}) => {
+    let responseData = null;
+
     try {
         const headers = {
             'Content-Type': 'application/json',
@@ -54,27 +180,46 @@ const apiRequest = async (endpoint, options = {}) => {
             ...options,
         });
 
+        // Parse response
+        responseData = await response.json().catch(() => null);
+
         // Handle 401 Unauthorized - token expired or invalid
         if (response.status === 401) {
-            const errorData = await response.json().catch(() => ({}));
-
             // Clear invalid token
-            if (errorData.code === 'TOKEN_INVALID' || errorData.code === 'TOKEN_REQUIRED') {
+            if (responseData?.code === 'TOKEN_INVALID' || responseData?.code === 'TOKEN_REQUIRED') {
                 await clearToken();
                 await cache.clearUserCache();
             }
 
-            throw new Error(errorData.message || 'Session expired. Please log in again.');
+            const parsedError = parseApiError(new Error('Unauthorized'), responseData);
+            const error = new Error(parsedError.message);
+            error.parsedError = parsedError;
+            error.responseData = responseData;
+            throw error;
         }
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.message || `API Error: ${response.status}`);
+            const parsedError = parseApiError(new Error(`HTTP ${response.status}`), responseData);
+            const error = new Error(parsedError.message);
+            error.parsedError = parsedError;
+            error.responseData = responseData;
+            throw error;
         }
 
-        return await response.json();
+        return responseData;
     } catch (error) {
-        console.error(`API Request failed for ${endpoint}:`, error);
+        // If error wasn't already parsed, parse it now
+        if (!error.parsedError) {
+            error.parsedError = parseApiError(error, responseData);
+            error.responseData = responseData;
+        }
+
+        console.error(`API Request failed for ${endpoint}:`, {
+            message: error.message,
+            code: error.parsedError?.code,
+            requestId: error.responseData?.requestId,
+        });
+
         throw error;
     }
 };

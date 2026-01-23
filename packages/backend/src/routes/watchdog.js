@@ -2,19 +2,24 @@ const express = require('express');
 const router = express.Router();
 const watchdogService = require('../services/watchdog');
 const { authenticateToken } = require('../middleware/auth');
+const { createLogger } = require('../services/logger');
+const { DATA_SOURCES, successResponse } = require('../utils/responseHelper');
+
+const logger = createLogger('WATCHDOG');
 
 // GET /watchdog
 // Returns recurring expense analysis for WatchdogScreen
 // Requires authentication
-router.get('/', authenticateToken, async (req, res) => {
-    console.log('\n📥 [GET /watchdog] Request received');
+router.get('/', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    logger.info('Fetching recurring expense analysis', ctx);
 
     try {
         // TODO: In production, analyze user's transaction history to detect recurring patterns
         // For now, return empty array until real pattern detection is implemented
         const recurringExpenses = [];
 
-        console.log('   📦 Recurring expense detection pending implementation\n');
+        logger.debug('Recurring expense detection pending implementation', ctx);
 
         // Calculate potential savings (items that can be stopped or negotiated)
         const potentialSavings = recurringExpenses
@@ -23,8 +28,14 @@ router.get('/', authenticateToken, async (req, res) => {
 
         const flagsFound = recurringExpenses.filter(e => e.action !== 'active').length;
 
-        res.json({
-            success: true,
+        logger.info('Returning watchdog analysis', {
+            ...ctx,
+            expenseCount: recurringExpenses.length,
+            potentialSavings,
+            flagsFound
+        });
+
+        successResponse(res, {
             expenses: recurringExpenses,
             analysis: {
                 potential_savings: potentialSavings,
@@ -33,31 +44,36 @@ router.get('/', authenticateToken, async (req, res) => {
             },
             categories: ['All', 'Streaming', 'Utilities', 'Health', 'Other'],
             needs_transaction_history: true
+        }, {
+            source: DATA_SOURCES.COMPUTED,
+            timestamp: new Date().toISOString()
         });
     } catch (error) {
-        console.error('Error analyzing recurring expenses:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
+        logger.error('Failed to analyze recurring expenses', { ...ctx, error });
+        next(error);
     }
 });
 
 // POST /watchdog/action
 // Handle actions like negotiate, stop, etc.
 // Requires authentication
-router.post('/action', authenticateToken, async (req, res) => {
+router.post('/action', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    const { expenseId, action } = req.body;
+    logger.info('Processing watchdog action', { ...ctx, expenseId, action });
+
     try {
-        const { expenseId, action } = req.body;
-        const userId = req.user.id;
-
-        console.log(`📝 [POST /watchdog/action] User ${userId}: ${action} on expense ${expenseId}`);
-
         // In production, this would update the expense status in the database
+        logger.info('Watchdog action registered', { ...ctx, expenseId, action });
+
         res.json({
             success: true,
             message: `Action '${action}' registered for expense ${expenseId}`,
+            requestId: req.requestId
         });
     } catch (error) {
-        console.error('Error processing action:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
+        logger.error('Failed to process watchdog action', { ...ctx, error });
+        next(error);
     }
 });
 

@@ -4,6 +4,10 @@ const db = require('../services/db');
 const plaidService = require('../services/plaid');
 const { authenticateToken } = require('../middleware/auth');
 const { categorizeTransaction, getCategoryBreakdown } = require('../services/categorization');
+const { createLogger } = require('../services/logger');
+const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse, getPlaidStatusFromError } = require('../utils/responseHelper');
+
+const logger = createLogger('ANALYTICS');
 
 // Intent categories mapping
 const INTENT_CATEGORIES = {
@@ -172,19 +176,24 @@ const generateWealthNarrative = (accounts, netCashFlow, periodDays) => {
 
 // GET /analytics
 // Returns analytics data for charts and insights
-router.get('/', authenticateToken, async (req, res) => {
-    console.log('\n📥 [GET /analytics] Request received');
+router.get('/', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    const period = req.query.period || '30';
+    logger.info('Fetching analytics', { ...ctx, period });
 
     try {
         const userId = req.user.id;
-        const { period = '30', refresh } = req.query; // Default to 30 days
+        const { refresh } = req.query;
         const forceRefresh = refresh === 'true';
+
+        let dataSource = DATA_SOURCES.DATABASE;
+        let plaidStatus = PLAID_STATUS.CACHED;
 
         // Sync from Plaid if needed (same logic as transactions endpoint)
         const needsSync = forceRefresh || await db.shouldSync(userId, 'last_transaction_sync', 24);
 
         if (needsSync) {
-            console.log('   🔄 [Analytics] Syncing transactions from Plaid first...');
+            logger.info('Syncing transactions from Plaid for analytics', { ...ctx, forceRefresh });
             const accessToken = req.user.plaidAccessToken || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
 
             if (accessToken) {
@@ -197,20 +206,25 @@ router.get('/', authenticateToken, async (req, res) => {
                         const plaidAccounts = await plaidService.getAccounts(accessToken);
                         await db.upsertAccounts(userId, plaidAccounts);
                     } catch (accErr) {
-                        console.warn('   ⚠️ Could not fetch accounts:', accErr.message);
+                        logger.warn('Could not fetch accounts', { ...ctx, error: accErr });
                     }
 
                     await db.updateSyncTime(userId, 'last_transaction_sync');
-                    console.log(`   ✅ [Analytics] Synced ${plaidTransactions.length} transactions from Plaid`);
+                    dataSource = DATA_SOURCES.PLAID_API;
+                    plaidStatus = PLAID_STATUS.SUCCESS;
+                    logger.info('Synced transactions from Plaid for analytics', { ...ctx, count: plaidTransactions.length });
                 } catch (plaidError) {
-                    console.warn(`   ⚠️ [Analytics] Plaid sync failed: ${plaidError.message}`);
+                    plaidStatus = getPlaidStatusFromError(plaidError);
+                    logger.warn('Plaid sync failed for analytics', { ...ctx, error: plaidError });
                 }
+            } else {
+                plaidStatus = PLAID_STATUS.NO_TOKEN;
             }
         }
 
         // Get transactions and accounts
         const [transactions, accounts] = await Promise.all([
-            db.getTransactions(userId, 1000), // Get more transactions for analytics
+            db.getTransactions(userId, 1000),
             db.getAccounts(userId),
         ]);
 
@@ -354,10 +368,21 @@ router.get('/', authenticateToken, async (req, res) => {
             });
         }
 
-        console.log(`   📤 Responding with enhanced analytics for ${period} days\n`);
+        const meta = await createMeta(userId, dataSource, {
+            syncType: 'last_transaction_sync',
+            plaidStatus,
+            count: categorizedTransactions.length
+        });
 
-        res.json({
-            success: true,
+        logger.info('Returning analytics', {
+            ...ctx,
+            period: periodDays,
+            transactionCount: categorizedTransactions.length,
+            dataSource,
+            plaidStatus
+        });
+
+        successResponse(res, {
             period: parseInt(period),
             summary: {
                 liquidCash,
@@ -389,39 +414,46 @@ router.get('/', authenticateToken, async (req, res) => {
                 },
                 netWorthTrend,
             },
-            // NEW: Enhanced analytics
+            // Enhanced analytics
             wealthNarrative,
             burnRate,
             spendingByIntent,
             topMerchant,
             aiTip,
-        });
+        }, meta);
     } catch (error) {
-        console.error('Error fetching analytics:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
+        logger.error('Failed to fetch analytics', { ...ctx, error });
+        next(error);
     }
 });
 
 // GET /analytics/monthly
 // Returns monthly spending trends
-router.get('/monthly', authenticateToken, async (req, res) => {
-    console.log('\n📥 [GET /analytics/monthly] Request received');
+router.get('/monthly', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    logger.info('Fetching monthly analytics', ctx);
 
     try {
         const userId = req.user.id;
-        const monthlyTrends = await db.getMonthlySpending(userId, 6); // Last 6 months
+        const monthlyTrends = await db.getMonthlySpending(userId, 6);
 
-        res.json({
-            success: true,
+        const meta = await createMeta(userId, DATA_SOURCES.DATABASE, {
+            syncType: 'last_transaction_sync',
+            count: monthlyTrends.length
+        });
+
+        logger.info('Returning monthly analytics', { ...ctx, monthCount: monthlyTrends.length });
+
+        successResponse(res, {
             data: monthlyTrends.map(month => ({
                 month: month.month,
                 spending: parseFloat(month.spending),
                 income: parseFloat(month.income),
             })),
-        });
+        }, meta);
     } catch (error) {
-        console.error('Error fetching monthly analytics:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
+        logger.error('Failed to fetch monthly analytics', { ...ctx, error });
+        next(error);
     }
 });
 
