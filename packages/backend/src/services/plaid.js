@@ -22,7 +22,7 @@ class PlaidService {
             const response = await client.linkTokenCreate({
                 user: { client_user_id: userId || 'test_user' },
                 client_name: 'IndusWealth',
-                products: ['transactions', 'balance'],
+                products: ['transactions'],
                 country_codes: ['CA'],
                 language: 'en',
             });
