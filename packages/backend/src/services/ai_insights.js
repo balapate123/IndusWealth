@@ -29,7 +29,7 @@ async function generateInsights(userData) {
                 temperature: 0.7,
                 topK: 40,
                 topP: 0.95,
-                maxOutputTokens: 2048,
+                maxOutputTokens: 4096,
                 responseMimeType: 'application/json',
             },
         });
@@ -42,8 +42,9 @@ async function generateInsights(userData) {
         try {
             insights = JSON.parse(text);
         } catch (parseError) {
-            console.error('Failed to parse AI response as JSON:', text);
-            throw new Error('AI returned invalid JSON format');
+            console.error('Failed to parse AI response as JSON:', text.substring(0, 500));
+            console.error('Parse error:', parseError.message);
+            throw new Error(`AI returned invalid JSON format: ${parseError.message}`);
         }
 
         // Validate and process insights
@@ -78,7 +79,7 @@ async function generateInsights(userData) {
  * Build the AI prompt with user data
  */
 function _buildPrompt(userData) {
-    const systemPrompt = `You are an expert Canadian personal finance advisor analyzing a user's financial data. Your goal is to generate 5-7 actionable, personalized insights that help the user optimize their finances.
+    const systemPrompt = `You are an expert Canadian personal finance advisor analyzing a user's financial data. Your goal is to generate 4-5 actionable, personalized insights that help the user optimize their finances.
 
 CONTEXT:
 - User location: Canada
@@ -218,7 +219,7 @@ function _validateInsights(data) {
 }
 
 /**
- * Prioritize and limit insights to top 7
+ * Prioritize and limit insights to top 5
  */
 function _prioritizeInsights(insights) {
     // Sort by priority (high > medium > low) and potential savings
@@ -234,8 +235,8 @@ function _prioritizeInsights(insights) {
         return bSavings - aSavings;
     });
 
-    // Return top 7
-    return insights.slice(0, 7);
+    // Return top 5
+    return insights.slice(0, 5);
 }
 
 module.exports = {
