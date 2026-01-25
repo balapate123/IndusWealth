@@ -9,38 +9,12 @@ const { pool } = require('../services/db');
 const { getUserFinancialSummary } = require('../services/insight_data');
 const { generateInsights } = require('../services/ai_insights');
 const authenticateToken = require('../middleware/auth');
-const rateLimit = require('express-rate-limit');
-
-// Rate limiter for force refresh (max 1 per 6 hours per user)
-const refreshLimiter = rateLimit({
-    windowMs: 6 * 60 * 60 * 1000, // 6 hours
-    max: 1,
-    message: { success: false, error: 'Rate limit exceeded. Please wait before refreshing again.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req) => `insights_refresh_${req.user?.id || 'anonymous'}`,
-    skip: (req) => req.query.force_refresh !== 'true'
-});
 
 /**
  * GET /api/insights
  * Get personalized financial insights (with caching)
  */
 router.get('/', authenticateToken, async (req, res) => {
-    // Apply rate limiter only for force refresh
-    if (req.query.force_refresh === 'true') {
-        return refreshLimiter(req, res, async () => {
-            await handleInsightsRequest(req, res);
-        });
-    }
-
-    await handleInsightsRequest(req, res);
-});
-
-/**
- * Handle insights request logic
- */
-async function handleInsightsRequest(req, res) {
     try {
         const userId = req.user.id;
         const forceRefresh = req.query.force_refresh === 'true';
@@ -154,7 +128,7 @@ async function handleInsightsRequest(req, res) {
             details: error.message
         });
     }
-}
+});
 
 /**
  * POST /api/insights/dismiss
