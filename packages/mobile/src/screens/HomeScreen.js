@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import api from '../services/api';
 import cache from '../services/cache';
 
@@ -345,12 +345,16 @@ const HomeScreen = ({ navigation }) => {
             {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                    <View style={styles.avatarContainer}>
+                    <TouchableOpacity
+                        style={styles.avatarContainer}
+                        onPress={() => navigation.navigate('Profile')}
+                        activeOpacity={0.7}
+                    >
                         <View style={styles.avatar}>
                             <Ionicons name="person" size={24} color={COLORS.TEXT_SECONDARY} />
                         </View>
                         <View style={styles.onlineIndicator} />
-                    </View>
+                    </TouchableOpacity>
                     <View style={styles.greetingContainer}>
                         <Text style={styles.welcomeText}>Welcome back,</Text>
                         <Text style={styles.userName}>{userName}</Text>
@@ -678,7 +682,7 @@ const styles = StyleSheet.create({
     userName: {
         color: COLORS.WHITE,
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     notificationButton: {
         padding: SPACING.SMALL,
@@ -709,7 +713,8 @@ const styles = StyleSheet.create({
         color: COLORS.TEXT_SECONDARY,
         fontSize: 11,
         letterSpacing: 1,
-        fontWeight: '500',
+        letterSpacing: 1,
+        fontFamily: FONTS.MEDIUM,
         marginBottom: 4,
     },
     balanceAmountRow: {
@@ -725,7 +730,7 @@ const styles = StyleSheet.create({
     balanceAmount: {
         color: COLORS.WHITE,
         fontSize: 32,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
     },
     eyeButton: {
         marginLeft: SPACING.SMALL,
@@ -743,7 +748,7 @@ const styles = StyleSheet.create({
     growthText: {
         color: '#C9A227',
         fontSize: 12,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         marginLeft: 4,
     },
     savingsRow: {
@@ -1054,7 +1059,7 @@ const styles = StyleSheet.create({
     modalTitle: {
         color: COLORS.WHITE,
         fontSize: 18,
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
     },
     modalCloseButton: {
         padding: SPACING.SMALL,
@@ -1073,7 +1078,7 @@ const styles = StyleSheet.create({
     },
     detailAmount: {
         fontSize: 32,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
     },
     amountBadge: {
         paddingHorizontal: SPACING.MEDIUM,
@@ -1099,7 +1104,7 @@ const styles = StyleSheet.create({
     detailValue: {
         color: COLORS.WHITE,
         fontSize: 14,
-        fontWeight: '500',
+        fontFamily: FONTS.MEDIUM,
         maxWidth: '60%',
         textAlign: 'right',
     },

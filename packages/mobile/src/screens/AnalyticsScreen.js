@@ -17,7 +17,7 @@ import {
 import { Svg, Circle, G, Path, Defs, Stop, LinearGradient as SvgLinearGradient } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import api from '../services/api';
 import cache from '../services/cache';
 import { categorizeTransaction } from '../utils/categorization';
@@ -874,7 +874,7 @@ const styles = StyleSheet.create({
     headerTitle: {
         color: COLORS.WHITE,
         fontSize: 18,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     notificationButton: {
         padding: SPACING.SMALL,
@@ -901,7 +901,7 @@ const styles = StyleSheet.create({
     periodButtonText: {
         color: COLORS.TEXT_MUTED,
         fontSize: 13,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     periodButtonTextActive: {
         color: COLORS.WHITE,
@@ -934,13 +934,13 @@ const styles = StyleSheet.create({
     },
     changeBadgeText: {
         fontSize: 12,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         marginLeft: 4,
     },
     netWorthAmount: {
         color: COLORS.WHITE,
         fontSize: 32,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
         marginBottom: SPACING.MEDIUM,
     },
     // Area Chart
@@ -966,7 +966,7 @@ const styles = StyleSheet.create({
     chartTooltipAmount: {
         color: COLORS.TEAL,
         fontSize: 14,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
     },
     chartTooltipDate: {
         color: COLORS.TEXT_MUTED,
@@ -1021,7 +1021,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         color: COLORS.WHITE,
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     statusBadge: {
         paddingHorizontal: 10,
@@ -1030,7 +1030,7 @@ const styles = StyleSheet.create({
     },
     statusBadgeText: {
         fontSize: 11,
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
     },
 
     // Progress Bars
@@ -1048,7 +1048,7 @@ const styles = StyleSheet.create({
     progressValue: {
         color: COLORS.TEXT_SECONDARY,
         fontSize: 12,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     progressBarBg: {
         height: 6,
@@ -1086,7 +1086,7 @@ const styles = StyleSheet.create({
     aiTipTitle: {
         color: '#0D0D0D',
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     aiTipDescription: {
         color: '#0D0D0D',
@@ -1095,7 +1095,7 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.MEDIUM,
     },
     aiTipHighlight: {
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
     },
     aiTipButton: {
         flexDirection: 'row',
@@ -1108,7 +1108,7 @@ const styles = StyleSheet.create({
     aiTipButtonText: {
         color: COLORS.GOLD,
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         marginRight: 6,
     },
 
@@ -1134,7 +1134,7 @@ const styles = StyleSheet.create({
     intentAmount: {
         color: COLORS.WHITE,
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
 
     // Top Leakage
@@ -1155,7 +1155,7 @@ const styles = StyleSheet.create({
     merchantInitial: {
         color: COLORS.WHITE,
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     merchantInfo: {
         flex: 1,
@@ -1163,7 +1163,7 @@ const styles = StyleSheet.create({
     merchantName: {
         color: COLORS.WHITE,
         fontSize: 14,
-        fontWeight: '500',
+        fontFamily: FONTS.MEDIUM,
     },
     merchantCategory: {
         color: COLORS.TEXT_MUTED,
@@ -1175,7 +1175,7 @@ const styles = StyleSheet.create({
     merchantAmount: {
         color: COLORS.WHITE,
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     merchantChange: {
         fontSize: 12,
@@ -1220,7 +1220,7 @@ const styles = StyleSheet.create({
     barChartTotal: {
         color: COLORS.TEXT_SECONDARY,
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         marginTop: SPACING.MEDIUM,
     },
     categoryTooltip: {
@@ -1234,7 +1234,7 @@ const styles = StyleSheet.create({
     categoryTooltipText: {
         color: COLORS.WHITE,
         fontSize: 13,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     categoryTooltipPlaceholder: {
         paddingHorizontal: 16,
@@ -1282,7 +1282,7 @@ const styles = StyleSheet.create({
     categoryName: {
         color: COLORS.WHITE,
         fontSize: 14,
-        fontWeight: '500',
+        fontFamily: FONTS.MEDIUM,
     },
     categoryCount: {
         color: COLORS.TEXT_MUTED,
@@ -1296,7 +1296,7 @@ const styles = StyleSheet.create({
     categoryAmount: {
         color: COLORS.WHITE,
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     categoryPercentage: {
         color: COLORS.GOLD,
@@ -1338,7 +1338,7 @@ const styles = StyleSheet.create({
     modalTitle: {
         color: COLORS.WHITE,
         fontSize: 18,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     modalCloseButton: {
         padding: SPACING.SMALL,
@@ -1352,7 +1352,7 @@ const styles = StyleSheet.create({
     modalSummaryAmount: {
         color: COLORS.WHITE,
         fontSize: 28,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
     },
     modalSummaryLabel: {
         color: COLORS.TEXT_SECONDARY,
@@ -1396,7 +1396,7 @@ const styles = StyleSheet.create({
     },
     transactionAmount: {
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     emptyTransactions: {
         padding: SPACING.XL,

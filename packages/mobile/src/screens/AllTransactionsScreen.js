@@ -13,7 +13,7 @@ import {
     TextInput,
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import api from '../services/api';
 import cache from '../services/cache';
 
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     headerTitle: {
         color: COLORS.WHITE,
         fontSize: 18,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     headerRight: {
         padding: SPACING.SMALL,
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     transactionMerchant: {
         color: COLORS.WHITE,
         fontSize: 15,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         marginBottom: 2,
     },
     transactionCategory: {
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
     modalTitle: {
         color: COLORS.WHITE,
         fontSize: 20,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     modalCloseButton: {
         padding: SPACING.SMALL,
@@ -563,7 +563,7 @@ const styles = StyleSheet.create({
     },
     detailAmount: {
         fontSize: 32,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
     },
     amountBadge: {
         paddingHorizontal: SPACING.MEDIUM,
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
     },
     amountBadgeText: {
         fontSize: 12,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     detailRow: {
         flexDirection: 'row',
@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
     detailValue: {
         color: COLORS.WHITE,
         fontSize: 14,
-        fontWeight: '500',
+        fontFamily: FONTS.MEDIUM,
         textAlign: 'right',
         flex: 1,
         marginLeft: SPACING.MEDIUM,
@@ -620,7 +620,7 @@ const styles = StyleSheet.create({
     modalDoneText: {
         color: COLORS.BACKGROUND,
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
 });
 

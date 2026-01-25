@@ -17,7 +17,7 @@ import Slider from '@react-native-community/slider';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { create, open } from 'react-native-plaid-link-sdk';
 import Svg, { Path, Defs, LinearGradient, Stop, Line, Circle, Text as SvgText } from 'react-native-svg';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import api from '../services/api';
 import CustomAlert from '../components/CustomAlert';
 
@@ -1062,7 +1062,7 @@ const styles = StyleSheet.create({
     headerTitle: {
         color: COLORS.WHITE,
         fontSize: 18,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     addButton: {
         padding: SPACING.SMALL,
@@ -1251,7 +1251,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         color: COLORS.WHITE,
         fontSize: 18,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         marginBottom: SPACING.MEDIUM,
     },
     strategyButtons: {
@@ -1321,7 +1321,7 @@ const styles = StyleSheet.create({
     debtRankText: {
         color: COLORS.TEXT_SECONDARY,
         fontSize: 12,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     debtContent: {
         flex: 1,
@@ -1335,7 +1335,7 @@ const styles = StyleSheet.create({
     debtName: {
         color: COLORS.WHITE,
         fontSize: 15,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         marginBottom: 2,
         flexShrink: 1,
     },
@@ -1348,7 +1348,7 @@ const styles = StyleSheet.create({
     customBadgeText: {
         color: COLORS.GOLD,
         fontSize: 10,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     debtApr: {
         color: COLORS.TEXT_SECONDARY,
@@ -1361,7 +1361,7 @@ const styles = StyleSheet.create({
     debtBalance: {
         color: COLORS.WHITE,
         fontSize: 15,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         marginBottom: 2,
     },
     debtPayoff: {
@@ -1388,7 +1388,7 @@ const styles = StyleSheet.create({
     },
     emptyAddButtonText: {
         color: COLORS.BACKGROUND,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
 
     // FAB
@@ -1431,7 +1431,7 @@ const styles = StyleSheet.create({
     modalTitle: {
         color: COLORS.WHITE,
         fontSize: 20,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
 
     // Type Selector
@@ -1500,7 +1500,7 @@ const styles = StyleSheet.create({
     deleteButtonText: {
         color: '#FF4444',
         marginLeft: SPACING.SMALL,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     saveButton: {
         flex: 1,
@@ -1517,7 +1517,7 @@ const styles = StyleSheet.create({
     saveButtonText: {
         color: COLORS.WHITE,
         marginLeft: SPACING.SMALL,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
 
     // Re-Authentication Error Modal
@@ -1543,7 +1543,7 @@ const styles = StyleSheet.create({
     },
     reAuthModalTitle: {
         fontSize: 20,
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
         marginBottom: SPACING.SMALL,
         textAlign: 'center',
@@ -1570,7 +1570,7 @@ const styles = StyleSheet.create({
     },
     reAuthModalButtonSecondaryText: {
         color: COLORS.TEXT_SECONDARY,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     reAuthModalButtonPrimary: {
         flex: 1,
@@ -1581,7 +1581,7 @@ const styles = StyleSheet.create({
     },
     reAuthModalButtonPrimaryText: {
         color: COLORS.BACKGROUND,
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
     },
 
     // Import Modal Styles

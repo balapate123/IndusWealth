@@ -9,28 +9,52 @@ import {
     Switch,
     StatusBar,
     Alert,
-    Modal
+    Modal,
+    TextInput,
+    ActivityIndicator,
+    Platform
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import cache from '../services/cache';
+import api from '../services/api';
 
 const ProfileScreen = ({ navigation }) => {
     const [user, setUser] = useState({ name: 'User', email: 'user@example.com' });
     const [faceIdEnabled, setFaceIdEnabled] = useState(true);
     const [darkThemeEnabled, setDarkThemeEnabled] = useState(true);
     const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+    const [editModalVisible, setEditModalVisible] = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    // Edit form state
+    const [editName, setEditName] = useState('');
+    const [editDob, setEditDob] = useState(null);
+    const [showDatePicker, setShowDatePicker] = useState(false);
 
     useEffect(() => {
-        const loadUser = async () => {
-            const cachedUser = await cache.getCachedUser();
-            if (cachedUser) {
-                setUser(cachedUser);
-            }
-        };
         loadUser();
     }, []);
+
+    const loadUser = async () => {
+        // Try cache first
+        const cachedUser = await cache.getCachedUser();
+        if (cachedUser) {
+            setUser(cachedUser);
+        }
+
+        // Fetch fresh data from API
+        try {
+            const response = await api.auth.me();
+            if (response.success && response.user) {
+                setUser(response.user);
+                await cache.setCachedUser(response.user);
+            }
+        } catch (error) {
+            console.error('Failed to fetch user:', error);
+        }
+    };
 
     const handleLogout = async () => {
         setLogoutModalVisible(true);
@@ -49,8 +73,77 @@ const ProfileScreen = ({ navigation }) => {
         });
     };
 
-    const MenuItem = ({ icon, label, subtitle, showToggle, value, onToggle, showBadge, badgeText }) => (
-        <TouchableOpacity style={styles.menuItem} disabled={showToggle}>
+    const openEditModal = () => {
+        setEditName(user.name || '');
+        // Parse existing DOB if available
+        if (user.dateOfBirth) {
+            setEditDob(new Date(user.dateOfBirth));
+        } else {
+            setEditDob(null);
+        }
+        setEditModalVisible(true);
+    };
+
+    const handleSaveProfile = async () => {
+        if (!editName.trim()) {
+            Alert.alert('Error', 'Please enter your name');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const updateData = { name: editName.trim() };
+            if (editDob) {
+                // Format date as YYYY-MM-DD
+                updateData.dateOfBirth = editDob.toISOString().split('T')[0];
+            }
+
+            const response = await api.auth.updateProfile(updateData);
+            if (response.success) {
+                // Update local state
+                const updatedUser = {
+                    ...user,
+                    name: editName.trim(),
+                    dateOfBirth: editDob ? editDob.toISOString().split('T')[0] : user.dateOfBirth
+                };
+                setUser(updatedUser);
+                await cache.setCachedUser(updatedUser);
+                setEditModalVisible(false);
+                Alert.alert('Success', 'Profile updated successfully');
+            }
+        } catch (error) {
+            console.error('Failed to update profile:', error);
+            Alert.alert('Error', error.message || 'Failed to update profile');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDateChange = (event, selectedDate) => {
+        if (Platform.OS === 'android') {
+            setShowDatePicker(false);
+        }
+        if (selectedDate) {
+            setEditDob(selectedDate);
+        }
+    };
+
+    const formatDisplayDate = (dateString) => {
+        if (!dateString) return 'Not set';
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+        } catch {
+            return 'Not set';
+        }
+    };
+
+    const MenuItem = ({ icon, label, subtitle, showToggle, value, onToggle, showBadge, badgeText, onPress }) => (
+        <TouchableOpacity style={styles.menuItem} disabled={showToggle && !onPress} onPress={onPress}>
             <View style={styles.menuIconContainer}>
                 <Ionicons name={icon} size={22} color={COLORS.WHITE} />
             </View>
@@ -84,7 +177,7 @@ const ProfileScreen = ({ navigation }) => {
                     <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Profile</Text>
-                <TouchableOpacity>
+                <TouchableOpacity onPress={openEditModal}>
                     <Text style={styles.editButton}>Edit</Text>
                 </TouchableOpacity>
             </View>
@@ -98,9 +191,9 @@ const ProfileScreen = ({ navigation }) => {
                             source={{ uri: 'https://i.pravatar.cc/300?img=5' }}
                             style={styles.avatar}
                         />
-                        <View style={styles.editIcon}>
+                        <TouchableOpacity style={styles.editIcon} onPress={openEditModal}>
                             <Ionicons name="pencil" size={12} color={COLORS.WHITE} />
-                        </View>
+                        </TouchableOpacity>
                     </View>
                     <Text style={styles.userName}>{user.name}</Text>
 
@@ -119,6 +212,14 @@ const ProfileScreen = ({ navigation }) => {
                         icon="person"
                         label="Personal Information"
                         subtitle={user.email}
+                        onPress={openEditModal}
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="calendar"
+                        label="Date of Birth"
+                        subtitle={formatDisplayDate(user.dateOfBirth)}
+                        onPress={openEditModal}
                     />
                     <View style={styles.divider} />
                     <MenuItem
@@ -153,7 +254,7 @@ const ProfileScreen = ({ navigation }) => {
                         label="2-Step Verification"
                         subtitle="Extra layer of protection"
                         showBadge // Mocking the "On" text as a pseudo-badge/text
-                        badgeText="On ✓"
+                        badgeText="On"
                     />
                 </View>
 
@@ -184,6 +285,105 @@ const ProfileScreen = ({ navigation }) => {
                     <Text style={styles.footerText}>© 2026 IndusWealth Inc.</Text>
                 </View>
             </ScrollView>
+
+            {/* Edit Profile Modal */}
+            <Modal
+                visible={editModalVisible}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setEditModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.editModalContent}>
+                        <View style={styles.editModalHeader}>
+                            <Text style={styles.modalTitle}>Edit Profile</Text>
+                            <TouchableOpacity
+                                style={styles.closeButton}
+                                onPress={() => setEditModalVisible(false)}
+                            >
+                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Name Input */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Name</Text>
+                            <TextInput
+                                style={styles.textInput}
+                                value={editName}
+                                onChangeText={setEditName}
+                                placeholder="Enter your name"
+                                placeholderTextColor={COLORS.TEXT_MUTED}
+                                autoCapitalize="words"
+                            />
+                        </View>
+
+                        {/* Date of Birth Input */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Date of Birth</Text>
+                            <TouchableOpacity
+                                style={styles.dateInput}
+                                onPress={() => setShowDatePicker(true)}
+                            >
+                                <Text style={editDob ? styles.dateText : styles.datePlaceholder}>
+                                    {editDob ? editDob.toLocaleDateString('en-US', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric'
+                                    }) : 'Select your date of birth'}
+                                </Text>
+                                <Ionicons name="calendar-outline" size={20} color={COLORS.GOLD} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Date Picker */}
+                        {showDatePicker && (
+                            <View style={styles.datePickerContainer}>
+                                <DateTimePicker
+                                    value={editDob || new Date(2000, 0, 1)}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    onChange={handleDateChange}
+                                    maximumDate={new Date()}
+                                    minimumDate={new Date(1900, 0, 1)}
+                                    textColor={COLORS.WHITE}
+                                    themeVariant="dark"
+                                />
+                                {Platform.OS === 'ios' && (
+                                    <TouchableOpacity
+                                        style={styles.datePickerDone}
+                                        onPress={() => setShowDatePicker(false)}
+                                    >
+                                        <Text style={styles.datePickerDoneText}>Done</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
+
+                        {/* Email (read-only) */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Email</Text>
+                            <View style={styles.readOnlyInput}>
+                                <Text style={styles.readOnlyText}>{user.email}</Text>
+                                <Ionicons name="lock-closed" size={16} color={COLORS.TEXT_MUTED} />
+                            </View>
+                        </View>
+
+                        {/* Save Button */}
+                        <TouchableOpacity
+                            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                            onPress={handleSaveProfile}
+                            disabled={saving}
+                        >
+                            {saving ? (
+                                <ActivityIndicator color={COLORS.BACKGROUND} />
+                            ) : (
+                                <Text style={styles.saveButtonText}>Save Changes</Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Custom Logout Modal */}
             <Modal
@@ -237,13 +437,13 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         fontSize: 18,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
     },
     editButton: {
         color: '#3B82F6', // Blue
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     content: {
         paddingHorizontal: SPACING.MEDIUM,
@@ -279,7 +479,7 @@ const styles = StyleSheet.create({
     },
     userName: {
         fontSize: 24,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
         marginBottom: 8,
     },
@@ -290,7 +490,7 @@ const styles = StyleSheet.create({
     },
     premiumText: {
         color: COLORS.GOLD,
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
         fontSize: 12,
         marginLeft: 6,
         letterSpacing: 1,
@@ -302,7 +502,7 @@ const styles = StyleSheet.create({
     sectionHeader: {
         color: COLORS.TEXT_SECONDARY,
         fontSize: 12,
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
         marginBottom: 10,
         letterSpacing: 1,
         marginTop: 10,
@@ -334,7 +534,7 @@ const styles = StyleSheet.create({
     },
     menuLabel: {
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
         marginBottom: 2,
     },
@@ -357,7 +557,7 @@ const styles = StyleSheet.create({
     badgeText: {
         color: '#60A5FA', // Light Blue
         fontSize: 12,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     logoutButton: {
         borderWidth: 1,
@@ -371,7 +571,7 @@ const styles = StyleSheet.create({
     logoutText: {
         color: '#F87171', // Red text
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     footer: {
         alignItems: 'center',
@@ -404,7 +604,7 @@ const styles = StyleSheet.create({
     },
     modalTitle: {
         fontSize: 20,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
         marginBottom: 12,
     },
@@ -431,7 +631,7 @@ const styles = StyleSheet.create({
     },
     cancelButtonText: {
         color: COLORS.TEXT_SECONDARY,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         fontSize: 16,
     },
     confirmButton: {
@@ -441,9 +641,110 @@ const styles = StyleSheet.create({
     },
     confirmButtonText: {
         color: '#F87171', // Red
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
         fontSize: 16,
-    }
+    },
+    // Edit Modal Styles
+    editModalContent: {
+        width: '90%',
+        maxHeight: '80%',
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: 24,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    editModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    closeButton: {
+        padding: 4,
+    },
+    inputGroup: {
+        marginBottom: 20,
+    },
+    inputLabel: {
+        fontSize: 14,
+        fontFamily: FONTS.BOLD,
+        color: COLORS.TEXT_SECONDARY,
+        marginBottom: 8,
+    },
+    textInput: {
+        backgroundColor: '#2A2A2A',
+        borderRadius: 12,
+        padding: 16,
+        fontSize: 16,
+        color: COLORS.WHITE,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    dateInput: {
+        backgroundColor: '#2A2A2A',
+        borderRadius: 12,
+        padding: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    dateText: {
+        fontSize: 16,
+        color: COLORS.WHITE,
+    },
+    datePlaceholder: {
+        fontSize: 16,
+        color: COLORS.TEXT_MUTED,
+    },
+    datePickerContainer: {
+        backgroundColor: '#2A2A2A',
+        borderRadius: 12,
+        marginBottom: 20,
+        overflow: 'hidden',
+    },
+    datePickerDone: {
+        alignItems: 'center',
+        padding: 12,
+        borderTopWidth: 1,
+        borderTopColor: COLORS.CARD_BORDER,
+    },
+    datePickerDoneText: {
+        color: COLORS.GOLD,
+        fontSize: 16,
+        fontFamily: FONTS.BOLD,
+    },
+    readOnlyInput: {
+        backgroundColor: '#1A1A1A',
+        borderRadius: 12,
+        padding: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    readOnlyText: {
+        fontSize: 16,
+        color: COLORS.TEXT_MUTED,
+    },
+    saveButton: {
+        backgroundColor: COLORS.GOLD,
+        borderRadius: 12,
+        paddingVertical: 16,
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    saveButtonDisabled: {
+        opacity: 0.6,
+    },
+    saveButtonText: {
+        color: COLORS.BACKGROUND,
+        fontSize: 16,
+        fontFamily: FONTS.BOLD,
+    },
 });
 
 export default ProfileScreen;

@@ -38,8 +38,7 @@ class PlaidService {
     /**
      * Create a Link token for update mode (re-authentication)
      * Used when ITEM_LOGIN_REQUIRED error occurs
-     * @param {string} userId - User ID
-     * @param {string} accessToken - Existing Plaid access token that needs refresh
+     * @param {string} user* @param {string} accessToken - Existing Plaid access token that needs refresh
      */
     async createUpdateLinkToken(userId, accessToken) {
         if (!process.env.PLAID_CLIENT_ID) throw new Error("Missing Plaid Keys");

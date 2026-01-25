@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import { api } from '../services/api';
 import cache from '../services/cache';
 import CustomAlert from '../components/CustomAlert';
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     },
     appName: {
         fontSize: 32,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
         marginBottom: 8,
     },
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#D4AF37', // Gold
         letterSpacing: 3,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     card: {
         backgroundColor: '#1E293B', // Slate 800
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     },
     welcomeText: {
         fontSize: 24,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
         textAlign: 'center',
         marginBottom: 8,
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     inputLabel: {
         fontSize: 14,
         color: COLORS.WHITE,
-        fontWeight: '500',
+        fontFamily: FONTS.MEDIUM,
     },
     inputContainer: {
         flexDirection: 'row',
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     loginButtonText: {
         color: '#1E293B',
         fontSize: 16,
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
     },
     dividerContainer: {
         flexDirection: 'row',
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     },
     footerLink: {
         color: COLORS.WHITE,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         fontSize: 14,
     },
 });

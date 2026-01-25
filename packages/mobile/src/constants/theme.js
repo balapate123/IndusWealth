@@ -25,8 +25,9 @@ export const COLORS = {
 };
 
 export const FONTS = {
-    BOLD: 'System',
-    REGULAR: 'System',
+    BOLD: 'SpaceGrotesk_700Bold',
+    REGULAR: 'SpaceGrotesk_400Regular',
+    MEDIUM: 'SpaceGrotesk_500Medium',
 };
 
 export const SPACING = {

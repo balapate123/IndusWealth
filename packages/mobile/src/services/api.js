@@ -269,9 +269,9 @@ export const api = {
             await cache.logout();
         },
 
-        updateProfile: (name) => apiRequest('/users/profile', {
+        updateProfile: (data) => apiRequest('/users/profile', {
             method: 'PUT',
-            body: JSON.stringify({ name }),
+            body: JSON.stringify(data),
         }),
 
         changePassword: (currentPassword, newPassword) => apiRequest('/users/password', {

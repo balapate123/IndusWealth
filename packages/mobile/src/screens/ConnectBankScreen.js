@@ -16,7 +16,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { create, open, dismissLink, LinkSuccess, LinkExit } from 'react-native-plaid-link-sdk';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import { api } from '../services/api';
 import cache from '../services/cache';
 import CustomAlert from '../components/CustomAlert';
@@ -529,12 +529,12 @@ const styles = StyleSheet.create({
     skipText: {
         color: '#94A3B8',
         fontSize: 14,
-        fontWeight: '500',
+        fontFamily: FONTS.MEDIUM,
     },
     headerTitle: {
         color: COLORS.WHITE,
         fontSize: 17,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     content: {
         padding: SPACING.LARGE,
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 28,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
         marginBottom: 12,
     },
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
     },
     brandText: {
         color: '#D4AF37',
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     bankGrid: {
         flexDirection: 'row',
@@ -585,7 +585,7 @@ const styles = StyleSheet.create({
     },
     bankName: {
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
         marginBottom: 4,
     },
@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
     securityText: {
         color: '#4CAF50',
         fontSize: 13,
-        fontWeight: '500',
+        fontFamily: FONTS.MEDIUM,
         marginLeft: 8,
     },
     buttonContainer: {
@@ -642,14 +642,14 @@ const styles = StyleSheet.create({
     buttonText: {
         color: '#FFF',
         fontSize: 16,
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
     },
     poweredBy: {
         textAlign: 'center',
         color: '#64748B',
         fontSize: 11,
         letterSpacing: 1.5,
-        fontWeight: '500',
+        fontFamily: FONTS.MEDIUM,
     },
     // Modal styles
     modalOverlay: {
@@ -674,7 +674,7 @@ const styles = StyleSheet.create({
     },
     modalTitle: {
         fontSize: 18,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
     },
     searchInputContainer: {
@@ -744,7 +744,7 @@ const styles = StyleSheet.create({
     },
     successTitle: {
         fontSize: 28,
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
         marginBottom: 12,
     },
@@ -766,7 +766,7 @@ const styles = StyleSheet.create({
     },
     successButtonText: {
         fontSize: 16,
-        fontWeight: '700',
+        fontFamily: FONTS.BOLD,
         color: '#0A0A0A',
     },
 });

@@ -11,7 +11,7 @@ import {
     RefreshControl,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import api from '../services/api';
 
 const CATEGORIES = [
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     headerTitle: {
         color: COLORS.WHITE,
         fontSize: 18,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     settingsButton: {
         padding: SPACING.SMALL,
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     flagsText: {
         color: COLORS.WHITE,
         fontSize: 12,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     savingsLabel: {
         color: COLORS.TEXT_SECONDARY,
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     savingsAmount: {
         color: '#4ADE80',
         fontSize: 42,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
         marginBottom: SPACING.SMALL,
     },
     infoRow: {
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         color: COLORS.WHITE,
         fontSize: 18,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     viewAllText: {
         color: '#3B82F6',
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     },
     logoText: {
         fontSize: 16,
-        fontWeight: 'bold',
+        fontFamily: FONTS.BOLD,
     },
     expenseContent: {
         flex: 1,
@@ -468,13 +468,13 @@ const styles = StyleSheet.create({
     expenseName: {
         color: COLORS.WHITE,
         fontSize: 15,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
         flex: 1,
     },
     expenseAmount: {
         color: COLORS.WHITE,
         fontSize: 15,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     expenseDetails: {
         color: COLORS.TEXT_SECONDARY,
@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
     negotiateText: {
         color: COLORS.WHITE,
         fontSize: 12,
-        fontWeight: '600',
+        fontFamily: FONTS.BOLD,
     },
     stopButton: {
         flexDirection: 'row',

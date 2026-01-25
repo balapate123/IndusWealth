@@ -47,6 +47,14 @@ const initDb = async () => {
             await pool.query(debSql);
         }
 
+        // Run user DOB migration
+        const dobSqlPath = path.join(__dirname, '../../db/add_user_dob.sql');
+        if (fs.existsSync(dobSqlPath)) {
+            const dobSql = fs.readFileSync(dobSqlPath, 'utf8');
+            console.log('🔄 Running user DOB migration...');
+            await pool.query(dobSql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);
@@ -74,7 +82,7 @@ const createUser = async (email, passwordHash, name) => {
 
 const getUserByEmail = async (email) => {
     const result = await pool.query(
-        `SELECT id, email, password_hash, name, plaid_access_token, plaid_item_id, created_at 
+        `SELECT id, email, password_hash, name, date_of_birth, plaid_access_token, plaid_item_id, created_at
          FROM users WHERE email = $1`,
         [email]
     );
@@ -83,7 +91,7 @@ const getUserByEmail = async (email) => {
 
 const getUserById = async (userId) => {
     const result = await pool.query(
-        `SELECT id, email, name, plaid_access_token, plaid_item_id, created_at 
+        `SELECT id, email, name, date_of_birth, plaid_access_token, plaid_item_id, created_at
          FROM users WHERE id = $1`,
         [userId]
     );

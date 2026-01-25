@@ -147,6 +147,7 @@ router.get('/me', authenticateToken, async (req, res, next) => {
                 id: user.id,
                 email: user.email,
                 name: user.name,
+                dateOfBirth: user.date_of_birth,
                 hasPlaidLinked: !!user.plaid_access_token,
                 createdAt: user.created_at,
             }
@@ -171,23 +172,67 @@ router.post('/logout', authenticateToken, async (req, res, next) => {
 });
 
 // PUT /users/profile
-// Update user profile
+// Update user profile (name and/or date of birth)
 router.put('/profile', authenticateToken, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
     logger.info('Updating user profile', ctx);
 
     try {
-        const { name } = req.body;
+        const { name, dateOfBirth } = req.body;
         const userId = req.user.id;
 
-        if (!name || name.trim().length === 0) {
-            throw new ValidationError('Name is required', { field: 'name' });
+        // At least one field must be provided
+        if ((!name || name.trim().length === 0) && !dateOfBirth) {
+            throw new ValidationError('At least name or date of birth is required', {
+                fields: ['name', 'dateOfBirth']
+            });
         }
+
+        // Build dynamic update query
+        const updates = [];
+        const values = [];
+        let paramIndex = 1;
+
+        if (name && name.trim().length > 0) {
+            updates.push(`name = $${paramIndex}`);
+            values.push(name.trim());
+            paramIndex++;
+        }
+
+        if (dateOfBirth) {
+            // Validate date format (YYYY-MM-DD)
+            const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+            if (!dateRegex.test(dateOfBirth)) {
+                throw new ValidationError('Invalid date format. Use YYYY-MM-DD', {
+                    field: 'dateOfBirth'
+                });
+            }
+            // Validate it's a valid date
+            const parsedDate = new Date(dateOfBirth);
+            if (isNaN(parsedDate.getTime())) {
+                throw new ValidationError('Invalid date', { field: 'dateOfBirth' });
+            }
+            // Validate reasonable age (between 13 and 120 years old)
+            const today = new Date();
+            const age = today.getFullYear() - parsedDate.getFullYear();
+            if (age < 13 || age > 120) {
+                throw new ValidationError('Please enter a valid date of birth', {
+                    field: 'dateOfBirth'
+                });
+            }
+
+            updates.push(`date_of_birth = $${paramIndex}`);
+            values.push(dateOfBirth);
+            paramIndex++;
+        }
+
+        updates.push('updated_at = NOW()');
+        values.push(userId);
 
         // Update user in database
         await db.pool.query(
-            'UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2',
-            [name.trim(), userId]
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+            values
         );
 
         logger.info('User profile updated', ctx);
