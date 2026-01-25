@@ -278,6 +278,11 @@ export const api = {
             method: 'PUT',
             body: JSON.stringify({ currentPassword, newPassword }),
         }),
+
+        deleteAccount: (password) => apiRequest('/users/account', {
+            method: 'DELETE',
+            body: JSON.stringify({ password }),
+        }),
     },
 
     // Accounts & Balance

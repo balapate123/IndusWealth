@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { create, open } from 'react-native-plaid-link-sdk';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import api from '../services/api';
 import cache from '../services/cache';
@@ -95,6 +96,8 @@ const HomeScreen = ({ navigation }) => {
     const [userName, setUserName] = useState('User');
     const [selectedTransaction, setSelectedTransaction] = useState(null);
     const [showTransactionModal, setShowTransactionModal] = useState(false);
+    const [plaidStatus, setPlaidStatus] = useState('unknown');
+    const [reAuthLoading, setReAuthLoading] = useState(false);
 
     // Format transactions for display
     const formatTransactions = (rawTransactions) => {
@@ -171,6 +174,10 @@ const HomeScreen = ({ navigation }) => {
                 setTransactions(formatTransactions(transactionsData.data));
                 // Cache the raw transactions data
                 await cache.setCachedTransactions(transactionsData.data);
+                // Track Plaid status for re-auth banner
+                if (transactionsData.plaid_status) {
+                    setPlaidStatus(transactionsData.plaid_status);
+                }
             }
         } catch (err) {
             console.error('Error fetching data:', err);
@@ -201,6 +208,46 @@ const HomeScreen = ({ navigation }) => {
             setLastPullTime(now);
         }
     }, [loadData, lastPullTime]);
+
+    // Handle Plaid re-authentication - opens Plaid Link in update mode
+    const handleReAuthenticate = async () => {
+        setReAuthLoading(true);
+        try {
+            // Get update mode link token from backend
+            console.log('🔄 Getting update mode link token...');
+            const result = await api.createUpdateLinkToken();
+
+            if (!result?.link_token) {
+                console.error('Failed to get update link token');
+                setReAuthLoading(false);
+                return;
+            }
+
+            console.log('✅ Got update link token, opening Plaid Link...');
+
+            // Create and open Plaid Link in update mode
+            await create({
+                token: result.link_token,
+            });
+
+            await open({
+                onSuccess: async (success) => {
+                    console.log('🎉 Plaid Link update success!');
+                    setPlaidStatus('success');
+                    // Refresh data after successful re-authentication
+                    loadData(true);
+                    setReAuthLoading(false);
+                },
+                onExit: (exit) => {
+                    console.log('📤 Plaid Link exited:', exit?.error?.displayMessage || 'User cancelled');
+                    setReAuthLoading(false);
+                },
+            });
+        } catch (err) {
+            console.error('Re-auth error:', err);
+            setReAuthLoading(false);
+        }
+    };
 
     // Helper functions
     const isDateToday = (dateStr) => {
@@ -485,6 +532,30 @@ const HomeScreen = ({ navigation }) => {
                             <Text style={styles.connectPromptText}>Connect Account</Text>
                         </TouchableOpacity>
                     </View>
+                )}
+
+                {/* Re-authentication Banner */}
+                {plaidStatus === 'login_required' && (
+                    <TouchableOpacity
+                        style={styles.reAuthBanner}
+                        onPress={handleReAuthenticate}
+                        disabled={reAuthLoading}
+                    >
+                        <View style={styles.reAuthContent}>
+                            <Ionicons name="alert-circle" size={24} color="#FFA726" />
+                            <View style={styles.reAuthTextContainer}>
+                                <Text style={styles.reAuthTitle}>Bank Connection Expired</Text>
+                                <Text style={styles.reAuthSubtitle}>
+                                    Tap to re-authenticate and sync your latest transactions
+                                </Text>
+                            </View>
+                        </View>
+                        {reAuthLoading ? (
+                            <ActivityIndicator size="small" color="#FFA726" />
+                        ) : (
+                            <Ionicons name="chevron-forward" size={20} color="#FFA726" />
+                        )}
+                    </TouchableOpacity>
                 )}
 
                 {/* Error Message */}
@@ -921,6 +992,39 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '600',
         marginLeft: 4,
+    },
+
+    // Re-authentication Banner
+    reAuthBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+        padding: SPACING.MEDIUM,
+        backgroundColor: 'rgba(255, 167, 38, 0.1)',
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 167, 38, 0.3)',
+    },
+    reAuthContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    reAuthTextContainer: {
+        marginLeft: SPACING.SMALL,
+        flex: 1,
+    },
+    reAuthTitle: {
+        color: '#FFA726',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    reAuthSubtitle: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 12,
+        marginTop: 2,
     },
 
     // Error

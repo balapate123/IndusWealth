@@ -302,4 +302,66 @@ router.put('/password', authenticateToken, async (req, res, next) => {
     }
 });
 
+// DELETE /users/account
+// Permanently delete user account and all associated data
+router.delete('/account', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    logger.info('Account deletion requested', ctx);
+
+    try {
+        const { password } = req.body;
+        const userId = req.user.id;
+
+        if (!password) {
+            throw new ValidationError('Password is required to delete account', {
+                field: 'password'
+            });
+        }
+
+        // Get user with password hash
+        const user = await db.getUserByEmail(req.user.email);
+
+        if (!user) {
+            throw new NotFoundError('User');
+        }
+
+        // Verify password
+        const isValid = await bcrypt.compare(password, user.password_hash);
+        if (!isValid) {
+            logger.warn('Account deletion failed - invalid password', ctx);
+            throw new AuthError('Incorrect password', 'INVALID_PASSWORD');
+        }
+
+        // Delete all user data in order (respecting foreign key constraints)
+        // 1. Delete transactions
+        await db.pool.query('DELETE FROM transactions WHERE user_id = $1', [userId]);
+
+        // 2. Delete accounts
+        await db.pool.query('DELETE FROM accounts WHERE user_id = $1', [userId]);
+
+        // 3. Delete sync logs
+        await db.pool.query('DELETE FROM sync_log WHERE user_id = $1', [userId]);
+
+        // 4. Delete custom debts
+        await db.pool.query('DELETE FROM custom_debts WHERE user_id = $1', [userId]);
+
+        // 5. Delete apr overrides
+        await db.pool.query('DELETE FROM apr_overrides WHERE user_id = $1', [userId]);
+
+        // 6. Finally delete the user
+        await db.pool.query('DELETE FROM users WHERE id = $1', [userId]);
+
+        logger.info('Account deleted successfully', ctx);
+
+        res.json({
+            success: true,
+            message: 'Account deleted successfully',
+            requestId: req.requestId
+        });
+    } catch (error) {
+        logger.error('Failed to delete account', { ...ctx, error });
+        next(error);
+    }
+});
+
 module.exports = router;

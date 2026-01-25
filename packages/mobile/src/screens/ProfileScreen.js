@@ -8,17 +8,17 @@ import {
     ScrollView,
     Switch,
     StatusBar,
-    Alert,
+    Alert, // Keep for fallback if needed, or remove if fully replaced. Kept for safety, though unused for main flows now.
     Modal,
     TextInput,
     ActivityIndicator,
     Platform
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import cache from '../services/cache';
 import api from '../services/api';
+import CustomAlert from '../components/CustomAlert';
 
 const ProfileScreen = ({ navigation }) => {
     const [user, setUser] = useState({ name: 'User', email: 'user@example.com' });
@@ -26,16 +26,46 @@ const ProfileScreen = ({ navigation }) => {
     const [darkThemeEnabled, setDarkThemeEnabled] = useState(true);
     const [logoutModalVisible, setLogoutModalVisible] = useState(false);
     const [editModalVisible, setEditModalVisible] = useState(false);
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [deletePassword, setDeletePassword] = useState('');
+    const [showDeletePassword, setShowDeletePassword] = useState(false);
+
+    // Alert state
+    const [alertConfig, setAlertConfig] = useState({
+        visible: false,
+        title: '',
+        message: '',
+        buttons: []
+    });
 
     // Edit form state
     const [editName, setEditName] = useState('');
     const [editDob, setEditDob] = useState(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
 
+    // Date picker state
+    const [selectedYear, setSelectedYear] = useState(2000);
+    const [selectedMonth, setSelectedMonth] = useState(1);
+    const [selectedDay, setSelectedDay] = useState(1);
+
     useEffect(() => {
         loadUser();
     }, []);
+
+    const showAlert = (title, message, buttons = []) => {
+        setAlertConfig({
+            visible: true,
+            title,
+            message,
+            buttons
+        });
+    };
+
+    const hideAlert = () => {
+        setAlertConfig(prev => ({ ...prev, visible: false }));
+    };
 
     const loadUser = async () => {
         // Try cache first
@@ -73,20 +103,68 @@ const ProfileScreen = ({ navigation }) => {
         });
     };
 
+    const handleDeleteAccount = () => {
+        setDeletePassword('');
+        setShowDeletePassword(false);
+        setDeleteModalVisible(true);
+    };
+
+    const confirmDeleteAccount = async () => {
+        if (!deletePassword.trim()) {
+            showAlert('Error', 'Please enter your password to confirm deletion', [
+                { text: 'OK', onPress: hideAlert }
+            ]);
+            return;
+        }
+
+        setDeleting(true);
+        try {
+            const response = await api.auth.deleteAccount(deletePassword);
+            if (response.success) {
+                setDeleteModalVisible(false);
+                // Clear session
+                await cache.clearUserCache();
+                // Reset Global User ID
+                global.CURRENT_USER_ID = undefined;
+                // Navigate to Auth Stack
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Auth' }],
+                });
+            }
+        } catch (error) {
+            console.error('Failed to delete account:', error);
+            showAlert('Error', error.message || 'Failed to delete account. Please check your password and try again.', [
+                { text: 'OK', onPress: hideAlert }
+            ]);
+        } finally {
+            setDeleting(false);
+        }
+    };
+
     const openEditModal = () => {
         setEditName(user.name || '');
         // Parse existing DOB if available
         if (user.dateOfBirth) {
-            setEditDob(new Date(user.dateOfBirth));
+            const date = new Date(user.dateOfBirth);
+            setEditDob(date);
+            setSelectedYear(date.getFullYear());
+            setSelectedMonth(date.getMonth() + 1);
+            setSelectedDay(date.getDate());
         } else {
             setEditDob(null);
+            setSelectedYear(2000);
+            setSelectedMonth(1);
+            setSelectedDay(1);
         }
         setEditModalVisible(true);
     };
 
     const handleSaveProfile = async () => {
         if (!editName.trim()) {
-            Alert.alert('Error', 'Please enter your name');
+            showAlert('Error', 'Please enter your name', [
+                { text: 'OK', onPress: hideAlert }
+            ]);
             return;
         }
 
@@ -109,24 +187,45 @@ const ProfileScreen = ({ navigation }) => {
                 setUser(updatedUser);
                 await cache.setCachedUser(updatedUser);
                 setEditModalVisible(false);
-                Alert.alert('Success', 'Profile updated successfully');
+                setTimeout(() => {
+                    showAlert('Success', 'Profile updated successfully', [
+                        { text: 'OK', onPress: hideAlert }
+                    ]);
+                }, 500); // Small delay to allow modal to close smoothly
             }
         } catch (error) {
             console.error('Failed to update profile:', error);
-            Alert.alert('Error', error.message || 'Failed to update profile');
+            showAlert('Error', error.message || 'Failed to update profile', [
+                { text: 'OK', onPress: hideAlert }
+            ]);
         } finally {
             setSaving(false);
         }
     };
 
-    const handleDateChange = (event, selectedDate) => {
-        if (Platform.OS === 'android') {
-            setShowDatePicker(false);
-        }
-        if (selectedDate) {
-            setEditDob(selectedDate);
-        }
+    const confirmDateSelection = () => {
+        const date = new Date(selectedYear, selectedMonth - 1, selectedDay);
+        setEditDob(date);
+        setShowDatePicker(false);
     };
+
+    const years = Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i);
+    const months = [
+        { value: 1, label: 'January' },
+        { value: 2, label: 'February' },
+        { value: 3, label: 'March' },
+        { value: 4, label: 'April' },
+        { value: 5, label: 'May' },
+        { value: 6, label: 'June' },
+        { value: 7, label: 'July' },
+        { value: 8, label: 'August' },
+        { value: 9, label: 'September' },
+        { value: 10, label: 'October' },
+        { value: 11, label: 'November' },
+        { value: 12, label: 'December' },
+    ];
+    const getDaysInMonth = (year, month) => new Date(year, month, 0).getDate();
+    const days = Array.from({ length: getDaysInMonth(selectedYear, selectedMonth) }, (_, i) => i + 1);
 
     const formatDisplayDate = (dateString) => {
         if (!dateString) return 'Not set';
@@ -275,6 +374,47 @@ const ProfileScreen = ({ navigation }) => {
                     />
                 </View>
 
+                {/* Support & Legal */}
+                <Text style={styles.sectionHeader}>SUPPORT & LEGAL</Text>
+                <View style={styles.sectionCard}>
+                    <MenuItem
+                        icon="help-circle"
+                        label="Help & Support"
+                        subtitle="FAQs and contact us"
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="document-text"
+                        label="Privacy Policy"
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="newspaper"
+                        label="Terms of Service"
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="star"
+                        label="Rate IndusWealth"
+                        subtitle="Share your feedback"
+                    />
+                </View>
+
+                {/* Danger Zone */}
+                <Text style={styles.sectionHeader}>ACCOUNT</Text>
+                <View style={styles.sectionCard}>
+                    <TouchableOpacity style={styles.deleteAccountItem} onPress={handleDeleteAccount}>
+                        <View style={[styles.menuIconContainer, styles.deleteIconContainer]}>
+                            <Ionicons name="trash" size={22} color="#EF4444" />
+                        </View>
+                        <View style={styles.menuTextContainer}>
+                            <Text style={styles.deleteLabel}>Delete Account</Text>
+                            <Text style={styles.deleteSubtitle}>Permanently remove your data</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#64748B" />
+                    </TouchableOpacity>
+                </View>
+
                 {/* Logout Button */}
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
                     <Text style={styles.logoutText}>Log Out</Text>
@@ -336,27 +476,88 @@ const ProfileScreen = ({ navigation }) => {
                             </TouchableOpacity>
                         </View>
 
-                        {/* Date Picker */}
+                        {/* Custom Date Picker */}
                         {showDatePicker && (
                             <View style={styles.datePickerContainer}>
-                                <DateTimePicker
-                                    value={editDob || new Date(2000, 0, 1)}
-                                    mode="date"
-                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                    onChange={handleDateChange}
-                                    maximumDate={new Date()}
-                                    minimumDate={new Date(1900, 0, 1)}
-                                    textColor={COLORS.WHITE}
-                                    themeVariant="dark"
-                                />
-                                {Platform.OS === 'ios' && (
-                                    <TouchableOpacity
-                                        style={styles.datePickerDone}
-                                        onPress={() => setShowDatePicker(false)}
-                                    >
-                                        <Text style={styles.datePickerDoneText}>Done</Text>
-                                    </TouchableOpacity>
-                                )}
+                                <View style={styles.datePickerRow}>
+                                    {/* Month Picker */}
+                                    <View style={styles.pickerColumn}>
+                                        <Text style={styles.pickerLabel}>Month</Text>
+                                        <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
+                                            {months.map((month) => (
+                                                <TouchableOpacity
+                                                    key={month.value}
+                                                    style={[
+                                                        styles.pickerItem,
+                                                        selectedMonth === month.value && styles.pickerItemSelected
+                                                    ]}
+                                                    onPress={() => setSelectedMonth(month.value)}
+                                                >
+                                                    <Text style={[
+                                                        styles.pickerItemText,
+                                                        selectedMonth === month.value && styles.pickerItemTextSelected
+                                                    ]}>
+                                                        {month.label.substring(0, 3)}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+
+                                    {/* Day Picker */}
+                                    <View style={styles.pickerColumn}>
+                                        <Text style={styles.pickerLabel}>Day</Text>
+                                        <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
+                                            {days.map((day) => (
+                                                <TouchableOpacity
+                                                    key={day}
+                                                    style={[
+                                                        styles.pickerItem,
+                                                        selectedDay === day && styles.pickerItemSelected
+                                                    ]}
+                                                    onPress={() => setSelectedDay(day)}
+                                                >
+                                                    <Text style={[
+                                                        styles.pickerItemText,
+                                                        selectedDay === day && styles.pickerItemTextSelected
+                                                    ]}>
+                                                        {day}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+
+                                    {/* Year Picker */}
+                                    <View style={styles.pickerColumn}>
+                                        <Text style={styles.pickerLabel}>Year</Text>
+                                        <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
+                                            {years.map((year) => (
+                                                <TouchableOpacity
+                                                    key={year}
+                                                    style={[
+                                                        styles.pickerItem,
+                                                        selectedYear === year && styles.pickerItemSelected
+                                                    ]}
+                                                    onPress={() => setSelectedYear(year)}
+                                                >
+                                                    <Text style={[
+                                                        styles.pickerItemText,
+                                                        selectedYear === year && styles.pickerItemTextSelected
+                                                    ]}>
+                                                        {year}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+                                </View>
+                                <TouchableOpacity
+                                    style={styles.datePickerDone}
+                                    onPress={confirmDateSelection}
+                                >
+                                    <Text style={styles.datePickerDoneText}>Confirm</Text>
+                                </TouchableOpacity>
                             </View>
                         )}
 
@@ -415,10 +616,107 @@ const ProfileScreen = ({ navigation }) => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Delete Account Modal */}
+            <Modal
+                visible={deleteModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setDeleteModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.deleteModalContent}>
+                        <View style={styles.deleteModalHeader}>
+                            <View style={styles.deleteWarningIcon}>
+                                <Ionicons name="warning" size={32} color="#EF4444" />
+                            </View>
+                            <Text style={styles.deleteModalTitle}>Delete Account</Text>
+                        </View>
+
+                        <Text style={styles.deleteModalMessage}>
+                            This action is permanent and cannot be undone. All your data will be permanently deleted including:
+                        </Text>
+
+                        <View style={styles.deleteWarningList}>
+                            <View style={styles.deleteWarningItem}>
+                                <Ionicons name="close-circle" size={16} color="#EF4444" />
+                                <Text style={styles.deleteWarningText}>Linked bank accounts</Text>
+                            </View>
+                            <View style={styles.deleteWarningItem}>
+                                <Ionicons name="close-circle" size={16} color="#EF4444" />
+                                <Text style={styles.deleteWarningText}>Transaction history</Text>
+                            </View>
+                            <View style={styles.deleteWarningItem}>
+                                <Ionicons name="close-circle" size={16} color="#EF4444" />
+                                <Text style={styles.deleteWarningText}>Debt tracking data</Text>
+                            </View>
+                            <View style={styles.deleteWarningItem}>
+                                <Ionicons name="close-circle" size={16} color="#EF4444" />
+                                <Text style={styles.deleteWarningText}>All personal information</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.deleteInputGroup}>
+                            <Text style={styles.deleteInputLabel}>Enter your password to confirm</Text>
+                            <View style={styles.passwordInputContainer}>
+                                <TextInput
+                                    style={styles.deletePasswordInput}
+                                    value={deletePassword}
+                                    onChangeText={setDeletePassword}
+                                    placeholder="Enter password"
+                                    placeholderTextColor={COLORS.TEXT_MUTED}
+                                    secureTextEntry={!showDeletePassword}
+                                    autoCapitalize="none"
+                                />
+                                <TouchableOpacity
+                                    style={styles.passwordToggle}
+                                    onPress={() => setShowDeletePassword(!showDeletePassword)}
+                                >
+                                    <Ionicons
+                                        name={showDeletePassword ? "eye-off" : "eye"}
+                                        size={20}
+                                        color={COLORS.TEXT_MUTED}
+                                    />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity
+                                style={styles.deleteCancelButton}
+                                onPress={() => setDeleteModalVisible(false)}
+                                disabled={deleting}
+                            >
+                                <Text style={styles.deleteCancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.deleteConfirmButton, deleting && styles.deleteButtonDisabled]}
+                                onPress={confirmDeleteAccount}
+                                disabled={deleting}
+                            >
+                                {deleting ? (
+                                    <ActivityIndicator color={COLORS.WHITE} size="small" />
+                                ) : (
+                                    <Text style={styles.deleteConfirmButtonText}>Delete Account</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Custom Alert Component */}
+            <CustomAlert
+                visible={alertConfig.visible}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                buttons={alertConfig.buttons}
+                onRequestClose={hideAlert}
+            />
         </View>
     );
 };
-
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -704,12 +1002,51 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         marginBottom: 20,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    datePickerRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        padding: 12,
+    },
+    pickerColumn: {
+        flex: 1,
+        marginHorizontal: 4,
+    },
+    pickerLabel: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 12,
+        fontFamily: FONTS.BOLD,
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    pickerScroll: {
+        maxHeight: 150,
+    },
+    pickerItem: {
+        paddingVertical: 8,
+        paddingHorizontal: 4,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    pickerItemSelected: {
+        backgroundColor: COLORS.GOLD,
+    },
+    pickerItemText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 14,
+    },
+    pickerItemTextSelected: {
+        color: COLORS.BACKGROUND,
+        fontFamily: FONTS.BOLD,
     },
     datePickerDone: {
         alignItems: 'center',
-        padding: 12,
+        padding: 14,
         borderTopWidth: 1,
         borderTopColor: COLORS.CARD_BORDER,
+        backgroundColor: 'rgba(201, 162, 39, 0.1)',
     },
     datePickerDoneText: {
         color: COLORS.GOLD,
@@ -744,6 +1081,139 @@ const styles = StyleSheet.create({
         color: COLORS.BACKGROUND,
         fontSize: 16,
         fontFamily: FONTS.BOLD,
+    },
+    // Delete Account Styles
+    deleteAccountItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 4,
+    },
+    deleteIconContainer: {
+        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    },
+    deleteLabel: {
+        fontSize: 16,
+        fontFamily: FONTS.BOLD,
+        color: '#EF4444',
+        marginBottom: 2,
+    },
+    deleteSubtitle: {
+        fontSize: 12,
+        color: COLORS.TEXT_SECONDARY,
+    },
+    // Delete Modal Styles
+    deleteModalContent: {
+        width: '90%',
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: 24,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    deleteModalHeader: {
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    deleteWarningIcon: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    deleteModalTitle: {
+        fontSize: 22,
+        fontFamily: FONTS.BOLD,
+        color: COLORS.WHITE,
+    },
+    deleteModalMessage: {
+        fontSize: 14,
+        color: COLORS.TEXT_SECONDARY,
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: 16,
+    },
+    deleteWarningList: {
+        backgroundColor: 'rgba(239, 68, 68, 0.08)',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 20,
+    },
+    deleteWarningItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    deleteWarningText: {
+        fontSize: 14,
+        color: COLORS.TEXT_SECONDARY,
+        marginLeft: 10,
+    },
+    deleteInputGroup: {
+        marginBottom: 20,
+    },
+    deleteInputLabel: {
+        fontSize: 14,
+        fontFamily: FONTS.BOLD,
+        color: COLORS.TEXT_SECONDARY,
+        marginBottom: 8,
+    },
+    passwordInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#2A2A2A',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    deletePasswordInput: {
+        flex: 1,
+        padding: 16,
+        fontSize: 16,
+        color: COLORS.WHITE,
+    },
+    passwordToggle: {
+        padding: 16,
+    },
+    deleteModalActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    deleteCancelButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginRight: 8,
+        backgroundColor: 'transparent',
+    },
+    deleteCancelButtonText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontFamily: FONTS.BOLD,
+        fontSize: 16,
+    },
+    deleteConfirmButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginLeft: 8,
+        backgroundColor: '#EF4444',
+    },
+    deleteButtonDisabled: {
+        opacity: 0.6,
+    },
+    deleteConfirmButtonText: {
+        color: COLORS.WHITE,
+        fontFamily: FONTS.BOLD,
+        fontSize: 16,
     },
 });
 
