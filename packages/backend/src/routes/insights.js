@@ -8,7 +8,7 @@ const router = express.Router();
 const { pool } = require('../services/db');
 const { getUserFinancialSummary } = require('../services/insight_data');
 const { generateInsights } = require('../services/ai_insights');
-const authenticateToken = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 
 /**
  * GET /api/insights
