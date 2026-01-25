@@ -332,23 +332,8 @@ router.delete('/account', authenticateToken, async (req, res, next) => {
             throw new AuthError('Incorrect password', 'INVALID_PASSWORD');
         }
 
-        // Delete all user data in order (respecting foreign key constraints)
-        // 1. Delete transactions
-        await db.pool.query('DELETE FROM transactions WHERE user_id = $1', [userId]);
-
-        // 2. Delete accounts
-        await db.pool.query('DELETE FROM accounts WHERE user_id = $1', [userId]);
-
-        // 3. Delete sync logs
-        await db.pool.query('DELETE FROM sync_log WHERE user_id = $1', [userId]);
-
-        // 4. Delete custom debts
-        await db.pool.query('DELETE FROM custom_debts WHERE user_id = $1', [userId]);
-
-        // 5. Delete apr overrides
-        await db.pool.query('DELETE FROM apr_overrides WHERE user_id = $1', [userId]);
-
-        // 6. Finally delete the user
+        // Delete user - related data (accounts, transactions, sync_log) will be
+        // automatically deleted via ON DELETE CASCADE foreign key constraints
         await db.pool.query('DELETE FROM users WHERE id = $1', [userId]);
 
         logger.info('Account deleted successfully', ctx);
