@@ -13,5 +13,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "devDependencies": {
+    "docx": "^9.5.1",
+    "marked": "^17.0.1"
+  }
 }
