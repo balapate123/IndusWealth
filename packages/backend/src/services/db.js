@@ -55,6 +55,14 @@ const initDb = async () => {
             await pool.query(dobSql);
         }
 
+        // Run AI insights migration
+        const aiInsightsSqlPath = path.join(__dirname, '../../db/add_ai_insights.sql');
+        if (fs.existsSync(aiInsightsSqlPath)) {
+            const aiInsightsSql = fs.readFileSync(aiInsightsSqlPath, 'utf8');
+            console.log('🔄 Running AI insights migration...');
+            await pool.query(aiInsightsSql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);

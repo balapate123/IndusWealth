@@ -83,6 +83,7 @@ app.use('/accounts', require('./routes/accounts'));
 app.use('/watchdog', require('./routes/watchdog'));
 app.use('/users', require('./routes/users'));
 app.use('/analytics', require('./routes/analytics'));
+app.use('/insights', require('./routes/insights'));
 
 // Health check endpoint
 app.get('/', (req, res) => {
