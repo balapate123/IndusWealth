@@ -50,4 +50,6 @@ android/
 packages/backend/node_modules/
 
 # Other
+.claude/
+ai-insights/
 
