@@ -18,15 +18,29 @@ const refreshLimiter = rateLimit({
     message: { success: false, error: 'Rate limit exceeded. Please wait before refreshing again.' },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => `insights_refresh_${req.user.id}`,
-    skip: (req) => !req.query.force_refresh
+    keyGenerator: (req) => `insights_refresh_${req.user?.id || 'anonymous'}`,
+    skip: (req) => req.query.force_refresh !== 'true'
 });
 
 /**
  * GET /api/insights
  * Get personalized financial insights (with caching)
  */
-router.get('/', authenticateToken, refreshLimiter, async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
+    // Apply rate limiter only for force refresh
+    if (req.query.force_refresh === 'true') {
+        return refreshLimiter(req, res, async () => {
+            await handleInsightsRequest(req, res);
+        });
+    }
+
+    await handleInsightsRequest(req, res);
+});
+
+/**
+ * Handle insights request logic
+ */
+async function handleInsightsRequest(req, res) {
     try {
         const userId = req.user.id;
         const forceRefresh = req.query.force_refresh === 'true';
@@ -140,7 +154,7 @@ router.get('/', authenticateToken, refreshLimiter, async (req, res) => {
             details: error.message
         });
     }
-});
+}
 
 /**
  * POST /api/insights/dismiss
