@@ -51,17 +51,19 @@ const CATEGORY_ICONS = {
     'Milestone Celebrations': 'trophy',
 };
 
-const InsightsScreen = ({ navigation }) => {
+const InsightsScreen = ({ navigation, route }) => {
     const [insights, setInsights] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
     const [summary, setSummary] = useState('');
+    const [isFromBankConnection, setIsFromBankConnection] = useState(false);
+    const [retryCount, setRetryCount] = useState(0);
 
-    const loadInsights = useCallback(async (forceRefresh = false) => {
+    const loadInsights = useCallback(async (forceRefresh = false, isRetry = false) => {
         try {
             setError(null);
-            if (!forceRefresh) {
+            if (!forceRefresh && !isRetry) {
                 setLoading(true);
             }
 
@@ -70,19 +72,71 @@ const InsightsScreen = ({ navigation }) => {
             if (response.success && response.data) {
                 setInsights(response.data.insights || []);
                 setSummary(response.data.summary || '');
+                setRetryCount(0); // Reset retry count on success
             }
         } catch (err) {
             console.error('Failed to load insights:', err);
+
+            // If this is from a new bank connection and we have few/no insights, retry
+            if (isFromBankConnection && retryCount < 2) {
+                console.log(`Retrying insights load (attempt ${retryCount + 1}/2)...`);
+                setRetryCount(prev => prev + 1);
+                // Wait 3 seconds and retry
+                setTimeout(() => {
+                    loadInsights(true, true);
+                }, 3000);
+                return; // Don't set error or stop loading yet
+            }
+
             setError(err.parsedError?.message || 'Failed to load insights');
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (!isFromBankConnection || retryCount >= 2) {
+                setLoading(false);
+                setRefreshing(false);
+                setIsFromBankConnection(false);
+            }
         }
-    }, []);
+    }, [isFromBankConnection, retryCount]);
 
     useEffect(() => {
         loadInsights();
     }, [loadInsights]);
+
+    // Handle navigation from bank connection success
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('focus', () => {
+            // Check if we're coming from bank connection
+            if (route.params?.forceRefresh && route.params?.fromBankConnection) {
+                setIsFromBankConnection(true);
+                setLoading(true);
+                setRetryCount(0);
+
+                // First fetch transactions to ensure they're synced, then load insights
+                const syncAndLoadInsights = async () => {
+                    try {
+                        console.log('🔄 Syncing transactions before loading insights...');
+                        // Force fetch transactions first to populate the database
+                        await api.getTransactions('?refresh=true'); // force refresh
+                        console.log('✅ Transactions synced, now loading insights...');
+                        // Now load insights with the fresh data
+                        await loadInsights(true);
+                    } catch (err) {
+                        console.error('Error during sync and insights load:', err);
+                        setError('Failed to sync data. Please try again.');
+                        setLoading(false);
+                        setIsFromBankConnection(false);
+                    }
+                };
+
+                syncAndLoadInsights();
+
+                // Clear the params to avoid re-triggering
+                navigation.setParams({ forceRefresh: false, fromBankConnection: false });
+            }
+        });
+
+        return unsubscribe;
+    }, [navigation, route.params, loadInsights]);
 
     const handleRefresh = () => {
         setRefreshing(true);
@@ -247,7 +301,20 @@ const InsightsScreen = ({ navigation }) => {
                 </View>
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={COLORS.GOLD} />
-                    <Text style={styles.loadingText}>Analyzing your finances...</Text>
+                    <Text style={styles.loadingText}>
+                        {isFromBankConnection
+                            ? retryCount > 0
+                                ? 'Waiting for transactions to sync...'
+                                : 'Categorizing transactions and generating insights...'
+                            : 'Analyzing your finances...'}
+                    </Text>
+                    {isFromBankConnection && (
+                        <Text style={styles.loadingSubtext}>
+                            {retryCount > 0
+                                ? `Your bank is syncing data (${retryCount}/2)...`
+                                : 'This may take a moment as we analyze your financial data'}
+                        </Text>
+                    )}
                 </View>
             </View>
         );
@@ -395,6 +462,13 @@ const styles = StyleSheet.create({
     loadingText: {
         fontSize: 16,
         color: COLORS.TEXT_SECONDARY,
+    },
+    loadingSubtext: {
+        fontSize: 13,
+        color: COLORS.TEXT_MUTED,
+        textAlign: 'center',
+        maxWidth: '80%',
+        marginTop: SPACING.SMALL,
     },
     errorContainer: {
         flex: 1,

@@ -72,7 +72,7 @@ const CATEGORY_PATTERNS = {
         color: '#AF52DE'
     },
     'Subscriptions': {
-        keywords: ['NETFLIX', 'SPOTIFY', 'AUDIBLE', 'DISNEY+', 'AMAZON PRIME', 'APPLE MUSIC', 'YOUTUBE', 'CRAVE', 'XBOX GAME', 'MICROSOFT*XBOX'],
+        keywords: ['NETFLIX', 'SPOTIFY', 'AUDIBLE', 'DISNEY+', 'AMAZON PRIME', 'APPLE MUSIC', 'YOUTUBE', 'CRAVE', 'XBOX GAME', 'MICROSOFT*XBOX', 'HBO MAX', 'HULU', 'PEACE', 'CLAUDE'],
         icon: 'play-circle-outline',
         color: '#5856D6'
     },

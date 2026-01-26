@@ -137,13 +137,11 @@ const AnalyticsScreen = ({ navigation }) => {
     // Handle category click - fetch transactions for that category
     const handleCategoryPress = async (category) => {
         // Prevent double-triggering if already loading
-        if (loadingTransactions || categoryModalVisible) return;
+        if (loadingTransactions) return;
 
-        // Clear previous transactions immediately and show modal with loading
-        setCategoryTransactions([]);
+        // Set loading state and selected category, but don't open modal yet
         setSelectedCategory(category);
         setLoadingTransactions(true);
-        setCategoryModalVisible(true);
 
         try {
             // Use cached transactions instead of API call for consistency
@@ -153,9 +151,18 @@ const AnalyticsScreen = ({ navigation }) => {
             if (response?.success && response?.data) {
                 const targetCategory = normalizeCategory(category.category);
 
+                // Calculate date threshold based on selected period
+                const now = new Date();
+                const dateThreshold = new Date();
+                dateThreshold.setDate(now.getDate() - selectedPeriod);
+
                 const filtered = response.data.filter(tx => {
                     // Only include expenses (positive amounts in Plaid's convention)
                     if (parseFloat(tx.amount) <= 0) return false;
+
+                    // Filter by selected time period
+                    const txDate = new Date(tx.date);
+                    if (txDate < dateThreshold) return false;
 
                     // Get the transaction's category
                     let txCategoryName;
@@ -178,6 +185,8 @@ const AnalyticsScreen = ({ navigation }) => {
             console.error('Error fetching category transactions:', err);
         } finally {
             setLoadingTransactions(false);
+            // Open modal only after data is loaded - prevents flicker
+            setCategoryModalVisible(true);
         }
     };
 

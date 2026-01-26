@@ -184,11 +184,28 @@ const ConnectBankScreen = ({ navigation, route }) => {
                                     await cache.setCachedUser(cachedUser);
                                 }
 
+                                // Wait 2 seconds for Plaid to prepare data before navigating
+                                await new Promise(resolve => setTimeout(resolve, 2000));
+
                                 // Navigate based on context
                                 if (isOnboarding) {
+                                    // For onboarding, reset and navigate directly to Insights
                                     navigation.reset({
                                         index: 0,
-                                        routes: [{ name: 'Main' }],
+                                        routes: [
+                                            {
+                                                name: 'Main',
+                                                state: {
+                                                    routes: [
+                                                        {
+                                                            name: 'Insights',
+                                                            params: { forceRefresh: true, fromBankConnection: true }
+                                                        }
+                                                    ],
+                                                    index: 0
+                                                }
+                                            }
+                                        ],
                                     });
                                 } else {
                                     // Show custom success modal
@@ -468,7 +485,15 @@ const ConnectBankScreen = ({ navigation, route }) => {
                             style={styles.successButton}
                             onPress={() => {
                                 setSuccessModalVisible(false);
+                                // First go back to close the modal, then navigate to Insights
                                 navigation.goBack();
+                                // Use setTimeout to ensure modal is closed before navigation
+                                setTimeout(() => {
+                                    navigation.navigate('Insights', {
+                                        forceRefresh: true,
+                                        fromBankConnection: true
+                                    });
+                                }, 100);
                             }}
                         >
                             <LinearGradient
