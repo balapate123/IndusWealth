@@ -63,6 +63,14 @@ const initDb = async () => {
             await pool.query(aiInsightsSql);
         }
 
+        // Run AI categorization migration
+        const aiCategorizationSqlPath = path.join(__dirname, '../../db/add_ai_categorization.sql');
+        if (fs.existsSync(aiCategorizationSqlPath)) {
+            const aiCategorizationSql = fs.readFileSync(aiCategorizationSqlPath, 'utf8');
+            console.log('🔄 Running AI categorization migration...');
+            await pool.query(aiCategorizationSql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);
