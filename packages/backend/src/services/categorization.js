@@ -35,9 +35,9 @@ function getDBHelpers() {
             console.warn('DB helpers not available:', error.message);
             dbHelpers = {
                 getMerchantCategory: async () => null,
-                storeMerchantCategories: async () => {},
-                incrementCacheUsage: async () => {},
-                logAICategorization: async () => {}
+                storeMerchantCategories: async () => { },
+                incrementCacheUsage: async () => { },
+                logAICategorization: async () => { }
             };
         }
     }
@@ -67,7 +67,7 @@ const CATEGORY_PATTERNS = {
 
     // Entertainment
     'Entertainment': {
-        keywords: ['CINEPLEX', 'FAMOUS PLAYER', 'RESIDENT ADVISOR', 'THEATRE', 'CONCERT', 'TICKETMASTER', 'MOVIES'],
+        keywords: ['CINEPLEX', 'FAMOUS PLAYER', 'RESIDENT ADVISOR', 'THEATRE', 'CONCERT', 'TICKETMASTER', 'MOVIES', 'LCBO', 'WINE', 'BAR', 'PUB', 'LIQUOR', 'GAMING', 'GAMING'],
         icon: 'film-outline',
         color: '#AF52DE'
     },
