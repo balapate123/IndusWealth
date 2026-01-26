@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../services/db');
 const plaidService = require('../services/plaid');
 const { authenticateToken } = require('../middleware/auth');
-const { categorizeTransaction, getCategoryBreakdown } = require('../services/categorization');
+const { categorizeTransaction, getCategoryBreakdown, batchCategorizeWithAI } = require('../services/categorization');
 const { createLogger } = require('../services/logger');
 const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse, getPlaidStatusFromError } = require('../utils/responseHelper');
 
@@ -247,33 +247,64 @@ router.get('/', authenticateToken, async (req, res, next) => {
             return txDate >= prevStartDate && txDate < startDate;
         });
 
-        // Apply categorization to transactions
-        const categorizedTransactions = filteredTransactions.map(tx => {
-            const categoryInfo = categorizeTransaction(tx);
-            return {
-                ...tx,
-                category: (tx.category && tx.category.length > 0)
-                    ? tx.category
-                    : [categoryInfo.category],
-                categoryIcon: categoryInfo.icon,
-                categoryColor: categoryInfo.color
-            };
-        });
+        // Apply categorization to transactions (now async)
+        const categorizedTransactions = [];
+        const transactionsNeedingAI = [];
 
-        const prevCategorizedTransactions = previousPeriodTransactions.map(tx => {
-            const categoryInfo = categorizeTransaction(tx);
-            return {
+        for (const tx of filteredTransactions) {
+            const categoryInfo = await categorizeTransaction(tx);
+            categorizedTransactions.push({
                 ...tx,
                 category: (tx.category && tx.category.length > 0)
                     ? tx.category
                     : [categoryInfo.category],
                 categoryIcon: categoryInfo.icon,
-                categoryColor: categoryInfo.color
-            };
-        });
+                categoryColor: categoryInfo.color,
+                categorySource: categoryInfo.source
+            });
+
+            if (categoryInfo.needsAI) {
+                transactionsNeedingAI.push(tx);
+            }
+        }
+
+        const prevCategorizedTransactions = [];
+        for (const tx of previousPeriodTransactions) {
+            const categoryInfo = await categorizeTransaction(tx);
+            prevCategorizedTransactions.push({
+                ...tx,
+                category: (tx.category && tx.category.length > 0)
+                    ? tx.category
+                    : [categoryInfo.category],
+                categoryIcon: categoryInfo.icon,
+                categoryColor: categoryInfo.color,
+                categorySource: categoryInfo.source
+            });
+
+            if (categoryInfo.needsAI) {
+                transactionsNeedingAI.push(tx);
+            }
+        }
+
+        // Trigger background AI categorization (non-blocking)
+        if (transactionsNeedingAI.length > 0) {
+            logger.info('Triggering background AI categorization', {
+                ...ctx,
+                count: transactionsNeedingAI.length
+            });
+
+            // Run in background (don't await)
+            batchCategorizeWithAI(transactionsNeedingAI)
+                .then(() => {
+                    logger.info('Background AI categorization completed', { ...ctx });
+                })
+                .catch(err => {
+                    logger.error('Background AI categorization failed', { ...ctx, error: err });
+                });
+        }
 
         // Get category breakdown using our categorization
-        const categoryBreakdown = getCategoryBreakdown(categorizedTransactions);
+        const categoryBreakdown = await getCategoryBreakdown(categorizedTransactions);
 
         // Calculate totals
         const totalSpending = categoryBreakdown.reduce((sum, cat) => sum + cat.total, 0);

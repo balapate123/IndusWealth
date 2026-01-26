@@ -368,6 +368,16 @@ export const api = {
 
     // Account-specific transactions
     getAccountTransactions: (accountId) => apiRequest(`/transactions?account_id=${accountId}`),
+
+    // AI Insights
+    getInsights: (forceRefresh = false) =>
+        apiRequest(`/insights${forceRefresh ? '?force_refresh=true' : ''}`),
+
+    dismissInsight: (insightId) =>
+        apiRequest('/insights/dismiss', {
+            method: 'POST',
+            body: JSON.stringify({ insight_id: insightId }),
+        }),
 };
 
 // Check if user is authenticated

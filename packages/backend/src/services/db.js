@@ -384,6 +384,97 @@ const getMonthlySpending = async (userId, months = 6) => {
     return result.rows;
 };
 
+// ===================
+// AI Categorization Operations
+// ===================
+
+/**
+ * Get cached merchant category
+ */
+const getMerchantCategory = async (merchantNormalized) => {
+    const result = await pool.query(
+        `SELECT category, category_icon, category_color, confidence_score
+         FROM merchant_category_cache
+         WHERE merchant_normalized = $1
+           AND (cache_expires_at IS NULL OR cache_expires_at > NOW())`,
+        [merchantNormalized]
+    );
+    return result.rows[0] || null;
+};
+
+/**
+ * Store merchant categories in bulk (from AI)
+ */
+const storeMerchantCategories = async (categorizations) => {
+    if (!categorizations || categorizations.length === 0) return;
+
+    const values = [];
+    const params = [];
+    let paramIndex = 1;
+
+    categorizations.forEach(cat => {
+        values.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5})`);
+        params.push(
+            cat.merchant_normalized,
+            cat.category,
+            cat.category_icon,
+            cat.category_color,
+            cat.confidence_score,
+            cat.ai_model_used
+        );
+        paramIndex += 6;
+    });
+
+    const query = `
+        INSERT INTO merchant_category_cache
+            (merchant_normalized, category, category_icon, category_color, confidence_score, ai_model_used)
+        VALUES ${values.join(', ')}
+        ON CONFLICT (merchant_normalized)
+        DO UPDATE SET
+            category = EXCLUDED.category,
+            category_icon = EXCLUDED.category_icon,
+            category_color = EXCLUDED.category_color,
+            confidence_score = EXCLUDED.confidence_score,
+            ai_model_used = EXCLUDED.ai_model_used,
+            updated_at = NOW()
+    `;
+
+    await pool.query(query, params);
+    console.log(`✓ Stored ${categorizations.length} merchant categories in cache`);
+};
+
+/**
+ * Increment cache usage counter
+ */
+const incrementCacheUsage = async (merchantNormalized) => {
+    await pool.query(
+        `UPDATE merchant_category_cache
+         SET times_used = times_used + 1,
+             last_used_at = NOW()
+         WHERE merchant_normalized = $1`,
+        [merchantNormalized]
+    );
+};
+
+/**
+ * Log AI categorization call
+ */
+const logAICategorization = async (logData) => {
+    await pool.query(
+        `INSERT INTO ai_categorization_log
+            (merchant_count, token_count_input, token_count_output, ai_model_used, generation_time_ms, error_message)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+            logData.merchant_count,
+            logData.token_count_input || null,
+            logData.token_count_output || null,
+            logData.ai_model_used || null,
+            logData.generation_time_ms || null,
+            logData.error_message || null
+        ]
+    );
+};
+
 module.exports = {
     pool,
     // User operations
@@ -412,6 +503,11 @@ module.exports = {
     getDailySpending,
     getIncomeVsExpenses,
     getMonthlySpending,
+    // AI Categorization operations
+    getMerchantCategory,
+    storeMerchantCategories,
+    incrementCacheUsage,
+    logAICategorization,
     initDb,
 };
 

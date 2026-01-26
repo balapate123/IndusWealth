@@ -106,6 +106,9 @@ RULES:
 7. Consider user's actual financial situation (don't recommend investing if they have high-interest debt)
 8. If user has negative cash flow, prioritize spending reduction insights
 9. If user has positive cash flow + emergency fund, prioritize growth insights (investing, tax-advantaged accounts)
+10. CRITICAL: NEVER suggest canceling investment transactions (Wealthsimple, Questrade, TFSA, RRSP contributions)
+11. CRITICAL: Distinguish between subscriptions (Netflix, Spotify) and investments (even if they recur weekly/monthly)
+12. Look at category field to identify investments - do not treat them as subscriptions to cancel
 
 CANADIAN FINANCIAL CONSTANTS (use these in calculations):
 - TFSA contribution limit 2026: $7,000/year

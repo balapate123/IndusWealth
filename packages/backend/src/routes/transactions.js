@@ -4,7 +4,7 @@ const plaidService = require('../services/plaid');
 const watchdogService = require('../services/watchdog');
 const db = require('../services/db');
 const { authenticateToken } = require('../middleware/auth');
-const { categorizeTransaction, getCategoryBreakdown } = require('../services/categorization');
+const { categorizeTransaction, getCategoryBreakdown, batchCategorizeWithAI } = require('../services/categorization');
 const { createLogger } = require('../services/logger');
 const { PlaidError } = require('../errors/AppError');
 const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse, getPlaidStatusFromError } = require('../utils/responseHelper');
@@ -100,22 +100,51 @@ router.get('/', authenticateToken, async (req, res, next) => {
             return new Date(b.date) - new Date(a.date);
         });
 
-        // Apply categorization to each transaction
-        const categorizedTransactions = sortedTransactions.map(tx => {
-            const categoryInfo = categorizeTransaction(tx);
-            return {
+        // Apply categorization to each transaction (now async)
+        const categorizedTransactions = [];
+        const transactionsNeedingAI = [];
+
+        for (const tx of sortedTransactions) {
+            const categoryInfo = await categorizeTransaction(tx);
+
+            const categorized = {
                 ...tx,
                 // If Plaid category is empty, use our pattern-based category
                 category: (tx.category && tx.category.length > 0)
                     ? tx.category
                     : [categoryInfo.category],
                 categoryIcon: categoryInfo.icon,
-                categoryColor: categoryInfo.color
+                categoryColor: categoryInfo.color,
+                categorySource: categoryInfo.source
             };
-        });
+
+            categorizedTransactions.push(categorized);
+
+            // Collect transactions that need AI categorization
+            if (categoryInfo.needsAI) {
+                transactionsNeedingAI.push(tx);
+            }
+        }
+
+        // Trigger background AI categorization (non-blocking)
+        if (transactionsNeedingAI.length > 0) {
+            logger.info('Triggering background AI categorization', {
+                ...ctx,
+                count: transactionsNeedingAI.length
+            });
+
+            // Run in background (don't await)
+            batchCategorizeWithAI(transactionsNeedingAI)
+                .then(() => {
+                    logger.info('Background AI categorization completed', { ...ctx });
+                })
+                .catch(err => {
+                    logger.error('Background AI categorization failed', { ...ctx, error: err });
+                });
+        }
 
         // Get category breakdown for analytics
-        const categoryBreakdown = getCategoryBreakdown(categorizedTransactions);
+        const categoryBreakdown = await getCategoryBreakdown(categorizedTransactions);
 
         // Run Watchdog Analysis
         const leakageAnalysis = watchdogService.analyze(categorizedTransactions);

@@ -5,6 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
+import InsightsScreen from '../screens/InsightsScreen';
 import WatchdogScreen from '../screens/WatchdogScreen';
 import DebtAttackScreen from '../screens/DebtAttackScreen';
 import AllTransactionsScreen from '../screens/AllTransactionsScreen';
@@ -24,6 +25,7 @@ const Stack = createStackNavigator();
 const TabBarIcon = ({ focused, name, label }) => {
     const iconMap = {
         'Home': 'home-outline',
+        'Insights': 'bulb-outline',
         'Wealth': 'bar-chart-outline',
         'Watchdog': 'location-outline',
         'Profile': 'person-outline',
@@ -60,6 +62,13 @@ const TabNavigator = () => {
                 component={HomeScreen}
                 options={{
                     tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="Home" />,
+                }}
+            />
+            <Tab.Screen
+                name="Insights"
+                component={InsightsScreen}
+                options={{
+                    tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="Insights" />,
                 }}
             />
             <Tab.Screen
@@ -220,7 +229,7 @@ const styles = StyleSheet.create({
     tabItem: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingHorizontal: 14,
+        paddingHorizontal: 10,
         paddingVertical: 6,
         borderRadius: 20,
         flexDirection: 'column',
@@ -228,7 +237,7 @@ const styles = StyleSheet.create({
     },
     tabItemActive: {
         backgroundColor: COLORS.GOLD,
-        paddingHorizontal: 18,
+        paddingHorizontal: 14,
         paddingVertical: 8,
     },
     tabLabel: {

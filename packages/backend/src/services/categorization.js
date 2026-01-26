@@ -1,9 +1,15 @@
 /**
  * Transaction Categorization Utility
- * 
- * Provides pattern-based categorization when Plaid doesn't return categories.
- * Priority: Plaid category > Pattern matching > 'Other'
+ *
+ * Hybrid 4-layer categorization system:
+ * Layer 1: Plaid category (from API)
+ * Layer 2: Pattern matching (keyword-based)
+ * Layer 3: AI cache lookup (merchant normalization)
+ * Layer 4: Fresh AI categorization (background async)
  */
+
+const { getMerchantCategory, storeMerchantCategories, incrementCacheUsage, logAICategorization } = require('./db');
+const { normalizeMerchant, batchCategorizeMerchants } = require('./ai_categorization');
 
 // Category definitions with keywords and patterns
 const CATEGORY_PATTERNS = {
@@ -86,6 +92,11 @@ const CATEGORY_PATTERNS = {
         icon: 'wallet-outline',
         color: '#30D158'
     },
+    'Transportation': {
+        keywords: ['Lyft', 'Uber', 'Taxi', 'Bus', 'Train', 'Subway', 'Tuk Tuk', 'Auto', 'Car', 'Bike', 'Motorcycle'],
+        icon: 'car-outline',
+        color: '#FF9500'
+    },
 
     // Alcohol & Tobacco
     'Alcohol & Bars': {
@@ -103,12 +114,12 @@ const CATEGORY_PATTERNS = {
 };
 
 /**
- * Categorize a transaction based on Plaid category or pattern matching
+ * Categorize a transaction using 4-layer hybrid approach
  * @param {Object} transaction - Transaction object with name, category fields
- * @returns {Object} - { category: string, icon: string, color: string }
+ * @returns {Promise<Object>} - { category, icon, color, source, needsAI }
  */
-const categorizeTransaction = (transaction) => {
-    // Priority 1: Use Plaid category if available
+const categorizeTransaction = async (transaction) => {
+    // Layer 1: Use Plaid category if available
     if (transaction.category && transaction.category.length > 0 && transaction.category[0]) {
         const plaidCategory = transaction.category[0];
         // Map common Plaid categories to our icons/colors
@@ -125,11 +136,13 @@ const categorizeTransaction = (transaction) => {
         return {
             category: plaidCategory,
             icon: plaidMapping[plaidCategory]?.icon || 'ellipse-outline',
-            color: plaidMapping[plaidCategory]?.color || '#8E8E93'
+            color: plaidMapping[plaidCategory]?.color || '#8E8E93',
+            source: 'plaid',
+            needsAI: false
         };
     }
 
-    // Priority 2: Pattern matching on transaction name
+    // Layer 2: Pattern matching on transaction name
     const name = (transaction.name || '').toUpperCase();
     const merchantName = (transaction.merchant_name || '').toUpperCase();
     const searchText = `${name} ${merchantName}`;
@@ -140,34 +153,122 @@ const categorizeTransaction = (transaction) => {
                 return {
                     category: categoryName,
                     icon: config.icon,
-                    color: config.color
+                    color: config.color,
+                    source: 'pattern',
+                    needsAI: false
                 };
             }
         }
     }
 
-    // Priority 3: Default to 'Other'
+    // Layer 3: AI cache lookup
+    const aiCategorizeEnabled = process.env.AI_CATEGORIZATION_ENABLED === 'true';
+    if (aiCategorizeEnabled) {
+        try {
+            const merchantNorm = normalizeMerchant(transaction.name);
+            if (merchantNorm) {
+                const cached = await getMerchantCategory(merchantNorm);
+                if (cached) {
+                    // Cache hit! Increment usage counter (async, don't wait)
+                    incrementCacheUsage(merchantNorm).catch(err =>
+                        console.error('Error incrementing cache usage:', err)
+                    );
+
+                    return {
+                        category: cached.category,
+                        icon: cached.category_icon,
+                        color: cached.category_color,
+                        source: 'ai_cache',
+                        needsAI: false
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('Error checking AI cache:', error);
+            // Fall through to default
+        }
+    }
+
+    // Layer 4: Mark as needing AI categorization
     return {
         category: 'Other',
         icon: 'ellipse-outline',
-        color: '#8E8E93'
+        color: '#8E8E93',
+        source: 'default',
+        needsAI: aiCategorizeEnabled // Only trigger AI if feature is enabled
     };
+};
+
+/**
+ * Batch categorize transactions with AI (background process)
+ * @param {Array} transactions - Transactions needing AI categorization
+ * @returns {Promise<void>}
+ */
+const batchCategorizeWithAI = async (transactions) => {
+    if (!transactions || transactions.length === 0) return;
+
+    try {
+        // Extract unique normalized merchant names
+        const merchantMap = new Map();
+        transactions.forEach(tx => {
+            const normalized = normalizeMerchant(tx.name);
+            if (normalized && !merchantMap.has(normalized)) {
+                merchantMap.set(normalized, tx);
+            }
+        });
+
+        const merchantNames = Array.from(merchantMap.keys());
+        console.log(`→ AI categorization needed for ${merchantNames.length} unique merchants`);
+
+        // Call AI service (batches up to 20 merchants per call)
+        const batchSize = parseInt(process.env.AI_CATEGORIZATION_BATCH_SIZE || '20');
+        const batches = [];
+
+        for (let i = 0; i < merchantNames.length; i += batchSize) {
+            const batch = merchantNames.slice(i, i + batchSize);
+            batches.push(batch);
+        }
+
+        for (const batch of batches) {
+            const result = await batchCategorizeMerchants(batch);
+
+            // Store results in cache
+            if (result.results && result.results.length > 0) {
+                await storeMerchantCategories(result.results);
+            }
+
+            // Log AI call
+            await logAICategorization(result.metadata);
+
+            console.log(`✓ AI categorized ${result.results?.length || 0}/${batch.length} merchants`);
+        }
+
+        console.log(`✓ Completed AI categorization for ${merchantNames.length} merchants`);
+    } catch (error) {
+        console.error('Error in batch AI categorization:', error);
+        // Log the error
+        await logAICategorization({
+            merchant_count: transactions.length,
+            error_message: error.message
+        }).catch(err => console.error('Failed to log AI error:', err));
+    }
 };
 
 /**
  * Get category spending breakdown
  * @param {Array} transactions - Array of transaction objects
- * @returns {Object} - Category spending summary
+ * @returns {Promise<Object>} - Category spending summary
  */
-const getCategoryBreakdown = (transactions) => {
+const getCategoryBreakdown = async (transactions) => {
     const breakdown = {};
 
-    transactions.forEach(tx => {
+    // Categorize all transactions (now async)
+    for (const tx of transactions) {
         // Only count expenses (positive amounts after Plaid inversion)
         const amount = Math.abs(parseFloat(tx.amount));
-        if (tx.amount <= 0) return; // Skip income
+        if (tx.amount <= 0) continue; // Skip income
 
-        const { category, icon, color } = categorizeTransaction(tx);
+        const { category, icon, color } = await categorizeTransaction(tx);
 
         if (!breakdown[category]) {
             breakdown[category] = {
@@ -180,7 +281,7 @@ const getCategoryBreakdown = (transactions) => {
 
         breakdown[category].total += amount;
         breakdown[category].count++;
-    });
+    }
 
     // Convert to array and sort by total
     return Object.entries(breakdown)
@@ -197,5 +298,7 @@ const getCategoryBreakdown = (transactions) => {
 module.exports = {
     CATEGORY_PATTERNS,
     categorizeTransaction,
-    getCategoryBreakdown
+    getCategoryBreakdown,
+    batchCategorizeWithAI,
+    normalizeMerchant
 };

@@ -20,21 +20,64 @@ const pool = new Pool(
         }
 );
 
+// Migration files in execution order
+const MIGRATIONS = [
+    'init.sql',
+    'add_custom_debts.sql',
+    'add_user_dob.sql',
+    'add_ai_insights.sql',
+    'add_ai_categorization.sql'
+];
+
 async function migrate() {
     console.log('Running database migrations...');
     const client = await pool.connect();
 
     try {
-        // Read the custom debts migration file
-        const sqlPath = path.join(__dirname, '../db/add_custom_debts.sql');
-        const sql = fs.readFileSync(sqlPath, 'utf8');
+        // Create migrations tracking table if it doesn't exist
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                id SERIAL PRIMARY KEY,
+                migration_name VARCHAR(255) UNIQUE NOT NULL,
+                executed_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
 
-        console.log(`Executing migration from ${sqlPath}...`);
-        await client.query(sql);
+        // Get list of already executed migrations
+        const result = await client.query('SELECT migration_name FROM schema_migrations');
+        const executedMigrations = new Set(result.rows.map(row => row.migration_name));
 
-        console.log('Migration completed successfully.');
+        // Execute each migration if not already run
+        for (const migrationFile of MIGRATIONS) {
+            if (executedMigrations.has(migrationFile)) {
+                console.log(`✓ Skipping ${migrationFile} (already executed)`);
+                continue;
+            }
+
+            const sqlPath = path.join(__dirname, '../db', migrationFile);
+
+            if (!fs.existsSync(sqlPath)) {
+                console.log(`⚠ Warning: ${migrationFile} not found, skipping...`);
+                continue;
+            }
+
+            const sql = fs.readFileSync(sqlPath, 'utf8');
+
+            console.log(`→ Executing migration: ${migrationFile}...`);
+            await client.query(sql);
+
+            // Mark migration as executed
+            await client.query(
+                'INSERT INTO schema_migrations (migration_name) VALUES ($1)',
+                [migrationFile]
+            );
+
+            console.log(`✓ Completed: ${migrationFile}`);
+        }
+
+        console.log('\n✓ All migrations completed successfully.');
     } catch (err) {
-        console.error('Migration failed:', err);
+        console.error('✗ Migration failed:', err);
         process.exit(1);
     } finally {
         client.release();
