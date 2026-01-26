@@ -1,8 +1,8 @@
 export const COLORS = {
     // Primary backgrounds
-    BACKGROUND: '#0D0D0D',        // Near black main background
-    CARD_BG: '#1A1A1A',           // Card background
-    CARD_BORDER: '#2A2A2A',       // Subtle card border
+    BACKGROUND: '#000000',        // Pure black main background
+    CARD_BG: '#000000',           // Pure black card background
+    CARD_BORDER: 'rgba(201, 162, 39, 0.2)',  // Gold-tinted border
 
     // Brand colors
     GOLD: '#C9A227',              // Gold accent for active states
@@ -15,11 +15,11 @@ export const COLORS = {
     // Text colors
     WHITE: '#FFFFFF',
     TEXT_PRIMARY: '#FFFFFF',
-    TEXT_SECONDARY: '#888888',
-    TEXT_MUTED: '#666666',
+    TEXT_SECONDARY: '#E5C048',    // Gold light for secondary text
+    TEXT_MUTED: '#C9A227',        // Gold for muted text
 
     // Legacy (kept for backward compatibility)
-    NAVY: '#0D0D0D',
+    NAVY: '#000000',
     GRAY_LIGHT: '#F0F0F0',
     GRAY_DARK: '#333333',
 };

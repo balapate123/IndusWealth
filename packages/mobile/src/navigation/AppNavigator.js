@@ -205,7 +205,7 @@ const AppNavigator = () => {
 
 const styles = StyleSheet.create({
     tabBar: {
-        backgroundColor: 'rgba(30, 30, 30, 0.95)',
+        backgroundColor: '#000000',
         borderTopWidth: 0,
         height: 70,
         position: 'absolute',
@@ -213,13 +213,13 @@ const styles = StyleSheet.create({
         left: 16,
         right: 16,
         borderRadius: 35,
-        borderWidth: 1,
-        borderColor: 'rgba(201, 180, 88, 0.3)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(201, 162, 39, 0.4)',
         elevation: 8,
-        shadowColor: '#000',
+        shadowColor: COLORS.GOLD,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowRadius: 12,
         paddingHorizontal: 8,
         paddingTop: 0,
         paddingBottom: 0,

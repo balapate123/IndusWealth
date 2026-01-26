@@ -284,7 +284,7 @@ const InsightsScreen = ({ navigation, route }) => {
                         onPress={() => handleDismiss(insight.id)}
                         activeOpacity={0.7}
                     >
-                        <Ionicons name="close-circle-outline" size={16} color={COLORS.TEXT_SECONDARY} />
+                        <Ionicons name="close-circle-outline" size={16} color={COLORS.TEXT_MUTED} />
                         <Text style={styles.dismissText}>Dismiss</Text>
                     </TouchableOpacity>
                 )}
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
     },
     headerSubtitle: {
         fontSize: 14,
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.GOLD_LIGHT,
     },
     infoButton: {
         padding: SPACING.TINY,
@@ -461,14 +461,15 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         fontSize: 16,
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.WHITE,
     },
     loadingSubtext: {
         fontSize: 13,
-        color: COLORS.TEXT_MUTED,
+        color: COLORS.GOLD_LIGHT,
         textAlign: 'center',
         maxWidth: '80%',
         marginTop: SPACING.SMALL,
+        opacity: 0.8,
     },
     errorContainer: {
         flex: 1,
@@ -479,7 +480,7 @@ const styles = StyleSheet.create({
     },
     errorText: {
         fontSize: 16,
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.WHITE,
         textAlign: 'center',
     },
     retryButton: {
@@ -507,10 +508,11 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontSize: 14,
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.WHITE,
         textAlign: 'center',
         maxWidth: '80%',
         lineHeight: 20,
+        opacity: 0.9,
     },
     insightCard: {
         backgroundColor: COLORS.CARD_BG,
@@ -519,11 +521,11 @@ const styles = StyleSheet.create({
         borderColor: COLORS.CARD_BORDER,
         padding: SPACING.LARGE,
         marginBottom: SPACING.LARGE,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
+        shadowColor: COLORS.GOLD,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+        elevation: 8,
     },
     priorityBadge: {
         flexDirection: 'row',
@@ -560,8 +562,10 @@ const styles = StyleSheet.create({
     },
     categoryText: {
         fontSize: 12,
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.GOLD_LIGHT,
         marginBottom: SPACING.TINY,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     insightTitle: {
         fontSize: 18,
@@ -571,12 +575,15 @@ const styles = StyleSheet.create({
     },
     description: {
         fontSize: 14,
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.WHITE,
         lineHeight: 20,
         marginBottom: SPACING.MEDIUM,
+        opacity: 0.9,
     },
     reasoningContainer: {
-        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        backgroundColor: 'rgba(201, 162, 39, 0.05)',
+        borderWidth: 1,
+        borderColor: 'rgba(201, 162, 39, 0.15)',
         borderRadius: BORDER_RADIUS.MEDIUM,
         padding: SPACING.MEDIUM,
         marginBottom: SPACING.MEDIUM,
@@ -605,8 +612,9 @@ const styles = StyleSheet.create({
     reasoningText: {
         flex: 1,
         fontSize: 13,
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.WHITE,
         lineHeight: 18,
+        opacity: 0.85,
     },
     benefitContainer: {
         marginBottom: SPACING.MEDIUM,
@@ -626,10 +634,11 @@ const styles = StyleSheet.create({
     },
     benefitLabel: {
         fontSize: 11,
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.GREEN,
         marginBottom: SPACING.TINY,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
+        opacity: 0.9,
     },
     benefitAmounts: {
         flexDirection: 'row',
@@ -649,9 +658,10 @@ const styles = StyleSheet.create({
     },
     calculationText: {
         fontSize: 11,
-        color: COLORS.TEXT_MUTED,
+        color: COLORS.GOLD_LIGHT,
         marginTop: SPACING.SMALL,
         lineHeight: 16,
+        opacity: 0.7,
     },
     actionContainer: {
         gap: SPACING.SMALL,
@@ -696,7 +706,7 @@ const styles = StyleSheet.create({
     },
     dismissText: {
         fontSize: 12,
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.TEXT_MUTED,
     },
     bottomSpacer: {
         height: 120,

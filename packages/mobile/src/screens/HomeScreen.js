@@ -398,7 +398,7 @@ const HomeScreen = ({ navigation }) => {
                         activeOpacity={0.7}
                     >
                         <View style={styles.avatar}>
-                            <Ionicons name="person" size={24} color={COLORS.TEXT_SECONDARY} />
+                            <Ionicons name="person" size={24} color={COLORS.GOLD} />
                         </View>
                         <View style={styles.onlineIndicator} />
                     </TouchableOpacity>
@@ -439,7 +439,7 @@ const HomeScreen = ({ navigation }) => {
                                     <Ionicons
                                         name={showBalance ? 'eye-outline' : 'eye-off-outline'}
                                         size={18}
-                                        color={COLORS.TEXT_SECONDARY}
+                                        color={COLORS.GOLD}
                                     />
                                 </TouchableOpacity>
                             </View>
@@ -574,7 +574,7 @@ const HomeScreen = ({ navigation }) => {
 
                     {transactions.length === 0 && !error && (
                         <View style={styles.emptyState}>
-                            <Ionicons name="receipt-outline" size={48} color={COLORS.TEXT_MUTED} />
+                            <Ionicons name="receipt-outline" size={48} color={COLORS.GOLD} />
                             <Text style={styles.emptyText}>No transactions yet</Text>
                         </View>
                     )}
@@ -699,7 +699,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     loadingText: {
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.WHITE,
         marginTop: SPACING.MEDIUM,
     },
     scrollContent: {
@@ -747,7 +747,7 @@ const styles = StyleSheet.create({
         marginLeft: SPACING.SMALL,
     },
     welcomeText: {
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.GOLD_LIGHT,
         fontSize: 12,
     },
     userName: {
@@ -781,9 +781,8 @@ const styles = StyleSheet.create({
         alignItems: 'flex-end',
     },
     balanceLabel: {
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.GOLD,
         fontSize: 11,
-        letterSpacing: 1,
         letterSpacing: 1,
         fontFamily: FONTS.MEDIUM,
         marginBottom: 4,
@@ -833,9 +832,10 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     savingsText: {
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.WHITE,
         fontSize: 13,
         flex: 1,
+        opacity: 0.9,
     },
     settingsButton: {
         padding: 4,
@@ -931,9 +931,10 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     accountTabText: {
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.GOLD_LIGHT,
         marginLeft: SPACING.SMALL,
         fontSize: 13,
+        opacity: 0.8,
     },
     accountTabTextActive: {
         color: COLORS.WHITE,
@@ -951,7 +952,7 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.SMALL,
     },
     accountFiltersLabel: {
-        color: COLORS.TEXT_MUTED,
+        color: COLORS.GOLD,
         fontSize: 12,
         fontWeight: '600',
         letterSpacing: 1,
@@ -975,9 +976,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     noAccountsText: {
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.WHITE,
         fontSize: 14,
         marginBottom: SPACING.MEDIUM,
+        opacity: 0.9,
     },
     connectPromptButton: {
         flexDirection: 'row',
@@ -1022,9 +1024,10 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     reAuthSubtitle: {
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.WHITE,
         fontSize: 12,
         marginTop: 2,
+        opacity: 0.8,
     },
 
     // Error
@@ -1053,7 +1056,7 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.MEDIUM,
     },
     groupTitle: {
-        color: COLORS.TEXT_MUTED,
+        color: COLORS.GOLD,
         fontSize: 12,
         fontWeight: '600',
         letterSpacing: 1,
@@ -1069,8 +1072,10 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.CARD_BG,
         padding: SPACING.MEDIUM,
         borderRadius: BORDER_RADIUS.LARGE,
-        marginBottom: SPACING.SMALL,
+        marginBottom: SPACING.MEDIUM,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
     },
     accountColorIndicator: {
         position: 'absolute',
@@ -1099,8 +1104,9 @@ const styles = StyleSheet.create({
         marginBottom: 2,
     },
     transactionCategory: {
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.GOLD_LIGHT,
         fontSize: 12,
+        opacity: 0.8,
     },
     transactionRight: {
         alignItems: 'flex-end',
@@ -1111,8 +1117,9 @@ const styles = StyleSheet.create({
         marginBottom: 2,
     },
     transactionTime: {
-        color: COLORS.TEXT_MUTED,
+        color: COLORS.GOLD,
         fontSize: 11,
+        opacity: 0.7,
     },
 
     // Empty State
@@ -1121,8 +1128,9 @@ const styles = StyleSheet.create({
         padding: SPACING.XL,
     },
     emptyText: {
-        color: COLORS.TEXT_MUTED,
+        color: COLORS.WHITE,
         marginTop: SPACING.MEDIUM,
+        opacity: 0.9,
     },
 
     // More indicator
@@ -1136,7 +1144,8 @@ const styles = StyleSheet.create({
         width: 6,
         height: 6,
         borderRadius: 3,
-        backgroundColor: COLORS.TEXT_MUTED,
+        backgroundColor: COLORS.GOLD,
+        opacity: 0.5,
     },
 
     // Transaction Modal
@@ -1202,7 +1211,7 @@ const styles = StyleSheet.create({
         borderBottomColor: COLORS.CARD_BORDER,
     },
     detailLabel: {
-        color: COLORS.TEXT_SECONDARY,
+        color: COLORS.GOLD_LIGHT,
         fontSize: 14,
     },
     detailValue: {
@@ -1224,7 +1233,8 @@ const styles = StyleSheet.create({
     },
     transactionId: {
         fontSize: 11,
-        color: COLORS.TEXT_MUTED,
+        color: COLORS.GOLD,
+        opacity: 0.6,
     },
     modalDoneButton: {
         backgroundColor: COLORS.GOLD,
