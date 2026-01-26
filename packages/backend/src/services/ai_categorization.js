@@ -4,7 +4,26 @@
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { CATEGORY_PATTERNS } = require('./categorization');
+
+// Lazy load to avoid circular dependency
+let CATEGORY_PATTERNS = null;
+function getCategoryPatterns() {
+    if (!CATEGORY_PATTERNS) {
+        try {
+            const categorization = require('./categorization');
+            CATEGORY_PATTERNS = categorization.CATEGORY_PATTERNS;
+        } catch (error) {
+            console.error('Failed to load CATEGORY_PATTERNS:', error.message);
+            // Fallback minimal patterns
+            CATEGORY_PATTERNS = {
+                'Transportation': { keywords: ['LYFT', 'UBER'], icon: 'car-outline', color: '#FF9500' },
+                'Investments': { keywords: ['WEALTHSIMPLE', 'QUESTRADE'], icon: 'trending-up-outline', color: '#32ADE6' },
+                'Shopping': { keywords: [], icon: 'bag-outline', color: '#FF2D92' }
+            };
+        }
+    }
+    return CATEGORY_PATTERNS;
+}
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -79,6 +98,7 @@ async function batchCategorizeMerchants(merchantNames) {
         }
 
         // Validate and enrich results
+        const patterns = getCategoryPatterns();
         const validResults = categorizations
             .filter(cat => {
                 // Ensure required fields
@@ -91,7 +111,7 @@ async function batchCategorizeMerchants(merchantNames) {
                 }
 
                 // Ensure category exists in our patterns
-                if (!CATEGORY_PATTERNS[cat.category]) {
+                if (!patterns[cat.category]) {
                     console.warn(`Unknown category "${cat.category}" for ${cat.merchant}, skipping`);
                     return false;
                 }
@@ -101,8 +121,8 @@ async function batchCategorizeMerchants(merchantNames) {
             .map(cat => ({
                 merchant_normalized: cat.merchant,
                 category: cat.category,
-                category_icon: CATEGORY_PATTERNS[cat.category].icon,
-                category_color: CATEGORY_PATTERNS[cat.category].color,
+                category_icon: patterns[cat.category].icon,
+                category_color: patterns[cat.category].color,
                 confidence_score: cat.confidence,
                 ai_model_used: 'gemini-2.0-flash-exp'
             }));
@@ -141,7 +161,8 @@ async function batchCategorizeMerchants(merchantNames) {
  * Build the AI prompt for categorization
  */
 function buildCategorizationPrompt(merchants) {
-    const categories = Object.keys(CATEGORY_PATTERNS);
+    const patterns = getCategoryPatterns();
+    const categories = Object.keys(patterns);
 
     const systemPrompt = `You are a transaction categorization expert for a Canadian personal finance app.
 

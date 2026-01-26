@@ -8,8 +8,41 @@
  * Layer 4: Fresh AI categorization (background async)
  */
 
-const { getMerchantCategory, storeMerchantCategories, incrementCacheUsage, logAICategorization } = require('./db');
-const { normalizeMerchant, batchCategorizeMerchants } = require('./ai_categorization');
+// Lazy load AI features to prevent crashes if GEMINI_API_KEY is missing
+let aiCategorization = null;
+let dbHelpers = null;
+
+function getAICategorization() {
+    if (!aiCategorization) {
+        try {
+            aiCategorization = require('./ai_categorization');
+        } catch (error) {
+            console.warn('AI categorization service not available:', error.message);
+            aiCategorization = {
+                normalizeMerchant: () => null,
+                batchCategorizeMerchants: async () => ({ results: [], metadata: { error_message: 'Service unavailable' } })
+            };
+        }
+    }
+    return aiCategorization;
+}
+
+function getDBHelpers() {
+    if (!dbHelpers) {
+        try {
+            dbHelpers = require('./db');
+        } catch (error) {
+            console.warn('DB helpers not available:', error.message);
+            dbHelpers = {
+                getMerchantCategory: async () => null,
+                storeMerchantCategories: async () => {},
+                incrementCacheUsage: async () => {},
+                logAICategorization: async () => {}
+            };
+        }
+    }
+    return dbHelpers;
+}
 
 // Category definitions with keywords and patterns
 const CATEGORY_PATTERNS = {
@@ -161,17 +194,20 @@ const categorizeTransaction = async (transaction) => {
         }
     }
 
-    // Layer 3: AI cache lookup
+    // Layer 3: AI cache lookup (only if feature is enabled and working)
     const aiCategorizeEnabled = process.env.AI_CATEGORIZATION_ENABLED === 'true';
     if (aiCategorizeEnabled) {
         try {
+            const { normalizeMerchant } = getAICategorization();
+            const { getMerchantCategory, incrementCacheUsage } = getDBHelpers();
+
             const merchantNorm = normalizeMerchant(transaction.name);
             if (merchantNorm) {
                 const cached = await getMerchantCategory(merchantNorm);
                 if (cached) {
                     // Cache hit! Increment usage counter (async, don't wait)
                     incrementCacheUsage(merchantNorm).catch(err =>
-                        console.error('Error incrementing cache usage:', err)
+                        console.warn('Error incrementing cache usage:', err.message)
                     );
 
                     return {
@@ -184,8 +220,8 @@ const categorizeTransaction = async (transaction) => {
                 }
             }
         } catch (error) {
-            console.error('Error checking AI cache:', error);
-            // Fall through to default
+            console.warn('AI cache lookup failed, falling back to pattern matching:', error.message);
+            // Fall through to default - don't crash the request!
         }
     }
 
@@ -208,6 +244,9 @@ const batchCategorizeWithAI = async (transactions) => {
     if (!transactions || transactions.length === 0) return;
 
     try {
+        const { normalizeMerchant, batchCategorizeMerchants } = getAICategorization();
+        const { storeMerchantCategories, logAICategorization } = getDBHelpers();
+
         // Extract unique normalized merchant names
         const merchantMap = new Map();
         transactions.forEach(tx => {
@@ -246,11 +285,16 @@ const batchCategorizeWithAI = async (transactions) => {
         console.log(`✓ Completed AI categorization for ${merchantNames.length} merchants`);
     } catch (error) {
         console.error('Error in batch AI categorization:', error);
-        // Log the error
-        await logAICategorization({
-            merchant_count: transactions.length,
-            error_message: error.message
-        }).catch(err => console.error('Failed to log AI error:', err));
+        // Log the error (gracefully handle if logging fails)
+        try {
+            const { logAICategorization } = getDBHelpers();
+            await logAICategorization({
+                merchant_count: transactions.length,
+                error_message: error.message
+            });
+        } catch (logError) {
+            console.warn('Failed to log AI error (tables may not exist yet):', logError.message);
+        }
     }
 };
 
@@ -300,5 +344,9 @@ module.exports = {
     categorizeTransaction,
     getCategoryBreakdown,
     batchCategorizeWithAI,
-    normalizeMerchant
+    // Export lazy-loaded function
+    normalizeMerchant: (name) => {
+        const { normalizeMerchant } = getAICategorization();
+        return normalizeMerchant(name);
+    }
 };
