@@ -69,6 +69,39 @@ router.get('/', authenticateToken, async (req, res, next) => {
             return sum - amount;
         }, 0);
 
+        // Calculate balance change percentage (compare current balance to 30 days ago)
+        let changePercent = 0;
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+        const last30DaysTransactions = await db.pool.query(
+            `SELECT amount FROM transactions
+             WHERE user_id = $1
+             AND date > $2
+             AND account_id IN (
+                 SELECT id FROM accounts
+                 WHERE user_id = $1
+                 AND (type = ANY($3) OR subtype = ANY($3))
+             )`,
+            [userId, thirtyDaysAgo, liquidAccountTypes]
+        );
+
+        // Sum of all transactions in last 30 days (Plaid format: positive = expense, negative = income)
+        const transactionSum = last30DaysTransactions.rows.reduce((sum, tx) => {
+            return sum + parseFloat(tx.amount || 0);
+        }, 0);
+
+        // Calculate balance 30 days ago
+        // current_balance = previous_balance - transaction_sum (Plaid format)
+        // So: previous_balance = current_balance + transaction_sum
+        const previousBalance = liquidCash + transactionSum;
+
+        // Calculate percentage change
+        if (previousBalance !== 0) {
+            changePercent = ((liquidCash - previousBalance) / Math.abs(previousBalance)) * 100;
+            // Round to 1 decimal place
+            changePercent = Math.round(changePercent * 10) / 10;
+        }
+
         // Format accounts for frontend
         const formattedAccounts = [
             { id: 'all', name: 'All Accounts', type: 'aggregate', balance: liquidCash },
@@ -94,7 +127,7 @@ router.get('/', authenticateToken, async (req, res, next) => {
             accounts: formattedAccounts,
             total_balance: totalBalance,
             liquid_cash: liquidCash,
-            change_percent: 2.4, // TODO: Calculate from historical data
+            change_percent: changePercent,
             monthly_savings: monthlySavings
         }, meta);
     } catch (error) {

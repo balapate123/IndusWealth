@@ -435,9 +435,21 @@ const HomeScreen = ({ navigation }) => {
                             </View>
                         </View>
                         <View style={styles.balanceRightSection}>
-                            <View style={styles.growthBadge}>
-                                <Ionicons name="trending-up" size={12} color="#4CAF50" />
-                                <Text style={styles.growthText}>+{changePercent}%</Text>
+                            <View style={[
+                                styles.growthBadge,
+                                changePercent < 0 && styles.growthBadgeNegative
+                            ]}>
+                                <Ionicons
+                                    name={changePercent >= 0 ? "trending-up" : "trending-down"}
+                                    size={12}
+                                    color={changePercent >= 0 ? "#4CAF50" : "#FF6B6B"}
+                                />
+                                <Text style={[
+                                    styles.growthText,
+                                    changePercent < 0 && styles.growthTextNegative
+                                ]}>
+                                    {changePercent >= 0 ? '+' : ''}{changePercent}%
+                                </Text>
                             </View>
                             <BalanceChart width={100} height={35} />
                         </View>
@@ -804,17 +816,23 @@ const styles = StyleSheet.create({
     growthBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(201, 162, 39, 0.15)',
+        backgroundColor: 'rgba(76, 175, 80, 0.15)',
         paddingHorizontal: SPACING.SMALL,
         paddingVertical: 4,
         borderRadius: BORDER_RADIUS.MEDIUM,
         marginBottom: SPACING.SMALL,
     },
+    growthBadgeNegative: {
+        backgroundColor: 'rgba(255, 107, 107, 0.15)',
+    },
     growthText: {
-        color: '#C9A227',
+        color: '#4CAF50',
         fontSize: 12,
         fontFamily: FONTS.BOLD,
         marginLeft: 4,
+    },
+    growthTextNegative: {
+        color: '#FF6B6B',
     },
     savingsRow: {
         flexDirection: 'row',

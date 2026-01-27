@@ -237,8 +237,9 @@ const AllAccountsScreen = ({ navigation }) => {
                             <TouchableOpacity
                                 style={styles.editAliasButton}
                                 onPress={() => handleEditAlias(account)}
+                                activeOpacity={0.7}
                             >
-                                <Ionicons name="pencil" size={14} color={COLORS.GOLD} />
+                                <Ionicons name="pencil" size={16} color={COLORS.GOLD} />
                             </TouchableOpacity>
                         </View>
                         <Text style={styles.accountType}>
@@ -658,8 +659,14 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     editAliasButton: {
-        padding: 4,
-        marginLeft: 4,
+        backgroundColor: `${COLORS.GOLD}20`,
+        borderRadius: 12,
+        padding: 6,
+        marginLeft: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: 28,
+        height: 28,
     },
     accountType: {
         color: COLORS.TEXT_SECONDARY,
