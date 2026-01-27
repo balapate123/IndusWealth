@@ -77,6 +77,7 @@ const HomeScreen = ({ navigation }) => {
     const [accounts, setAccounts] = useState([]);
     const [totalCash, setTotalCash] = useState(0);
     const [changePercent, setChangePercent] = useState(0);
+    const [monthlySavings, setMonthlySavings] = useState(0);
     const [showBalance, setShowBalance] = useState(true);
     const [selectedAccount, setSelectedAccount] = useState('all');
     const [loading, setLoading] = useState(true);
@@ -133,6 +134,7 @@ const HomeScreen = ({ navigation }) => {
                     // Use liquid_cash for display (only checking/savings accounts)
                     setTotalCash(cachedAccounts.liquid_cash || cachedAccounts.total_balance || 0);
                     setChangePercent(cachedAccounts.change_percent || 0);
+                    setMonthlySavings(cachedAccounts.monthly_savings || 0);
                 }
 
                 if (cachedTransactions) {
@@ -159,6 +161,7 @@ const HomeScreen = ({ navigation }) => {
                 // Use liquid_cash for display (only checking/savings accounts)
                 setTotalCash(accountsData.liquid_cash || accountsData.total_balance || 0);
                 setChangePercent(accountsData.change_percent || 0);
+                setMonthlySavings(accountsData.monthly_savings || 0);
                 // Cache the accounts data
                 await cache.setCachedAccounts(accountsData);
             }
@@ -442,11 +445,13 @@ const HomeScreen = ({ navigation }) => {
 
                     {/* Savings info */}
                     <View style={styles.savingsRow}>
-                        <Text style={styles.savingsPositive}>+$1,200.00</Text>
-                        <Text style={styles.savingsText}> in savings this month</Text>
-                        <TouchableOpacity style={styles.settingsButton}>
-                            <Ionicons name="settings-outline" size={16} color={COLORS.GOLD} />
-                        </TouchableOpacity>
+                        <Text style={[
+                            styles.savingsAmount,
+                            monthlySavings >= 0 ? styles.savingsPositive : styles.savingsNegative
+                        ]}>
+                            {monthlySavings >= 0 ? '+' : '-'}${Math.abs(monthlySavings).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </Text>
+                        <Text style={styles.savingsText}> {monthlySavings >= 0 ? 'in savings' : 'overspent'} this month</Text>
                     </View>
 
                     {/* Action Buttons */}
@@ -502,7 +507,7 @@ const HomeScreen = ({ navigation }) => {
                                         styles.accountTabText,
                                         selectedAccount === account.id && styles.accountTabTextActive
                                     ]}>
-                                        {account.name}
+                                        {account.alias || account.name}
                                     </Text>
                                 </TouchableOpacity>
                             ))}
@@ -649,7 +654,10 @@ const HomeScreen = ({ navigation }) => {
                                         <View style={styles.accountIndicator}>
                                             <View style={[styles.accountDot, { backgroundColor: getAccountColor(selectedTransaction.account_id) }]} />
                                             <Text style={styles.detailValue}>
-                                                {accounts.find(a => a.id === selectedTransaction.account_id)?.name || 'N/A'}
+                                                {(() => {
+                                                    const account = accounts.find(a => a.id === selectedTransaction.account_id);
+                                                    return account ? (account.alias || account.name) : 'N/A';
+                                                })()}
                                             </Text>
                                         </View>
                                     </View>
@@ -813,19 +821,21 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: SPACING.LARGE,
     },
-    savingsPositive: {
-        color: '#4CAF50',
+    savingsAmount: {
         fontSize: 13,
         fontWeight: '600',
+    },
+    savingsPositive: {
+        color: '#4CAF50',
+    },
+    savingsNegative: {
+        color: '#FF6B6B',
     },
     savingsText: {
         color: COLORS.WHITE,
         fontSize: 13,
         flex: 1,
         opacity: 0.9,
-    },
-    settingsButton: {
-        padding: 4,
     },
     balanceRow: {
         flexDirection: 'row',

@@ -47,12 +47,35 @@ router.get('/', authenticateToken, async (req, res, next) => {
             .filter(acc => liquidAccountTypes.includes(acc.type) || liquidAccountTypes.includes(acc.subtype))
             .reduce((sum, acc) => sum + parseFloat(acc.current_balance || 0), 0);
 
+        // Calculate monthly savings (income - expenses for current month)
+        const now = new Date();
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+        const monthlyTransactions = await db.query(
+            `SELECT amount FROM transactions
+             WHERE user_id = $1
+             AND date >= $2
+             AND date <= $3`,
+            [userId, firstDayOfMonth, lastDayOfMonth]
+        );
+
+        // Calculate net savings (positive amount = income, negative = expense in Plaid's format)
+        // We want income - expenses, so sum of positive amounts minus sum of negative amounts
+        const monthlySavings = monthlyTransactions.rows.reduce((sum, tx) => {
+            const amount = parseFloat(tx.amount || 0);
+            // Plaid uses positive for expenses, negative for income
+            // So we flip the sign: negative amount (income) becomes positive, positive (expense) becomes negative
+            return sum - amount;
+        }, 0);
+
         // Format accounts for frontend
         const formattedAccounts = [
             { id: 'all', name: 'All Accounts', type: 'aggregate', balance: liquidCash },
             ...accounts.map(acc => ({
                 id: acc.plaid_account_id,
                 name: acc.name,
+                alias: acc.alias,
                 officialName: acc.official_name,
                 type: acc.type,
                 subtype: acc.subtype,
@@ -71,10 +94,69 @@ router.get('/', authenticateToken, async (req, res, next) => {
             accounts: formattedAccounts,
             total_balance: totalBalance,
             liquid_cash: liquidCash,
-            change_percent: 2.4 // TODO: Calculate from historical data
+            change_percent: 2.4, // TODO: Calculate from historical data
+            monthly_savings: monthlySavings
         }, meta);
     } catch (error) {
         logger.error('Failed to fetch accounts', { ...ctx, error });
+        next(error);
+    }
+});
+
+// PUT /accounts/:plaidAccountId/alias
+// Updates the alias for a specific account
+// Requires authentication
+router.put('/:plaidAccountId/alias', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    const { plaidAccountId } = req.params;
+    const { alias } = req.body;
+
+    logger.info('Updating account alias', { ...ctx, plaidAccountId, alias });
+
+    try {
+        const userId = req.user.id;
+
+        // Validate alias (optional field, can be null/empty to clear)
+        if (alias !== null && alias !== undefined && typeof alias !== 'string') {
+            return res.status(400).json({
+                success: false,
+                code: 'VALIDATION_ERROR',
+                message: 'Alias must be a string',
+            });
+        }
+
+        // Trim and limit alias length
+        const trimmedAlias = alias ? alias.trim().substring(0, 255) : null;
+
+        // Update the alias
+        const result = await db.query(
+            `UPDATE accounts
+             SET alias = $1, updated_at = CURRENT_TIMESTAMP
+             WHERE user_id = $2 AND plaid_account_id = $3
+             RETURNING *`,
+            [trimmedAlias, userId, plaidAccountId]
+        );
+
+        if (result.rows.length === 0) {
+            logger.warn('Account not found', { ...ctx, plaidAccountId });
+            return res.status(404).json({
+                success: false,
+                code: 'NOT_FOUND',
+                message: 'Account not found',
+            });
+        }
+
+        logger.info('Account alias updated successfully', { ...ctx, plaidAccountId });
+
+        successResponse(res, {
+            account: {
+                id: result.rows[0].plaid_account_id,
+                name: result.rows[0].name,
+                alias: result.rows[0].alias,
+            }
+        });
+    } catch (error) {
+        logger.error('Failed to update account alias', { ...ctx, error });
         next(error);
     }
 });

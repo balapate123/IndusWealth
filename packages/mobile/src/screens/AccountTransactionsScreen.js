@@ -178,7 +178,7 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                     <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
                 </TouchableOpacity>
                 <View style={styles.headerCenter}>
-                    <Text style={styles.headerTitle} numberOfLines={1}>{account.name}</Text>
+                    <Text style={styles.headerTitle} numberOfLines={1}>{account.alias || account.name}</Text>
                     {account.mask && (
                         <Text style={styles.headerSubtitle}>•••• {account.mask}</Text>
                     )}
@@ -347,7 +347,7 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
 
                                 <View style={styles.detailRow}>
                                     <Text style={styles.detailLabel}>Account</Text>
-                                    <Text style={styles.detailValue}>{account.name}</Text>
+                                    <Text style={styles.detailValue}>{account.alias || account.name}</Text>
                                 </View>
 
                                 <View style={styles.detailRow}>

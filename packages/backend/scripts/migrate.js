@@ -26,7 +26,8 @@ const MIGRATIONS = [
     'add_custom_debts.sql',
     'add_user_dob.sql',
     'add_ai_insights.sql',
-    'add_ai_categorization.sql'
+    'add_ai_categorization.sql',
+    'add_account_alias.sql'
 ];
 
 async function migrate() {

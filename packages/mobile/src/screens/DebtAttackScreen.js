@@ -334,7 +334,7 @@ const DebtAttackScreen = () => {
         setFormSubmitting(true);
         try {
             const debt = {
-                name: account.name || account.officialName || 'Credit Card',
+                name: account.alias || account.name || account.officialName || 'Credit Card',
                 balance: Math.abs(account.balance || 0),
                 apr: DEFAULT_APRS.credit_card, // Default APR for credit cards
                 min_payment: Math.abs(account.balance || 0) * 0.02, // Estimate 2% minimum payment
@@ -936,7 +936,7 @@ const DebtAttackScreen = () => {
                                         </View>
                                         <View style={styles.importAccountInfo}>
                                             <Text style={styles.importAccountName}>
-                                                {account.name || account.officialName}
+                                                {account.alias || account.name || account.officialName}
                                             </Text>
                                             <Text style={styles.importAccountType}>
                                                 {account.subtype || account.type}

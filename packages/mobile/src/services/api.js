@@ -288,6 +288,12 @@ export const api = {
     // Accounts & Balance
     getAccounts: () => apiRequest('/accounts'),
 
+    updateAccountAlias: (accountId, alias) =>
+        apiRequest(`/accounts/${accountId}/alias`, {
+            method: 'PUT',
+            body: JSON.stringify({ alias }),
+        }),
+
     // Transactions (includes watchdog analysis)
     // Pass ?refresh=true to force sync from Plaid
     getTransactions: (queryParams = '') => apiRequest(`/transactions${queryParams}`),

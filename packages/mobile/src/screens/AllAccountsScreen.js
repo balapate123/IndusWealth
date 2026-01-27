@@ -10,6 +10,7 @@ import {
     ActivityIndicator,
     RefreshControl,
     Modal,
+    TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
@@ -28,6 +29,10 @@ const AllAccountsScreen = ({ navigation }) => {
     const [accountToDelete, setAccountToDelete] = useState(null);
     const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
     const [deletingAccount, setDeletingAccount] = useState(false);
+    const [showEditAliasModal, setShowEditAliasModal] = useState(false);
+    const [accountToEdit, setAccountToEdit] = useState(null);
+    const [aliasInput, setAliasInput] = useState('');
+    const [savingAlias, setSavingAlias] = useState(false);
 
     // Custom Alert state
     const [alertVisible, setAlertVisible] = useState(false);
@@ -150,6 +155,37 @@ const AllAccountsScreen = ({ navigation }) => {
         setShowDeleteAccountModal(true);
     };
 
+    const handleEditAlias = (account) => {
+        setAccountToEdit(account);
+        setAliasInput(account.alias || '');
+        setShowEditAliasModal(true);
+    };
+
+    const saveAlias = async () => {
+        if (!accountToEdit) return;
+
+        setSavingAlias(true);
+        try {
+            const accountId = accountToEdit.id;
+            const response = await api.updateAccountAlias(accountId, aliasInput.trim());
+
+            if (response?.success) {
+                // Update local state
+                setAccounts(prev => prev.map(a =>
+                    a.id === accountId ? { ...a, alias: aliasInput.trim() } : a
+                ));
+                setShowEditAliasModal(false);
+                setAccountToEdit(null);
+                setAliasInput('');
+            }
+        } catch (error) {
+            console.error('Error saving alias:', error);
+            showAlert('Error', 'Failed to save alias. Please try again.');
+        } finally {
+            setSavingAlias(false);
+        }
+    };
+
     const confirmDeleteAccount = async () => {
         if (!accountToDelete) return;
 
@@ -194,9 +230,17 @@ const AllAccountsScreen = ({ navigation }) => {
                     </View>
 
                     <View style={styles.accountInfo}>
-                        <Text style={styles.accountName} numberOfLines={1}>
-                            {account.name}
-                        </Text>
+                        <View style={styles.accountNameRow}>
+                            <Text style={styles.accountName} numberOfLines={1}>
+                                {account.alias || account.name}
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.editAliasButton}
+                                onPress={() => handleEditAlias(account)}
+                            >
+                                <Ionicons name="pencil" size={14} color={COLORS.GOLD} />
+                            </TouchableOpacity>
+                        </View>
                         <Text style={styles.accountType}>
                             {account.subtype || account.type}
                             {account.mask && ` • ****${account.mask}`}
@@ -404,6 +448,59 @@ const AllAccountsScreen = ({ navigation }) => {
                 </View>
             </Modal>
 
+            {/* Edit Alias Modal */}
+            <Modal
+                visible={showEditAliasModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowEditAliasModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalIconContainer}>
+                            <Ionicons name="pencil-outline" size={48} color={COLORS.GOLD} />
+                        </View>
+                        <Text style={styles.modalTitle}>Edit Account Alias</Text>
+                        <Text style={styles.modalMessage}>
+                            Set a custom name for "{accountToEdit?.name}"
+                        </Text>
+                        <TextInput
+                            style={styles.aliasInput}
+                            value={aliasInput}
+                            onChangeText={setAliasInput}
+                            placeholder="Enter custom name (optional)"
+                            placeholderTextColor={COLORS.TEXT_MUTED}
+                            maxLength={255}
+                            autoFocus={true}
+                        />
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity
+                                style={styles.modalCancelButton}
+                                onPress={() => {
+                                    setShowEditAliasModal(false);
+                                    setAccountToEdit(null);
+                                    setAliasInput('');
+                                }}
+                                disabled={savingAlias}
+                            >
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalConfirmButton, { backgroundColor: COLORS.GOLD }]}
+                                onPress={saveAlias}
+                                disabled={savingAlias}
+                            >
+                                {savingAlias ? (
+                                    <ActivityIndicator size="small" color={COLORS.BACKGROUND} />
+                                ) : (
+                                    <Text style={[styles.modalConfirmText, { color: COLORS.BACKGROUND }]}>Save</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
             {/* Custom Alert */}
             <CustomAlert
                 visible={alertVisible}
@@ -549,11 +646,20 @@ const styles = StyleSheet.create({
     accountInfo: {
         flex: 1,
     },
+    accountNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 2,
+    },
     accountName: {
         color: COLORS.WHITE,
         fontSize: 15,
         fontWeight: '600',
-        marginBottom: 2,
+        flex: 1,
+    },
+    editAliasButton: {
+        padding: 4,
+        marginLeft: 4,
     },
     accountType: {
         color: COLORS.TEXT_SECONDARY,
@@ -664,6 +770,17 @@ const styles = StyleSheet.create({
         fontSize: 14,
         textAlign: 'center',
         lineHeight: 20,
+        marginBottom: SPACING.MEDIUM,
+    },
+    aliasInput: {
+        backgroundColor: COLORS.BACKGROUND,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingVertical: SPACING.SMALL,
+        color: COLORS.WHITE,
+        fontSize: 15,
         marginBottom: SPACING.LARGE,
     },
     modalButtons: {
