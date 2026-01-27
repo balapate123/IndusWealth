@@ -71,6 +71,14 @@ const initDb = async () => {
             await pool.query(aiCategorizationSql);
         }
 
+        // Run account alias migration
+        const accountAliasSqlPath = path.join(__dirname, '../../db/add_account_alias.sql');
+        if (fs.existsSync(accountAliasSqlPath)) {
+            const accountAliasSql = fs.readFileSync(accountAliasSqlPath, 'utf8');
+            console.log('🔄 Running account alias migration...');
+            await pool.query(accountAliasSql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);
