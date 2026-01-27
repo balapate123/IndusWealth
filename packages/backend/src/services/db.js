@@ -193,7 +193,7 @@ const upsertAccounts = async (userId, accounts) => {
 
 const getAccounts = async (userId) => {
     const result = await pool.query(
-        `SELECT id, plaid_account_id, name, official_name, type, subtype, mask, 
+        `SELECT id, plaid_account_id, name, alias, official_name, type, subtype, mask,
                 current_balance, available_balance, iso_currency_code, updated_at
          FROM accounts WHERE user_id = $1 ORDER BY name`,
         [userId]

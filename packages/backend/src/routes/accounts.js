@@ -52,7 +52,7 @@ router.get('/', authenticateToken, async (req, res, next) => {
         const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
         const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
 
-        const monthlyTransactions = await db.query(
+        const monthlyTransactions = await db.pool.query(
             `SELECT amount FROM transactions
              WHERE user_id = $1
              AND date >= $2
@@ -129,7 +129,7 @@ router.put('/:plaidAccountId/alias', authenticateToken, async (req, res, next) =
         const trimmedAlias = alias ? alias.trim().substring(0, 255) : null;
 
         // Update the alias
-        const result = await db.query(
+        const result = await db.pool.query(
             `UPDATE accounts
              SET alias = $1, updated_at = CURRENT_TIMESTAMP
              WHERE user_id = $2 AND plaid_account_id = $3
