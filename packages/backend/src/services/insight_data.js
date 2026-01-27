@@ -242,13 +242,17 @@ async function _getIncomeSummary(userId, days) {
 
 /**
  * Identify recurring subscriptions from transactions
+ * IMPORTANT: Only includes actual subscriptions (streaming, software, memberships)
+ * Excludes regular recurring expenses (restaurants, gas, groceries, transportation)
  */
 async function _getSubscriptions(userId) {
     // Identify recurring payments (same merchant, similar amount, ~30 day intervals)
+    // Filter out non-subscription categories like restaurants, gas, groceries, transportation
     const result = await pool.query(
         `WITH recurring_merchants AS (
             SELECT
                 merchant_name,
+                category[1] as primary_category,
                 ROUND(AVG(amount)::numeric, 2) as avg_amount,
                 COUNT(*) as occurrence_count,
                 MAX(date) as last_charge,
@@ -258,7 +262,24 @@ async function _getSubscriptions(userId) {
               AND amount > 0
               AND merchant_name IS NOT NULL
               AND date >= CURRENT_DATE - INTERVAL '6 months'
-            GROUP BY merchant_name
+              -- Exclude categories that are NOT subscriptions
+              AND category[1] NOT ILIKE '%restaurant%'
+              AND category[1] NOT ILIKE '%food%'
+              AND category[1] NOT ILIKE '%dining%'
+              AND category[1] NOT ILIKE '%gas%'
+              AND category[1] NOT ILIKE '%fuel%'
+              AND category[1] NOT ILIKE '%groceries%'
+              AND category[1] NOT ILIKE '%grocery%'
+              AND category[1] NOT ILIKE '%transportation%'
+              AND category[1] NOT ILIKE '%travel%'
+              AND category[1] NOT ILIKE '%coffee%'
+              AND category[1] NOT ILIKE '%bar%'
+              AND category[1] NOT ILIKE '%alcohol%'
+              AND category[1] NOT ILIKE '%entertainment%'
+              AND category[1] NOT ILIKE '%shopping%'
+              AND category[1] NOT ILIKE '%pharmacy%'
+              AND category[1] NOT ILIKE '%health%'
+            GROUP BY merchant_name, category[1]
             HAVING COUNT(*) >= 3
         )
         SELECT * FROM recurring_merchants
@@ -272,6 +293,7 @@ async function _getSubscriptions(userId) {
         name: row.merchant_name,
         amount: parseFloat(row.avg_amount),
         frequency: 'monthly',
+        category: row.primary_category,
         last_charge: row.last_charge,
         usage_detected: true, // Simplified - would need more analysis
         occurrence_count: row.occurrence_count

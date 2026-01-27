@@ -45,6 +45,7 @@ function getDBHelpers() {
 }
 
 // Category definitions with keywords and patterns
+// Category definitions with keywords and patterns
 const CATEGORY_PATTERNS = {
     // Transportation
     'Gas & Fuel': {
@@ -52,34 +53,44 @@ const CATEGORY_PATTERNS = {
         icon: 'car-outline',
         color: '#FF9500'
     },
+    'Transportation': {
+        keywords: ['UBER', 'LYFT', 'TAXI', 'TTC', 'GO TRANSIT', 'TRANSIT', 'PARKING', 'PRESTO'],
+        icon: 'bus-outline',
+        color: '#5C6BC0'
+    },
 
     // Food & Drink
     'Groceries': {
-        keywords: ['SUBZI MANDI', 'LOBLAWS', 'METRO', 'SOBEYS', 'FRESHCO', 'NOFRILLS', 'COSTCO', 'WALMART SUPER', 'FOOD BASICS', 'HOLLAND DAZE'],
+        keywords: ['SUBZI MANDI', 'LOBLAWS', 'METRO', 'SOBEYS', 'FRESHCO', 'NOFRILLS', 'COSTCO', 'WALMART', 'FOOD BASICS', 'HOLLAND DAZE'],
         icon: 'cart-outline',
         color: '#34C759'
     },
     'Restaurants': {
-        keywords: ['CHAIIWALA', 'GWALIA SWEETS', 'RESTAURANT', 'CAFE', 'PIZZA', 'SUSHI', 'BURGER', 'MCDONALD', 'TIM HORTONS', 'STARBUCKS'],
+        keywords: ['CHAIIWALA', 'GWALIA SWEETS', 'RESTAURANT', 'CAFE', 'PIZZA', 'SUSHI', 'BURGER', 'MCDONALD', 'TIM HORTONS', 'STARBUCKS', 'DOORDASH', 'UBER EATS', 'SKIP DISHES', 'GRILLIES', 'MINERVA'],
         icon: 'restaurant-outline',
         color: '#FF6B6B'
+    },
+    'Coffee & Snacks': {
+        keywords: ['COFFEE', 'TIM HORTONS', 'STARBUCKS', 'SECOND CUP', 'DUNKIN'],
+        icon: 'cafe-outline',
+        color: '#A0522D'
     },
 
     // Entertainment
     'Entertainment': {
-        keywords: ['CINEPLEX', 'FAMOUS PLAYER', 'RESIDENT ADVISOR', 'THEATRE', 'CONCERT', 'TICKETMASTER', 'MOVIES', 'LCBO', 'WINE', 'BAR', 'PUB', 'LIQUOR', 'GAMING', 'GAMING'],
+        keywords: ['CINEPLEX', 'FAMOUS PLAYER', 'RESIDENT ADVISOR', 'THEATRE', 'CONCERT', 'TICKETMASTER', 'MOVIES', 'LCBO', 'WINE', 'BAR', 'PUB', 'LIQUOR', 'GAMING'],
         icon: 'film-outline',
         color: '#AF52DE'
     },
     'Subscriptions': {
-        keywords: ['NETFLIX', 'SPOTIFY', 'AUDIBLE', 'DISNEY+', 'AMAZON PRIME', 'APPLE MUSIC', 'YOUTUBE', 'CRAVE', 'XBOX GAME', 'MICROSOFT*XBOX', 'HBO MAX', 'HULU', 'PEACE', 'CLAUDE'],
+        keywords: ['NETFLIX', 'SPOTIFY', 'AUDIBLE', 'DISNEY+', 'AMAZON PRIME', 'APPLE MUSIC', 'YOUTUBE', 'CRAVE', 'XBOX GAME', 'MICROSOFT*XBOX', 'HBO MAX', 'HULU', 'PEACE', 'CLAUDE', 'ANTH'],
         icon: 'play-circle-outline',
         color: '#5856D6'
     },
 
     // Shopping
     'Shopping': {
-        keywords: ['SEPHORA', 'ZARA', 'LOCCITANE', 'WINNERS', 'H&M', 'GAP', 'UNIQLO', 'NIKE', 'ADIDAS', 'CANADIAN TIRE', 'BEST BUY', 'TIMEX', 'SP TIMEX'],
+        keywords: ['SEPHORA', 'ZARA', 'LOCCITANE', 'WINNERS', 'H&M', 'GAP', 'UNIQLO', 'NIKE', 'ADIDAS', 'CANADIAN TIRE', 'BEST BUY', 'TIMEX', 'SP TIMEX', 'SERVICES'],
         icon: 'bag-outline',
         color: '#FF2D92'
     },
@@ -101,7 +112,7 @@ const CATEGORY_PATTERNS = {
         color: '#32ADE6'
     },
     'Transfers': {
-        keywords: ['E-TRANSFER', 'INTERNET TRANSFER', 'WIRE', 'FULFILL REQUEST'],
+        keywords: ['E-TRANSFER', 'INTERNET TRANSFER', 'WIRE', 'FULFILL REQUEST', 'REMITLY', 'WESTERN UNION', 'MONEYGRAM'],
         icon: 'swap-horizontal-outline',
         color: '#007AFF'
     },
@@ -112,7 +123,7 @@ const CATEGORY_PATTERNS = {
     },
     'Fees & Charges': {
         keywords: ['SERVICE CHARGE', 'NSF FEE', 'PURCHASE INTEREST', 'NETWORK TRANSACTION FEE', 'PAYMENT PROTECTOR', 'INTEREST'],
-        icon: 'alert-circle-outline',
+        icon: 'pricetag-outline',
         color: '#FF3B30'
     },
     'Payments': {
@@ -122,27 +133,36 @@ const CATEGORY_PATTERNS = {
     },
     'Income': {
         keywords: ['PAYROLL', 'DEPOSIT', 'SALARY', 'BONUS INTEREST', 'REBATE'],
-        icon: 'wallet-outline',
-        color: '#30D158'
-    },
-    'Transportation': {
-        keywords: ['Lyft', 'Uber', 'Taxi', 'Bus', 'Train', 'Subway', 'Tuk Tuk', 'Auto', 'Car', 'Bike', 'Motorcycle'],
-        icon: 'car-outline',
-        color: '#FF9500'
+        icon: 'cash-outline',
+        color: '#4CAF50'
     },
 
     // Alcohol & Tobacco
     'Alcohol & Bars': {
         keywords: ['LCBO', 'BEER STORE', 'WINE', 'BAR', 'PUB', 'LIQUOR'],
-        icon: 'wine-outline',
+        icon: 'beer-outline',
         color: '#BF5AF2'
     },
 
     // Tech & Software
     'Software & Tech': {
         keywords: ['MICROSOFT*STORE', 'APPLE', 'GOOGLE', 'AMAZON', 'ADOBE', 'SOFTWARE'],
-        icon: 'laptop-outline',
+        icon: 'phone-portrait-outline',
         color: '#5AC8FA'
+    },
+
+    // Utilities
+    'Utilities': {
+        keywords: ['HYDRO', 'ELECTRIC', 'WATER', 'GAS', 'UTILITY', 'ENBRIDGE', 'TORONTO HYDRO'],
+        icon: 'flash-outline',
+        color: '#FFC107'
+    },
+
+    // Bank Fees
+    'Bank Fees': {
+        keywords: ['BANK FEE', 'MONTHLY FEE', 'OVERDRAFT', 'ACCOUNT FEE'],
+        icon: 'pricetag-outline',
+        color: '#F44336'
     }
 };
 
@@ -152,30 +172,7 @@ const CATEGORY_PATTERNS = {
  * @returns {Promise<Object>} - { category, icon, color, source, needsAI }
  */
 const categorizeTransaction = async (transaction) => {
-    // Layer 1: Use Plaid category if available
-    if (transaction.category && transaction.category.length > 0 && transaction.category[0]) {
-        const plaidCategory = transaction.category[0];
-        // Map common Plaid categories to our icons/colors
-        const plaidMapping = {
-            'Food and Drink': { icon: 'restaurant-outline', color: '#FF6B6B' },
-            'Travel': { icon: 'airplane-outline', color: '#FF9500' },
-            'Shops': { icon: 'bag-outline', color: '#FF2D92' },
-            'Transfer': { icon: 'swap-horizontal-outline', color: '#007AFF' },
-            'Payment': { icon: 'card-outline', color: '#64D2FF' },
-            'Recreation': { icon: 'game-controller-outline', color: '#AF52DE' },
-            'Service': { icon: 'construct-outline', color: '#8E8E93' },
-        };
-
-        return {
-            category: plaidCategory,
-            icon: plaidMapping[plaidCategory]?.icon || 'ellipse-outline',
-            color: plaidMapping[plaidCategory]?.color || '#8E8E93',
-            source: 'plaid',
-            needsAI: false
-        };
-    }
-
-    // Layer 2: Pattern matching on transaction name
+    // Layer 1: Pattern matching on transaction name (moved to top priority)
     const name = (transaction.name || '').toUpperCase();
     const merchantName = (transaction.merchant_name || '').toUpperCase();
     const searchText = `${name} ${merchantName}`;
@@ -192,6 +189,30 @@ const categorizeTransaction = async (transaction) => {
                 };
             }
         }
+    }
+
+    // Layer 2: Use Plaid category if available
+    if (transaction.category && transaction.category.length > 0 && transaction.category[0]) {
+        const plaidCategory = transaction.category[0];
+        // Map common Plaid categories to our icons/colors
+        const plaidMapping = {
+            'Food and Drink': { icon: 'fast-food-outline', color: '#FF6B6B' },
+            'Travel': { icon: 'airplane-outline', color: '#FF9500' },
+            'Shops': { icon: 'bag-outline', color: '#FF2D92' },
+            'Transfer': { icon: 'paper-plane-outline', color: '#007AFF' },
+            'Payment': { icon: 'card-outline', color: '#64D2FF' },
+            'Recreation': { icon: 'game-controller-outline', color: '#AF52DE' },
+            'Service': { icon: 'pricetag-outline', color: '#FF3B30' },
+            'Bank Fees': { icon: 'pricetag-outline', color: '#F44336' },
+        };
+
+        return {
+            category: plaidCategory,
+            icon: plaidMapping[plaidCategory]?.icon || 'wallet-outline',
+            color: plaidMapping[plaidCategory]?.color || '#8E8E93',
+            source: 'plaid',
+            needsAI: false
+        };
     }
 
     // Layer 3: AI cache lookup (only if feature is enabled and working)
@@ -228,7 +249,7 @@ const categorizeTransaction = async (transaction) => {
     // Layer 4: Mark as needing AI categorization
     return {
         category: 'Other',
-        icon: 'ellipse-outline',
+        icon: 'wallet-outline',
         color: '#8E8E93',
         source: 'default',
         needsAI: aiCategorizeEnabled // Only trigger AI if feature is enabled

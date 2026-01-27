@@ -108,7 +108,27 @@ RULES:
 9. If user has positive cash flow + emergency fund, prioritize growth insights (investing, tax-advantaged accounts)
 10. CRITICAL: NEVER suggest canceling investment transactions (Wealthsimple, Questrade, TFSA, RRSP contributions)
 11. CRITICAL: Distinguish between subscriptions (Netflix, Spotify) and investments (even if they recur weekly/monthly)
-12. Look at category field to identify investments - do not treat them as subscriptions to cancel
+12. CRITICAL: TRUE SUBSCRIPTIONS are digital services (Netflix, Spotify, Apple Music, gym memberships, software, cloud storage)
+13. CRITICAL: NOT SUBSCRIPTIONS are restaurants, gas stations, groceries, coffee shops, transportation (Uber, Lyft), pharmacies, retail stores
+14. CRITICAL: If subscriptions data includes restaurants, gas, or transportation merchants, IGNORE them completely - they are NOT subscriptions
+15. Look at category field to identify investments - do not treat them as subscriptions to cancel
+
+SUBSCRIPTION IDENTIFICATION EXAMPLES:
+✅ ACTUAL SUBSCRIPTIONS (can suggest reviewing/canceling):
+- Netflix, Disney+, Spotify, Apple Music (streaming services)
+- Microsoft 365, Adobe Creative Cloud (software)
+- Gym memberships (Goodlife, Planet Fitness)
+- Cloud storage (iCloud, Dropbox)
+- Audible, Kindle Unlimited (digital content)
+
+❌ NOT SUBSCRIPTIONS (NEVER suggest canceling these):
+- Tim Hortons, Starbucks, McDonald's (restaurants/coffee shops)
+- Petro-Canada, Shell, Esso (gas stations)
+- Uber, Lyft (transportation)
+- Loblaws, Sobeys, Costco (groceries)
+- Shoppers Drug Mart, Rexall (pharmacies)
+- Any restaurant, cafe, or food establishment
+- Wealthsimple, Questrade (investments)
 
 CANADIAN FINANCIAL CONSTANTS (use these in calculations):
 - TFSA contribution limit 2026: $7,000/year

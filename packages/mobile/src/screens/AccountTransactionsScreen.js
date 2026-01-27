@@ -15,22 +15,7 @@ import {
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import api from '../services/api';
-
-// Category icon mapping
-const CATEGORY_ICONS = {
-    'Coffee & Snacks': { icon: 'coffee', library: 'FontAwesome5', color: '#4A7C59' },
-    'Income': { icon: 'cash', library: 'Ionicons', color: '#4CAF50' },
-    'Transportation': { icon: 'car', library: 'Ionicons', color: '#5C6BC0' },
-    'Utilities': { icon: 'flash', library: 'Ionicons', color: '#FFC107' },
-    'Groceries': { icon: 'cart', library: 'Ionicons', color: '#8BC34A' },
-    'Subscription': { icon: 'repeat', library: 'Ionicons', color: '#E91E63' },
-    'Bank Fees': { icon: 'alert-circle', library: 'Ionicons', color: '#F44336' },
-    'Travel': { icon: 'airplane', library: 'Ionicons', color: '#00BCD4' },
-    'Food and Drink': { icon: 'restaurant', library: 'Ionicons', color: '#FF5722' },
-    'Payment': { icon: 'card', library: 'Ionicons', color: '#3F51B5' },
-    'Transfer': { icon: 'swap-horizontal', library: 'Ionicons', color: '#607D8B' },
-    'default': { icon: 'wallet', library: 'Ionicons', color: '#9E9E9E' },
-};
+import { categorizeTransaction } from '../utils/categorization';
 
 const AccountTransactionsScreen = ({ navigation, route }) => {
     const { account } = route.params;
@@ -47,14 +32,20 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
             const data = await api.getAccountTransactions(account.id);
 
             if (data?.success) {
-                const formattedTransactions = (data.data || []).map((tx, index) => ({
-                    id: tx.transaction_id || index,
-                    merchant: tx.name,
-                    category: tx.category?.[0] || 'Other',
-                    amount: tx.amount * -1,
-                    date: tx.date,
-                    formattedDate: formatDate(tx.date),
-                }));
+                const formattedTransactions = (data.data || []).map((tx, index) => {
+                    const categorization = categorizeTransaction(tx);
+                    return {
+                        id: tx.transaction_id || index,
+                        merchant: tx.name,
+                        category: categorization.category,
+                        categoryIcon: categorization.icon,
+                        categoryLibrary: categorization.library,
+                        categoryColor: categorization.color,
+                        amount: tx.amount * -1,
+                        date: tx.date,
+                        formattedDate: formatDate(tx.date),
+                    };
+                });
                 setTransactions(formattedTransactions);
 
                 // Calculate totals
@@ -119,31 +110,26 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
         return `$${Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     };
 
-    const getCategoryIcon = (category) => {
-        return CATEGORY_ICONS[category] || CATEGORY_ICONS.default;
-    };
-
-    const renderTransactionIcon = (category, isIncome) => {
+    const renderTransactionIcon = (item, isIncome) => {
         if (isIncome) {
             return (
                 <View style={[styles.transactionIcon, { backgroundColor: '#1A3D1A' }]}>
-                    <Ionicons name="cash" size={20} color="#4CAF50" />
+                    <Ionicons name="cash" size={26} color="#4CAF50" />
                 </View>
             );
         }
-        const iconData = getCategoryIcon(category);
-        const bgColor = `${iconData.color}20`;
+        const bgColor = `${item.categoryColor}20`;
 
-        if (iconData.library === 'FontAwesome5') {
+        if (item.categoryLibrary === 'FontAwesome5') {
             return (
                 <View style={[styles.transactionIcon, { backgroundColor: bgColor }]}>
-                    <FontAwesome5 name={iconData.icon} size={18} color={iconData.color} />
+                    <FontAwesome5 name={item.categoryIcon} size={24} color={item.categoryColor} />
                 </View>
             );
         }
         return (
             <View style={[styles.transactionIcon, { backgroundColor: bgColor }]}>
-                <Ionicons name={iconData.icon} size={20} color={iconData.color} />
+                <Ionicons name={item.categoryIcon} size={26} color={item.categoryColor} />
             </View>
         );
     };
@@ -154,7 +140,7 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
             onPress={() => openTransactionDetails(item)}
             activeOpacity={0.7}
         >
-            {renderTransactionIcon(item.category, item.amount > 0)}
+            {renderTransactionIcon(item, item.amount > 0)}
             <View style={styles.transactionContent}>
                 <Text style={styles.transactionMerchant} numberOfLines={1}>{item.merchant}</Text>
                 <Text style={styles.transactionCategory}>{item.category} • {item.formattedDate}</Text>
@@ -529,8 +515,8 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.SMALL,
     },
     transactionIcon: {
-        width: 44,
-        height: 44,
+        width: 48,
+        height: 48,
         borderRadius: BORDER_RADIUS.MEDIUM,
         justifyContent: 'center',
         alignItems: 'center',
