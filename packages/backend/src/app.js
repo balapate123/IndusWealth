@@ -15,6 +15,10 @@ const transactionsRoutes = require('./routes/transactions');
 
 const app = express();
 
+// Trust proxy - required for Render.com and other reverse proxies
+// This allows express-rate-limit to correctly identify users via X-Forwarded-For header
+app.set('trust proxy', 1);
+
 // Security headers
 app.use(helmet());
 
