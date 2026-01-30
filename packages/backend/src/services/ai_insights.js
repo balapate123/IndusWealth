@@ -8,6 +8,18 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// Trusted sources for educational article recommendations
+const TRUSTED_SOURCES = [
+    { domain: 'nerdwallet.com', name: 'NerdWallet', focus: 'Personal finance, credit cards, loans' },
+    { domain: 'investopedia.com', name: 'Investopedia', focus: 'Investing, trading, financial terms' },
+    { domain: 'moneysense.ca', name: 'MoneySense', focus: 'Canadian personal finance, investing' },
+    { domain: 'wealthsimple.com/en-ca/learn', name: 'Wealthsimple', focus: 'Investing basics, Canadian finance' },
+    { domain: 'canada.ca', name: 'Government of Canada', focus: 'TFSA, RRSP, FHSA, tax info' },
+    { domain: 'getsmarteraboutmoney.ca', name: 'GetSmarterAboutMoney', focus: 'Financial literacy, Ontario Securities Commission' },
+    { domain: 'ratehub.ca', name: 'RateHub', focus: 'Mortgages, credit cards, banking rates' },
+    { domain: 'fool.ca', name: 'Motley Fool Canada', focus: 'Stock investing, market analysis' }
+];
+
 /**
  * Generate financial insights for a user
  * @param {Object} userData - Aggregated financial data from insight_data.js
@@ -38,9 +50,9 @@ async function generateInsights(userData) {
         const text = response.text();
 
         // Parse JSON response
-        let insights;
+        let aiResponse;
         try {
-            insights = JSON.parse(text);
+            aiResponse = JSON.parse(text);
         } catch (parseError) {
             console.error('Failed to parse AI response as JSON:', text.substring(0, 500));
             console.error('Parse error:', parseError.message);
@@ -48,10 +60,13 @@ async function generateInsights(userData) {
         }
 
         // Validate and process insights
-        const validatedInsights = _validateInsights(insights);
+        const validatedInsights = _validateInsights(aiResponse);
 
         // Calculate priority scores and limit to top 7
         const prioritizedInsights = _prioritizeInsights(validatedInsights);
+
+        // Extract recommended articles if present
+        const recommendedArticles = _validateArticles(aiResponse.recommendedArticles || []);
 
         // Estimate token counts (approximate)
         const tokenCountInput = Math.ceil(prompt.length / 4);
@@ -61,6 +76,7 @@ async function generateInsights(userData) {
 
         return {
             insights: prioritizedInsights,
+            recommendedArticles,
             summary: `${prioritizedInsights.length} insights generated from your last ${userData.user_profile.analysis_period_days} days of activity`,
             metadata: {
                 token_count_input: tokenCountInput,
@@ -139,6 +155,9 @@ CANADIAN FINANCIAL CONSTANTS (use these in calculations):
 - Recommended credit utilization: < 30%
 - Recommended emergency fund: 3-6 months of expenses
 
+TRUSTED EDUCATIONAL SOURCES (use these for article recommendations):
+${TRUSTED_SOURCES.map(s => `- ${s.name} (${s.domain}): ${s.focus}`).join('\n')}
+
 OUTPUT FORMAT:
 Return ONLY a valid JSON object (no markdown, no extra text) matching this schema:
 
@@ -170,15 +189,34 @@ Return ONLY a valid JSON object (no markdown, no extra text) matching this schem
       "dismissible": true,
       "generated_at": "${new Date().toISOString()}"
     }
+  ],
+  "recommendedArticles": [
+    {
+      "url": "https://...",
+      "title": "Article Title",
+      "description": "Brief 1-2 sentence description of the article",
+      "category": "budgeting|investing|debt|taxes|savings|general",
+      "source": "Source Name (e.g., NerdWallet)",
+      "relatedInsightTypes": ["insight_type_1", "insight_type_2"],
+      "read_time_minutes": 5
+    }
   ]
 }
+
+ARTICLE RECOMMENDATION RULES:
+1. Recommend 3-5 educational articles from the TRUSTED SOURCES above
+2. Articles should be relevant to the user's financial situation and generated insights
+3. Use REAL, valid URLs from these trusted sources (not made up URLs)
+4. Each article should relate to at least one generated insight type
+5. Prioritize Canadian financial content (MoneySense, Wealthsimple, Government of Canada) when applicable
+6. Include a mix of categories based on user's situation
 
 PRIORITY SCORING:
 - high: Potential savings/benefit > $1,000/year OR urgent financial health issue
 - medium: Potential savings $300-1,000/year OR important optimization
 - low: Potential savings < $300/year OR celebratory/educational insights
 
-Now, analyze the following user data and generate 5-7 personalized insights:`;
+Now, analyze the following user data and generate 5-7 personalized insights with 3-5 relevant educational article recommendations:`;
 
     const userDataJson = JSON.stringify(userData, null, 2);
 
@@ -262,6 +300,54 @@ function _prioritizeInsights(insights) {
     return insights.slice(0, 5);
 }
 
+/**
+ * Validate article recommendations from AI response
+ */
+function _validateArticles(articles) {
+    if (!Array.isArray(articles)) {
+        return [];
+    }
+
+    const requiredFields = ['url', 'title', 'category'];
+    const validCategories = ['budgeting', 'investing', 'debt', 'taxes', 'savings', 'general'];
+
+    return articles.filter(article => {
+        // Check required fields
+        for (const field of requiredFields) {
+            if (!article[field]) {
+                console.warn(`Article missing required field: ${field}`, article);
+                return false;
+            }
+        }
+
+        // Validate URL format
+        try {
+            new URL(article.url);
+        } catch (e) {
+            console.warn(`Invalid article URL: ${article.url}`);
+            return false;
+        }
+
+        // Normalize category
+        if (!validCategories.includes(article.category)) {
+            article.category = 'general';
+        }
+
+        // Ensure relatedInsightTypes is an array
+        if (!Array.isArray(article.relatedInsightTypes)) {
+            article.relatedInsightTypes = [];
+        }
+
+        // Set default read time if missing
+        if (!article.read_time_minutes) {
+            article.read_time_minutes = 5;
+        }
+
+        return true;
+    }).slice(0, 5); // Limit to 5 articles
+}
+
 module.exports = {
-    generateInsights
+    generateInsights,
+    TRUSTED_SOURCES
 };

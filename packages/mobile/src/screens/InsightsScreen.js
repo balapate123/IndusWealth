@@ -14,6 +14,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import api from '../services/api';
+import ArticleCard from '../components/ArticleCard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - SPACING.LARGE * 2;
@@ -59,6 +60,8 @@ const InsightsScreen = ({ navigation, route }) => {
     const [summary, setSummary] = useState('');
     const [isFromBankConnection, setIsFromBankConnection] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
+    const [academyArticles, setAcademyArticles] = useState([]);
+    const [academyLoading, setAcademyLoading] = useState(true);
 
     const loadInsights = useCallback(async (forceRefresh = false, isRetry = false) => {
         try {
@@ -101,6 +104,53 @@ const InsightsScreen = ({ navigation, route }) => {
     useEffect(() => {
         loadInsights();
     }, [loadInsights]);
+
+    // Load Wealth Academy articles
+    const loadAcademyArticles = useCallback(async () => {
+        try {
+            setAcademyLoading(true);
+            const response = await api.getEducationalArticles(null, 1, 10);
+            if (response.success && response.data) {
+                setAcademyArticles(response.data.articles || []);
+            }
+        } catch (err) {
+            console.error('Failed to load academy articles:', err);
+        } finally {
+            setAcademyLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadAcademyArticles();
+    }, [loadAcademyArticles]);
+
+    const handleArticlePress = (article) => {
+        navigation.navigate('ArticleWebView', {
+            url: article.external_url,
+            title: article.title,
+            articleId: article.id,
+        });
+    };
+
+    const handleArticleBookmark = async (articleId, shouldBookmark) => {
+        try {
+            if (shouldBookmark) {
+                await api.addArticleBookmark(articleId);
+            } else {
+                await api.removeArticleBookmark(articleId);
+            }
+            // Update local state
+            setAcademyArticles(prev =>
+                prev.map(article =>
+                    article.id === articleId
+                        ? { ...article, isBookmarked: shouldBookmark }
+                        : article
+                )
+            );
+        } catch (err) {
+            console.error('Failed to update bookmark:', err);
+        }
+    };
 
     // Handle navigation from bank connection success
     useEffect(() => {
@@ -392,6 +442,45 @@ const InsightsScreen = ({ navigation, route }) => {
                     </View>
                 ) : (
                     insights.map(renderInsightCard)
+                )}
+
+                {/* Wealth Academy Section */}
+                {academyArticles.length > 0 && (
+                    <View style={styles.academySection}>
+                        <View style={styles.academySectionHeader}>
+                            <View style={styles.academyTitleRow}>
+                                <Ionicons name="school-outline" size={22} color={COLORS.GOLD} />
+                                <Text style={styles.academySectionTitle}>Wealth Academy</Text>
+                            </View>
+                            <TouchableOpacity
+                                style={styles.viewAllButton}
+                                onPress={() => navigation.navigate('WealthAcademy')}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={styles.viewAllText}>VIEW ALL</Text>
+                                <Ionicons name="chevron-forward" size={14} color={COLORS.GOLD} />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.academySubtitle}>
+                            Curated articles to help you grow your financial knowledge
+                        </Text>
+
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.academyScrollContent}
+                        >
+                            {academyArticles.map((article) => (
+                                <ArticleCard
+                                    key={article.id}
+                                    article={article}
+                                    variant="horizontal"
+                                    onPress={handleArticlePress}
+                                    onBookmark={handleArticleBookmark}
+                                />
+                            ))}
+                        </ScrollView>
+                    </View>
                 )}
 
                 {/* Bottom Spacer for Tab Bar */}
@@ -710,6 +799,47 @@ const styles = StyleSheet.create({
     },
     bottomSpacer: {
         height: 120,
+    },
+    // Wealth Academy styles
+    academySection: {
+        marginTop: SPACING.LARGE,
+        marginBottom: SPACING.MEDIUM,
+    },
+    academySectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.TINY,
+    },
+    academyTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+    },
+    academySectionTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: COLORS.WHITE,
+    },
+    viewAllButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.TINY,
+    },
+    viewAllText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: COLORS.GOLD,
+        letterSpacing: 0.5,
+    },
+    academySubtitle: {
+        fontSize: 13,
+        color: COLORS.TEXT_SECONDARY,
+        marginBottom: SPACING.MEDIUM,
+        opacity: 0.8,
+    },
+    academyScrollContent: {
+        paddingRight: SPACING.LARGE,
     },
 });
 

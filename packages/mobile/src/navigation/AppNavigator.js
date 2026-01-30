@@ -16,6 +16,8 @@ import SignupScreen from '../screens/SignupScreen';
 import ConnectBankScreen from '../screens/ConnectBankScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AllAccountsScreen from '../screens/AllAccountsScreen';
+import WealthAcademyScreen from '../screens/WealthAcademyScreen';
+import ArticleWebViewScreen from '../screens/ArticleWebViewScreen';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/theme';
 import cache from '../services/cache';
 
@@ -196,6 +198,20 @@ const AppNavigator = () => {
                     component={AllAccountsScreen}
                     options={{
                         presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="WealthAcademy"
+                    component={WealthAcademyScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="ArticleWebView"
+                    component={ArticleWebViewScreen}
+                    options={{
+                        presentation: 'modal',
                     }}
                 />
             </Stack.Navigator>

@@ -87,6 +87,14 @@ const initDb = async () => {
             await pool.query(transactionNotesSql);
         }
 
+        // Run educational content migration
+        const educationalContentSqlPath = path.join(__dirname, '../../db/add_educational_content.sql');
+        if (fs.existsSync(educationalContentSqlPath)) {
+            const educationalContentSql = fs.readFileSync(educationalContentSqlPath, 'utf8');
+            console.log('🔄 Running educational content migration...');
+            await pool.query(educationalContentSql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);

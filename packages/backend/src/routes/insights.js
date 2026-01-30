@@ -8,6 +8,7 @@ const router = express.Router();
 const { pool } = require('../services/db');
 const { getUserFinancialSummary } = require('../services/insight_data');
 const { generateInsights } = require('../services/ai_insights');
+const { saveAIGeneratedArticles } = require('../services/educational_content');
 const { authenticateToken } = require('../middleware/auth');
 
 /**
@@ -56,7 +57,19 @@ router.get('/', authenticateToken, async (req, res) => {
         // Step 2: Generate AI insights
         const result = await generateInsights(userData);
 
-        // Step 3: Save to cache
+        // Step 3: Cache AI-recommended articles if any
+        let savedArticles = [];
+        if (result.recommendedArticles && result.recommendedArticles.length > 0) {
+            try {
+                savedArticles = await saveAIGeneratedArticles(result.recommendedArticles);
+                console.log(`Cached ${savedArticles.length} educational articles from AI recommendations`);
+            } catch (articleError) {
+                console.error('Error saving AI-recommended articles:', articleError);
+                // Don't fail the whole request if article caching fails
+            }
+        }
+
+        // Step 4: Save insights to cache
         const cacheExpiresAt = new Date();
         cacheExpiresAt.setHours(cacheExpiresAt.getHours() + cacheHours);
 
@@ -87,7 +100,8 @@ router.get('/', authenticateToken, async (req, res) => {
                 cache_expires_at: cacheExpiresAt.toISOString(),
                 is_cached: false,
                 ai_model_used: result.metadata.ai_model_used,
-                generation_time_ms: result.metadata.generation_time_ms
+                generation_time_ms: result.metadata.generation_time_ms,
+                recommended_articles_count: savedArticles.length
             }
         });
     } catch (error) {

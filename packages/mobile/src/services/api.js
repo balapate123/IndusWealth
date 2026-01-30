@@ -390,6 +390,38 @@ export const api = {
             method: 'POST',
             body: JSON.stringify({ insight_id: insightId }),
         }),
+
+    // Educational Content / Wealth Academy
+    getEducationalArticles: (category = null, page = 1, limit = 20) => {
+        const params = new URLSearchParams();
+        if (category) params.append('category', category);
+        params.append('page', page.toString());
+        params.append('limit', limit.toString());
+        return apiRequest(`/educational/articles?${params.toString()}`);
+    },
+
+    getEducationalCategories: () =>
+        apiRequest('/educational/categories'),
+
+    getArticlesForInsight: (insightType, limit = 3) =>
+        apiRequest(`/educational/for-insight/${insightType}?limit=${limit}`),
+
+    getArticleBookmarks: (page = 1, limit = 20) =>
+        apiRequest(`/educational/bookmarks?page=${page}&limit=${limit}`),
+
+    addArticleBookmark: (articleId) =>
+        apiRequest('/educational/bookmarks', {
+            method: 'POST',
+            body: JSON.stringify({ article_id: articleId }),
+        }),
+
+    removeArticleBookmark: (articleId) =>
+        apiRequest(`/educational/bookmarks/${articleId}`, {
+            method: 'DELETE',
+        }),
+
+    seedEducationalArticles: () =>
+        apiRequest('/educational/seed', { method: 'POST' }),
 };
 
 // Check if user is authenticated
