@@ -10,6 +10,7 @@ import {
     ActivityIndicator,
     RefreshControl,
     Modal,
+    TextInput,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -88,6 +89,8 @@ const HomeScreen = ({ navigation }) => {
     const [showTransactionModal, setShowTransactionModal] = useState(false);
     const [plaidStatus, setPlaidStatus] = useState('unknown');
     const [reAuthLoading, setReAuthLoading] = useState(false);
+    const [editNotes, setEditNotes] = useState('');
+    const [saving, setSaving] = useState(false);
 
     // Format transactions for display
     const formatTransactions = (rawTransactions) => {
@@ -108,6 +111,7 @@ const HomeScreen = ({ navigation }) => {
                 rawDate: tx.date,
                 dateGroup: isToday ? 'today' : isYesterday ? 'yesterday' : 'older',
                 account_id: tx.account_id,
+                notes: tx.notes || '',
             };
         });
     };
@@ -275,9 +279,15 @@ const HomeScreen = ({ navigation }) => {
     const olderTransactions = transactions.filter(t => t.dateGroup === 'older');
 
     const renderTransactionIcon = (item, isIncome) => {
+        const hasNotes = item.notes && item.notes.trim().length > 0;
+        const iconStyle = [
+            styles.transactionIcon,
+            hasNotes && styles.transactionIconWithNotes
+        ];
+
         if (isIncome) {
             return (
-                <View style={[styles.transactionIcon, { backgroundColor: '#1A3D1A' }]}>
+                <View style={[...iconStyle, { backgroundColor: '#1A3D1A' }]}>
                     <Ionicons name="cash" size={26} color="#4CAF50" />
                 </View>
             );
@@ -286,13 +296,13 @@ const HomeScreen = ({ navigation }) => {
 
         if (item.categoryLibrary === 'FontAwesome5') {
             return (
-                <View style={[styles.transactionIcon, { backgroundColor: bgColor }]}>
+                <View style={[...iconStyle, { backgroundColor: bgColor }]}>
                     <FontAwesome5 name={item.categoryIcon} size={24} color={item.categoryColor} />
                 </View>
             );
         }
         return (
-            <View style={[styles.transactionIcon, { backgroundColor: bgColor }]}>
+            <View style={[...iconStyle, { backgroundColor: bgColor }]}>
                 <Ionicons name={item.categoryIcon} size={26} color={item.categoryColor} />
             </View>
         );
@@ -314,7 +324,33 @@ const HomeScreen = ({ navigation }) => {
 
     const openTransactionDetails = (item) => {
         setSelectedTransaction(item);
+        setEditNotes(item.notes || '');
         setShowTransactionModal(true);
+    };
+
+    const handleSaveNotes = async () => {
+        if (!selectedTransaction) return;
+
+        try {
+            setSaving(true);
+            await api.updateTransactionNotes(selectedTransaction.id, editNotes.trim());
+
+            // Update local state
+            setTransactions(prev => prev.map(tx =>
+                tx.id === selectedTransaction.id
+                    ? { ...tx, notes: editNotes.trim() }
+                    : tx
+            ));
+            setSelectedTransaction(prev => ({ ...prev, notes: editNotes.trim() }));
+
+            // Close modal after saving
+            setShowTransactionModal(false);
+        } catch (error) {
+            console.error('Error saving notes:', error);
+            alert('Failed to save notes. Please try again.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const renderTransaction = (item) => {
@@ -679,15 +715,46 @@ const HomeScreen = ({ navigation }) => {
                                     <Text style={styles.detailLabel}>Transaction ID</Text>
                                     <Text style={[styles.detailValue, styles.transactionId]}>{selectedTransaction.id}</Text>
                                 </View>
+
+                                {/* Notes Section */}
+                                <View style={styles.metadataSection}>
+                                    <Text style={styles.sectionTitle}>Notes</Text>
+                                    <TextInput
+                                        style={styles.notesInput}
+                                        placeholder="Add notes about this transaction..."
+                                        placeholderTextColor={COLORS.TEXT_MUTED}
+                                        value={editNotes}
+                                        onChangeText={setEditNotes}
+                                        multiline
+                                        maxLength={500}
+                                        editable={!saving}
+                                    />
+                                    <Text style={styles.characterCounter}>
+                                        {editNotes.length}/500 characters
+                                    </Text>
+                                </View>
                             </View>
                         )}
 
-                        <TouchableOpacity
-                            style={styles.modalDoneButton}
-                            onPress={() => setShowTransactionModal(false)}
-                        >
-                            <Text style={styles.modalDoneText}>Done</Text>
-                        </TouchableOpacity>
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={styles.modalDoneButton}
+                                onPress={() => setShowTransactionModal(false)}
+                            >
+                                <Text style={styles.modalDoneText}>Done</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                                onPress={handleSaveNotes}
+                                disabled={saving}
+                            >
+                                {saving ? (
+                                    <ActivityIndicator size="small" color={COLORS.BACKGROUND} />
+                                ) : (
+                                    <Text style={styles.saveButtonText}>Save</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -1109,6 +1176,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: SPACING.MEDIUM,
     },
+    transactionIconWithNotes: {
+        borderWidth: 2,
+        borderColor: COLORS.GOLD,
+    },
     transactionContent: {
         flex: 1,
     },
@@ -1252,12 +1323,64 @@ const styles = StyleSheet.create({
         opacity: 0.6,
     },
     modalDoneButton: {
-        backgroundColor: COLORS.GOLD,
+        flex: 1,
+        backgroundColor: COLORS.CARD_BORDER,
         paddingVertical: SPACING.MEDIUM,
         borderRadius: BORDER_RADIUS.LARGE,
         alignItems: 'center',
     },
     modalDoneText: {
+        color: COLORS.WHITE,
+        fontSize: 16,
+        fontWeight: '600',
+    },
+
+    // Notes Section
+    metadataSection: {
+        marginTop: SPACING.MEDIUM,
+        paddingTop: SPACING.MEDIUM,
+        borderTopWidth: 1,
+        borderTopColor: COLORS.CARD_BORDER,
+    },
+    sectionTitle: {
+        color: COLORS.GOLD,
+        fontSize: 14,
+        fontFamily: FONTS.BOLD,
+        marginBottom: SPACING.SMALL,
+    },
+    notesInput: {
+        backgroundColor: COLORS.BACKGROUND,
+        color: COLORS.WHITE,
+        fontSize: 14,
+        padding: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+        minHeight: 80,
+        textAlignVertical: 'top',
+    },
+    characterCounter: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 12,
+        textAlign: 'right',
+        marginTop: SPACING.SMALL,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: SPACING.MEDIUM,
+        marginTop: SPACING.LARGE,
+    },
+    saveButton: {
+        flex: 1,
+        backgroundColor: COLORS.GOLD,
+        paddingVertical: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.LARGE,
+        alignItems: 'center',
+    },
+    saveButtonDisabled: {
+        opacity: 0.6,
+    },
+    saveButtonText: {
         color: COLORS.BACKGROUND,
         fontSize: 16,
         fontWeight: '600',
