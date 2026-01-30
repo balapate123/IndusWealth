@@ -298,6 +298,12 @@ export const api = {
     // Pass ?refresh=true to force sync from Plaid
     getTransactions: (queryParams = '') => apiRequest(`/transactions${queryParams}`),
 
+    updateTransactionNotes: (transactionId, notes) =>
+        apiRequest(`/transactions/${transactionId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ notes }),
+        }),
+
     // Watchdog - Recurring Expenses
     getWatchdogAnalysis: () => apiRequest('/watchdog'),
 

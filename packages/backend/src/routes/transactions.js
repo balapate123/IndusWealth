@@ -176,4 +176,54 @@ router.get('/', authenticateToken, async (req, res, next) => {
     }
 });
 
+// PATCH /transactions/:transactionId
+// Update transaction notes
+// Requires authentication
+router.patch('/:transactionId', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    logger.info('Updating transaction notes', ctx);
+
+    try {
+        const userId = req.user.id;
+        const { transactionId } = req.params;
+        const { notes } = req.body;
+
+        // Validate notes
+        if (notes !== null && notes !== undefined && typeof notes !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'Notes must be a string'
+            });
+        }
+
+        // Validate notes length (max 500 characters)
+        if (notes && notes.length > 500) {
+            return res.status(400).json({
+                success: false,
+                error: 'Notes cannot exceed 500 characters'
+            });
+        }
+
+        // Update transaction notes
+        const updatedTransaction = await db.updateTransactionNotes(userId, transactionId, notes || null);
+
+        if (!updatedTransaction) {
+            return res.status(404).json({
+                success: false,
+                error: 'Transaction not found'
+            });
+        }
+
+        logger.info('Transaction notes updated', { ...ctx, transactionId });
+
+        res.json({
+            success: true,
+            data: updatedTransaction
+        });
+    } catch (error) {
+        logger.error('Failed to update transaction notes', { ...ctx, error });
+        next(error);
+    }
+});
+
 module.exports = router;

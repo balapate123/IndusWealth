@@ -79,6 +79,14 @@ const initDb = async () => {
             await pool.query(accountAliasSql);
         }
 
+        // Run transaction notes migration
+        const transactionNotesSqlPath = path.join(__dirname, '../../db/add_transaction_notes.sql');
+        if (fs.existsSync(transactionNotesSqlPath)) {
+            const transactionNotesSql = fs.readFileSync(transactionNotesSqlPath, 'utf8');
+            console.log('🔄 Running transaction notes migration...');
+            await pool.query(transactionNotesSql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);
@@ -282,10 +290,11 @@ const upsertTransactions = async (userId, transactions) => {
             `INSERT INTO transactions (user_id, account_id, plaid_transaction_id, name, merchant_name, amount, date, category, pending, iso_currency_code)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              ON CONFLICT (user_id, plaid_transaction_id)
-             DO UPDATE SET 
+             DO UPDATE SET
                 name = EXCLUDED.name,
                 amount = EXCLUDED.amount,
-                pending = EXCLUDED.pending`,
+                pending = EXCLUDED.pending
+                -- Note: notes and updated_at are intentionally excluded to preserve user data`,
             [
                 userId,
                 accountId,
@@ -304,8 +313,8 @@ const upsertTransactions = async (userId, transactions) => {
 
 const getTransactions = async (userId, limit = 100) => {
     const result = await pool.query(
-        `SELECT t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name, 
-                t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending, t.iso_currency_code,
+        `SELECT t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name,
+                t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending, t.iso_currency_code, t.notes,
                 a.name as account_name, a.plaid_account_id as account_id
          FROM transactions t
          LEFT JOIN accounts a ON t.account_id = a.id
@@ -320,8 +329,8 @@ const getTransactions = async (userId, limit = 100) => {
 // Get transactions for a specific account
 const getTransactionsByAccount = async (userId, accountId, limit = 100) => {
     const result = await pool.query(
-        `SELECT t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name, 
-                t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending, t.iso_currency_code,
+        `SELECT t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name,
+                t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending, t.iso_currency_code, t.notes,
                 a.name as account_name, a.plaid_account_id as account_id
          FROM transactions t
          LEFT JOIN accounts a ON t.account_id = a.id
@@ -331,6 +340,18 @@ const getTransactionsByAccount = async (userId, accountId, limit = 100) => {
         [userId, accountId, limit]
     );
     return result.rows;
+};
+
+// Update transaction notes
+const updateTransactionNotes = async (userId, plaidTransactionId, notes) => {
+    const result = await pool.query(
+        `UPDATE transactions
+         SET notes = $1, updated_at = NOW()
+         WHERE user_id = $2 AND plaid_transaction_id = $3
+         RETURNING id, plaid_transaction_id as transaction_id, notes, updated_at`,
+        [notes, userId, plaidTransactionId]
+    );
+    return result.rows[0];
 };
 
 // Get spending by category for analytics
@@ -514,6 +535,7 @@ module.exports = {
     upsertTransactions,
     getTransactions,
     getTransactionsByAccount,
+    updateTransactionNotes,
     // Analytics operations
     getCategorySpending,
     getDailySpending,
