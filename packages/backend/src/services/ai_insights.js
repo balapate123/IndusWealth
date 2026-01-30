@@ -21,7 +21,7 @@ async function generateInsights(userData) {
         const prompt = _buildPrompt(userData);
 
         // Call Gemini API
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         const result = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -65,7 +65,7 @@ async function generateInsights(userData) {
             metadata: {
                 token_count_input: tokenCountInput,
                 token_count_output: tokenCountOutput,
-                ai_model_used: 'gemini-2.0-flash-exp',
+                ai_model_used: 'gemini-2.0-flash',
                 generation_time_ms: generationTimeMs
             }
         };

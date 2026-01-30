@@ -69,7 +69,7 @@ async function batchCategorizeMerchants(merchantNames) {
 
         // Call Gemini API
         const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash-exp',
+            model: 'gemini-2.0-flash',
             generationConfig: {
                 temperature: 0.3,          // Lower = more consistent
                 topK: 20,
@@ -124,7 +124,7 @@ async function batchCategorizeMerchants(merchantNames) {
                 category_icon: patterns[cat.category].icon,
                 category_color: patterns[cat.category].color,
                 confidence_score: cat.confidence,
-                ai_model_used: 'gemini-2.0-flash-exp'
+                ai_model_used: 'gemini-2.0-flash'
             }));
 
         const generationTimeMs = Date.now() - startTime;
@@ -140,7 +140,7 @@ async function batchCategorizeMerchants(merchantNames) {
                 token_count_input: tokenCountInput,
                 token_count_output: tokenCountOutput,
                 generation_time_ms: generationTimeMs,
-                ai_model_used: 'gemini-2.0-flash-exp'
+                ai_model_used: 'gemini-2.0-flash'
             }
         };
 
