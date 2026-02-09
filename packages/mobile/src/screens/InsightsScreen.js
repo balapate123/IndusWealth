@@ -108,13 +108,20 @@ const InsightsScreen = ({ navigation, route }) => {
     // Load Wealth Academy articles
     const loadAcademyArticles = useCallback(async () => {
         try {
+            console.log('📚 Loading Academy Articles...');
             setAcademyLoading(true);
             const response = await api.getEducationalArticles(null, 1, 10);
+            console.log('📚 Academy Response:', JSON.stringify(response, null, 2));
+
             if (response.success && response.data) {
-                setAcademyArticles(response.data.articles || []);
+                const articles = response.data.articles || [];
+                console.log(`📚 Found ${articles.length} articles`);
+                setAcademyArticles(articles);
+            } else {
+                console.warn('📚 Academy response unsuccessful:', response);
             }
         } catch (err) {
-            console.error('Failed to load academy articles:', err);
+            console.error('❌ Failed to load academy articles:', err);
         } finally {
             setAcademyLoading(false);
         }
@@ -403,7 +410,7 @@ const InsightsScreen = ({ navigation, route }) => {
                     </View>
                     <TouchableOpacity
                         style={styles.infoButton}
-                        onPress={() => {/* Show info modal */}}
+                        onPress={() => {/* Show info modal */ }}
                         activeOpacity={0.7}
                     >
                         <Ionicons name="information-circle-outline" size={24} color={COLORS.GOLD} />
