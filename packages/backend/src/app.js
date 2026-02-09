@@ -19,12 +19,41 @@ const app = express();
 // This allows express-rate-limit to correctly identify users via X-Forwarded-For header
 app.set('trust proxy', 1);
 
-// Security headers
-app.use(helmet());
+// Security headers — enhanced helmet config
+app.use(helmet({
+    hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true,
+    },
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", 'data:'],
+            connectSrc: ["'self'"],
+            fontSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            frameSrc: ["'none'"],
+        },
+    },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
 
-// CORS
-app.use(cors());
-app.use(express.json());
+// CORS — restricted in production, open in development
+const corsOptions = {
+    origin: process.env.NODE_ENV === 'production'
+        ? (process.env.CORS_ORIGINS || 'https://induswealth.com').split(',').map(s => s.trim())
+        : true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
+};
+app.use(cors(corsOptions));
+
+// Body parser with size limit to prevent large payload attacks
+app.use(express.json({ limit: '10kb' }));
 
 // Request ID middleware - must be early in chain
 app.use(requestIdMiddleware);
@@ -89,6 +118,7 @@ app.use('/users', require('./routes/users'));
 app.use('/analytics', require('./routes/analytics'));
 app.use('/insights', require('./routes/insights'));
 app.use('/educational', require('./routes/educational'));
+app.use('/2fa', require('./routes/twoFactor'));
 
 // Health check endpoint
 app.get('/', (req, res) => {

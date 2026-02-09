@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const db = require('../services/db');
-const { generateToken, authenticateToken } = require('../middleware/auth');
+const { generateAccessToken, generateRefreshToken, rotateRefreshToken, revokeAllUserTokens, revokeSingleToken, authenticateToken } = require('../middleware/auth');
 const { createLogger } = require('../services/logger');
 const { ValidationError, AuthError, NotFoundError } = require('../errors/AppError');
 const { successResponse } = require('../utils/responseHelper');
+const { validatePassword, getPasswordStrength } = require('../utils/passwordValidator');
+const { checkAccountLock, recordFailedAttempt, recordSuccessfulLogin } = require('../utils/loginProtection');
+const { encrypt, decrypt } = require('../services/encryption');
 
 const logger = createLogger('USERS');
 
@@ -33,8 +37,9 @@ router.post('/signup', async (req, res, next) => {
         }
 
         // Password strength validation
-        if (password.length < 6) {
-            throw new ValidationError('Password must be at least 6 characters', { field: 'password' });
+        const passwordCheck = validatePassword(password);
+        if (!passwordCheck.valid) {
+            throw new ValidationError(passwordCheck.errors[0], { field: 'password', errors: passwordCheck.errors });
         }
 
         // Check if user already exists
@@ -50,15 +55,22 @@ router.post('/signup', async (req, res, next) => {
         // Create user
         const user = await db.createUser(email, passwordHash, name || 'User');
 
-        // Generate JWT token
-        const token = generateToken(user);
+        // Generate tokens
+        const accessToken = generateAccessToken(user);
+        const { token: refreshToken, hash: refreshHash, familyId } = generateRefreshToken();
+
+        // Store refresh token
+        const refreshExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+        await db.storeRefreshToken(refreshHash, user.id, familyId, refreshExpiry, req.ip);
 
         logger.info('User created successfully', { ...ctx, userId: user.id, email });
 
         res.status(201).json({
             success: true,
             message: 'Account created successfully',
-            token,
+            token: accessToken, // backward compat
+            accessToken,
+            refreshToken,
             user: {
                 id: user.id,
                 email: user.email,
@@ -74,14 +86,14 @@ router.post('/signup', async (req, res, next) => {
 });
 
 // POST /users/login
-// Authenticate user and return JWT token
+// Authenticate user and return JWT + refresh token
 router.post('/login', async (req, res, next) => {
     const ctx = { requestId: req.requestId };
     const email = req.body.email?.toLowerCase();
     logger.info('User login attempt', { ...ctx, email });
 
     try {
-        const { password } = req.body;
+        const { password, twoFactorCode, recoveryCode } = req.body;
 
         if (!email || !password) {
             throw new ValidationError('Email and password are required', {
@@ -89,9 +101,20 @@ router.post('/login', async (req, res, next) => {
             });
         }
 
+        // Check account lockout
+        const lockStatus = await checkAccountLock(email);
+        if (lockStatus.locked) {
+            logger.warn('Login blocked - account locked', { ...ctx, email });
+            throw new AuthError(
+                `Account locked. Try again in ${lockStatus.remainingMinutes} minute(s).`,
+                'ACCOUNT_LOCKED'
+            );
+        }
+
         // Find user (case-insensitive email)
         const user = await db.getUserByEmail(email);
         if (!user) {
+            await recordFailedAttempt(email, req.ip, req.headers['user-agent'], 'USER_NOT_FOUND');
             logger.warn('Login failed - user not found', { ...ctx, email });
             throw new AuthError('Invalid email or password', 'INVALID_CREDENTIALS');
         }
@@ -99,19 +122,65 @@ router.post('/login', async (req, res, next) => {
         // Verify password
         const isValid = await bcrypt.compare(password, user.password_hash);
         if (!isValid) {
+            await recordFailedAttempt(email, req.ip, req.headers['user-agent'], 'INVALID_PASSWORD');
             logger.warn('Login failed - invalid password', { ...ctx, email });
             throw new AuthError('Invalid email or password', 'INVALID_CREDENTIALS');
         }
 
-        // Generate JWT token
-        const token = generateToken(user);
+        // Check 2FA if enabled
+        const totpRecord = await db.getTotpSecret(user.id);
+        if (totpRecord && totpRecord.is_verified) {
+            // 2FA is enabled
+            if (!twoFactorCode && !recoveryCode) {
+                // No code provided — tell client 2FA is required
+                return res.json({
+                    success: false,
+                    code: '2FA_REQUIRED',
+                    message: 'Two-factor authentication code required',
+                    requestId: req.requestId,
+                });
+            }
+
+            if (recoveryCode) {
+                // Try recovery code
+                const { createHash } = require('crypto');
+                const codeHash = createHash('sha256').update(recoveryCode.trim()).digest('hex');
+                const used = await db.useRecoveryCode(user.id, codeHash);
+                if (!used) {
+                    await recordFailedAttempt(email, req.ip, req.headers['user-agent'], 'INVALID_RECOVERY_CODE');
+                    throw new AuthError('Invalid recovery code', 'INVALID_2FA');
+                }
+            } else {
+                // Verify TOTP code
+                const { authenticator } = require('otplib');
+                const decryptedSecret = decrypt(totpRecord.encrypted_secret);
+                const isValidCode = authenticator.check(twoFactorCode, decryptedSecret);
+                if (!isValidCode) {
+                    await recordFailedAttempt(email, req.ip, req.headers['user-agent'], 'INVALID_2FA_CODE');
+                    throw new AuthError('Invalid two-factor code', 'INVALID_2FA');
+                }
+            }
+        }
+
+        // Successful login — record and reset lockout
+        await recordSuccessfulLogin(email, req.ip, req.headers['user-agent']);
+
+        // Generate tokens
+        const accessToken = generateAccessToken(user);
+        const { token: refreshToken, hash: refreshHash, familyId } = generateRefreshToken();
+
+        // Store refresh token
+        const refreshExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+        await db.storeRefreshToken(refreshHash, user.id, familyId, refreshExpiry, req.ip);
 
         logger.info('User logged in successfully', { ...ctx, userId: user.id, email });
 
         res.json({
             success: true,
             message: 'Login successful',
-            token,
+            token: accessToken, // backward compat
+            accessToken,
+            refreshToken,
             user: {
                 id: user.id,
                 email: user.email,
@@ -159,10 +228,20 @@ router.get('/me', authenticateToken, async (req, res, next) => {
 });
 
 // POST /users/logout
-// Client-side logout (just for logging, token invalidation would require blacklist)
+// Revoke refresh token on logout
 router.post('/logout', authenticateToken, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
     logger.info('User logged out', { ...ctx, email: req.user.email });
+
+    try {
+        const { refreshToken } = req.body;
+        if (refreshToken) {
+            await revokeSingleToken(refreshToken);
+        }
+    } catch (error) {
+        // Log but don't fail logout if token revocation fails
+        logger.warn('Failed to revoke refresh token during logout', { ...ctx, error: error.message });
+    }
 
     res.json({
         success: true,
@@ -264,9 +343,11 @@ router.put('/password', authenticateToken, async (req, res, next) => {
             });
         }
 
-        if (newPassword.length < 6) {
-            throw new ValidationError('New password must be at least 6 characters', {
-                field: 'newPassword'
+        const passwordCheck = validatePassword(newPassword);
+        if (!passwordCheck.valid) {
+            throw new ValidationError(passwordCheck.errors[0], {
+                field: 'newPassword',
+                errors: passwordCheck.errors
             });
         }
 
@@ -283,17 +364,29 @@ router.put('/password', authenticateToken, async (req, res, next) => {
         // Hash new password
         const newPasswordHash = await bcrypt.hash(newPassword, 12);
 
-        // Update password
+        // Update password and password_changed_at
         await db.pool.query(
-            'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+            'UPDATE users SET password_hash = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2',
             [newPasswordHash, userId]
         );
+
+        // Revoke all refresh tokens for this user
+        await revokeAllUserTokens(userId);
+
+        // Issue new token pair
+        const accessToken = generateAccessToken({ id: userId, email: req.user.email, name: req.user.name });
+        const { token: refreshToken, hash: refreshHash, familyId } = generateRefreshToken();
+        const refreshExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await db.storeRefreshToken(refreshHash, userId, familyId, refreshExpiry, req.ip);
 
         logger.info('Password changed successfully', ctx);
 
         res.json({
             success: true,
             message: 'Password changed successfully',
+            token: accessToken,
+            accessToken,
+            refreshToken,
             requestId: req.requestId
         });
     } catch (error) {
@@ -347,6 +440,43 @@ router.delete('/account', authenticateToken, async (req, res, next) => {
         logger.error('Failed to delete account', { ...ctx, error });
         next(error);
     }
+});
+
+// POST /users/refresh
+// Exchange a refresh token for a new access + refresh token pair
+router.post('/refresh', async (req, res, next) => {
+    const ctx = { requestId: req.requestId };
+    logger.info('Token refresh attempt', ctx);
+
+    try {
+        const { refreshToken } = req.body;
+        if (!refreshToken) {
+            throw new ValidationError('Refresh token is required', { field: 'refreshToken' });
+        }
+
+        const result = await rotateRefreshToken(refreshToken, req.ip);
+
+        logger.info('Token refreshed successfully', { ...ctx, userId: result.userId });
+
+        res.json({
+            success: true,
+            token: result.accessToken, // backward compat
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+            requestId: req.requestId,
+        });
+    } catch (error) {
+        logger.error('Token refresh failed', { ...ctx, error });
+        next(error);
+    }
+});
+
+// POST /users/password-strength
+// Check password strength (public endpoint for mobile UI)
+router.post('/password-strength', (req, res) => {
+    const { password } = req.body;
+    const strength = getPasswordStrength(password || '');
+    res.json({ success: true, ...strength });
 });
 
 module.exports = router;

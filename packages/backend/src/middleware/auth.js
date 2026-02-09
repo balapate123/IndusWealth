@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const db = require('../services/db');
 const { createLogger } = require('../services/logger');
 const { AuthError } = require('../errors/AppError');
@@ -14,14 +15,16 @@ if (!JWT_SECRET) {
     logger.warn('JWT_SECRET not set - using insecure default for development only');
 }
 const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'dev-only-insecure-secret';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+// Access token expiry — configurable for transition period (default: 15m, use 7d for backward compat)
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
 
 /**
- * Generate a JWT token for a user
+ * Generate a short-lived access token (JWT).
  * @param {Object} user - User object with id, email, name
- * @returns {string} JWT token
+ * @returns {string} JWT access token
  */
-const generateToken = (user) => {
+const generateAccessToken = (user) => {
     const payload = {
         userId: user.id,
         email: user.email,
@@ -35,7 +38,95 @@ const generateToken = (user) => {
 };
 
 /**
- * Verify and decode a JWT token
+ * Generate a refresh token (opaque, random).
+ * Returns the raw token (to send to client), its SHA-256 hash (to store in DB),
+ * and a family ID (for rotation-based reuse detection).
+ * @returns {{ token: string, hash: string, familyId: string }}
+ */
+const generateRefreshToken = () => {
+    const token = crypto.randomBytes(48).toString('base64url');
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    const familyId = crypto.randomUUID();
+    return { token, hash, familyId };
+};
+
+/**
+ * Rotate a refresh token: validate the old token, revoke it, and issue a new pair.
+ * Implements reuse detection — if a revoked token is reused, the entire family is revoked.
+ * @param {string} oldToken - The raw refresh token from the client
+ * @param {string} ipAddress - Client IP for logging
+ * @returns {Promise<{ accessToken: string, refreshToken: string, userId: number }>}
+ */
+const rotateRefreshToken = async (oldToken, ipAddress) => {
+    const oldHash = crypto.createHash('sha256').update(oldToken).digest('hex');
+    const storedToken = await db.getRefreshToken(oldHash);
+
+    if (!storedToken) {
+        throw new AuthError('Invalid refresh token', 'TOKEN_INVALID');
+    }
+
+    // Reuse detection: if the token has already been revoked, revoke the entire family
+    if (storedToken.revoked_at) {
+        logger.warn('Refresh token reuse detected — revoking family', {
+            familyId: storedToken.family_id,
+            userId: storedToken.user_id,
+        });
+        await db.revokeTokenFamily(storedToken.family_id);
+        throw new AuthError('Refresh token has been revoked (possible token theft)', 'TOKEN_REUSED');
+    }
+
+    // Check expiry
+    if (new Date(storedToken.expires_at) < new Date()) {
+        throw new AuthError('Refresh token has expired', 'TOKEN_EXPIRED');
+    }
+
+    // Get user
+    const user = await db.getUserById(storedToken.user_id);
+    if (!user) {
+        throw new AuthError('User no longer exists', 'USER_NOT_FOUND');
+    }
+
+    // Generate new pair (keep the same family)
+    const newRefreshRaw = crypto.randomBytes(48).toString('base64url');
+    const newRefreshHash = crypto.createHash('sha256').update(newRefreshRaw).digest('hex');
+
+    // Revoke old token and link to new
+    await db.revokeRefreshToken(oldHash, newRefreshHash);
+
+    // Store new token in the same family
+    const refreshExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    await db.storeRefreshToken(newRefreshHash, user.id, storedToken.family_id, refreshExpiry, ipAddress);
+
+    // Generate new access token
+    const accessToken = generateAccessToken(user);
+
+    return {
+        accessToken,
+        refreshToken: newRefreshRaw,
+        userId: user.id,
+    };
+};
+
+/**
+ * Revoke all refresh tokens for a user (e.g., on password change).
+ * @param {number} userId
+ */
+const revokeAllUserTokens = async (userId) => {
+    await db.revokeAllUserTokens(userId);
+    logger.info('All refresh tokens revoked for user', { userId });
+};
+
+/**
+ * Revoke a single refresh token (e.g., on logout).
+ * @param {string} rawToken - The raw refresh token
+ */
+const revokeSingleToken = async (rawToken) => {
+    const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    await db.revokeRefreshToken(hash);
+};
+
+/**
+ * Verify and decode a JWT access token.
  * @param {string} token - JWT token
  * @returns {Object} Decoded payload or null if invalid
  */
@@ -48,8 +139,8 @@ const verifyToken = (token) => {
 };
 
 /**
- * Authentication middleware
- * Verifies JWT token from Authorization header and attaches user to request
+ * Authentication middleware.
+ * Verifies JWT token from Authorization header and attaches user to request.
  */
 const authenticateToken = async (req, res, next) => {
     const ctx = { requestId: req.requestId };
@@ -101,8 +192,8 @@ const authenticateToken = async (req, res, next) => {
 };
 
 /**
- * Optional authentication middleware
- * Attaches user to request if token is valid, but doesn't require it
+ * Optional authentication middleware.
+ * Attaches user to request if token is valid, but doesn't require it.
  */
 const optionalAuth = async (req, res, next) => {
     const ctx = { requestId: req.requestId };
@@ -136,7 +227,11 @@ const optionalAuth = async (req, res, next) => {
 };
 
 module.exports = {
-    generateToken,
+    generateAccessToken,
+    generateRefreshToken,
+    rotateRefreshToken,
+    revokeAllUserTokens,
+    revokeSingleToken,
     verifyToken,
     authenticateToken,
     optionalAuth,

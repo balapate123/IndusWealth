@@ -6,6 +6,7 @@ const CACHE_KEYS = {
     ACCOUNTS: '@induswealth_accounts',
     USER: '@induswealth_user',
     AUTH_TOKEN: '@induswealth_auth_token',
+    REFRESH_TOKEN: '@induswealth_refresh_token',
     LAST_FETCH: '@induswealth_last_fetch',
 };
 
@@ -41,6 +42,37 @@ export const clearAuthToken = async () => {
         console.log('🔐 [CACHE] Auth token cleared');
     } catch (error) {
         console.error('Error clearing auth token:', error);
+    }
+};
+
+// ============ REFRESH TOKEN ============
+
+export const getRefreshToken = async () => {
+    try {
+        return await AsyncStorage.getItem(CACHE_KEYS.REFRESH_TOKEN);
+    } catch (error) {
+        console.error('Error reading refresh token:', error);
+        return null;
+    }
+};
+
+export const setRefreshToken = async (token) => {
+    try {
+        if (token) {
+            await AsyncStorage.setItem(CACHE_KEYS.REFRESH_TOKEN, token);
+        } else {
+            await AsyncStorage.removeItem(CACHE_KEYS.REFRESH_TOKEN);
+        }
+    } catch (error) {
+        console.error('Error saving refresh token:', error);
+    }
+};
+
+export const clearRefreshToken = async () => {
+    try {
+        await AsyncStorage.removeItem(CACHE_KEYS.REFRESH_TOKEN);
+    } catch (error) {
+        console.error('Error clearing refresh token:', error);
     }
 };
 
@@ -164,6 +196,7 @@ export const isCacheStale = async (type = 'transactions', maxAgeMinutes = 5) => 
 export const logout = async () => {
     try {
         await clearAuthToken();
+        await clearRefreshToken();
         await clearUserCache();
         await clearAllCache();
         global.CURRENT_USER_ID = undefined;
@@ -179,6 +212,10 @@ export default {
     getAuthToken,
     setAuthToken,
     clearAuthToken,
+    // Refresh token
+    getRefreshToken,
+    setRefreshToken,
+    clearRefreshToken,
     // Data
     getCachedTransactions,
     setCachedTransactions,

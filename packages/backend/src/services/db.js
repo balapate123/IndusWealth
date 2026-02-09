@@ -3,6 +3,7 @@ const { Pool } = require('pg');
 // PostgreSQL connection pool
 const fs = require('fs');
 const path = require('path');
+const { encrypt, decrypt } = require('./encryption');
 
 // PostgreSQL connection pool
 const pool = new Pool(
@@ -95,6 +96,14 @@ const initDb = async () => {
             await pool.query(educationalContentSql);
         }
 
+        // Run security tables migration
+        const securitySqlPath = path.join(__dirname, '../../db/add_security_tables.sql');
+        if (fs.existsSync(securitySqlPath)) {
+            const securitySql = fs.readFileSync(securitySqlPath, 'utf8');
+            console.log('🔄 Running security tables migration...');
+            await pool.query(securitySql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);
@@ -122,11 +131,16 @@ const createUser = async (email, passwordHash, name) => {
 
 const getUserByEmail = async (email) => {
     const result = await pool.query(
-        `SELECT id, email, password_hash, name, date_of_birth, plaid_access_token, plaid_item_id, created_at
+        `SELECT id, email, password_hash, name, date_of_birth, plaid_access_token, plaid_item_id,
+                failed_login_attempts, locked_until, password_changed_at, created_at
          FROM users WHERE email = $1`,
         [email]
     );
-    return result.rows[0];
+    const user = result.rows[0];
+    if (user && user.plaid_access_token) {
+        user.plaid_access_token = decrypt(user.plaid_access_token);
+    }
+    return user;
 };
 
 const getUserById = async (userId) => {
@@ -135,14 +149,19 @@ const getUserById = async (userId) => {
          FROM users WHERE id = $1`,
         [userId]
     );
-    return result.rows[0];
+    const user = result.rows[0];
+    if (user && user.plaid_access_token) {
+        user.plaid_access_token = decrypt(user.plaid_access_token);
+    }
+    return user;
 };
 
 const updateUserPlaidToken = async (userId, accessToken, itemId) => {
+    const encryptedToken = encrypt(accessToken);
     await pool.query(
-        `UPDATE users SET plaid_access_token = $1, plaid_item_id = $2, updated_at = NOW() 
+        `UPDATE users SET plaid_access_token = $1, plaid_item_id = $2, updated_at = NOW()
          WHERE id = $3`,
-        [accessToken, itemId, userId]
+        [encryptedToken, itemId, userId]
     );
 };
 
@@ -520,6 +539,140 @@ const logAICategorization = async (logData) => {
     );
 };
 
+// ============ REFRESH TOKEN OPERATIONS ============
+
+const storeRefreshToken = async (tokenHash, userId, familyId, expiresAt, ipAddress) => {
+    await pool.query(
+        `INSERT INTO refresh_tokens (token_hash, user_id, family_id, expires_at, ip_address)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [tokenHash, userId, familyId, expiresAt, ipAddress]
+    );
+};
+
+const getRefreshToken = async (tokenHash) => {
+    const result = await pool.query(
+        `SELECT id, token_hash, user_id, family_id, expires_at, revoked_at, replaced_by_hash, ip_address
+         FROM refresh_tokens WHERE token_hash = $1`,
+        [tokenHash]
+    );
+    return result.rows[0];
+};
+
+const revokeRefreshToken = async (tokenHash, replacedByHash = null) => {
+    await pool.query(
+        `UPDATE refresh_tokens SET revoked_at = NOW(), replaced_by_hash = $2 WHERE token_hash = $1`,
+        [tokenHash, replacedByHash]
+    );
+};
+
+const revokeTokenFamily = async (familyId) => {
+    await pool.query(
+        `UPDATE refresh_tokens SET revoked_at = NOW() WHERE family_id = $1 AND revoked_at IS NULL`,
+        [familyId]
+    );
+};
+
+const revokeAllUserTokens = async (userId) => {
+    await pool.query(
+        `UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
+        [userId]
+    );
+};
+
+const cleanupExpiredTokens = async () => {
+    const result = await pool.query(
+        `DELETE FROM refresh_tokens WHERE expires_at < NOW() OR revoked_at < NOW() - INTERVAL '7 days'`
+    );
+    return result.rowCount;
+};
+
+// ============ LOGIN ATTEMPT OPERATIONS ============
+
+const recordLoginAttempt = async (email, ipAddress, userAgent, success, failureReason = null) => {
+    await pool.query(
+        `INSERT INTO login_attempts (email, ip_address, user_agent, success, failure_reason)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [email, ipAddress, userAgent, success, failureReason]
+    );
+};
+
+const getRecentFailedAttempts = async (email, windowMinutes = 15) => {
+    const result = await pool.query(
+        `SELECT COUNT(*) as count FROM login_attempts
+         WHERE email = $1 AND success = false
+         AND attempted_at > NOW() - INTERVAL '1 minute' * $2`,
+        [email, windowMinutes]
+    );
+    return parseInt(result.rows[0].count, 10);
+};
+
+const updateUserLockStatus = async (userId, failedAttempts, lockedUntil = null) => {
+    await pool.query(
+        `UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3`,
+        [failedAttempts, lockedUntil, userId]
+    );
+};
+
+// ============ 2FA OPERATIONS ============
+
+const storeTotpSecret = async (userId, encryptedSecret) => {
+    await pool.query(
+        `INSERT INTO totp_secrets (user_id, encrypted_secret)
+         VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET encrypted_secret = $2, is_verified = false, updated_at = NOW()`,
+        [userId, encryptedSecret]
+    );
+};
+
+const getTotpSecret = async (userId) => {
+    const result = await pool.query(
+        `SELECT encrypted_secret, is_verified FROM totp_secrets WHERE user_id = $1`,
+        [userId]
+    );
+    return result.rows[0];
+};
+
+const verifyTotpSetup = async (userId) => {
+    await pool.query(
+        `UPDATE totp_secrets SET is_verified = true, updated_at = NOW() WHERE user_id = $1`,
+        [userId]
+    );
+};
+
+const deleteTotpSecret = async (userId) => {
+    await pool.query(`DELETE FROM totp_secrets WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM recovery_codes WHERE user_id = $1`, [userId]);
+};
+
+const storeRecoveryCodes = async (userId, codeHashes) => {
+    // Clear old codes first
+    await pool.query(`DELETE FROM recovery_codes WHERE user_id = $1`, [userId]);
+    for (const hash of codeHashes) {
+        await pool.query(
+            `INSERT INTO recovery_codes (user_id, code_hash) VALUES ($1, $2)`,
+            [userId, hash]
+        );
+    }
+};
+
+const getRecoveryCodes = async (userId) => {
+    const result = await pool.query(
+        `SELECT code_hash, used_at FROM recovery_codes WHERE user_id = $1`,
+        [userId]
+    );
+    return result.rows;
+};
+
+const useRecoveryCode = async (userId, codeHash) => {
+    const result = await pool.query(
+        `UPDATE recovery_codes SET used_at = NOW()
+         WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL
+         RETURNING id`,
+        [userId, codeHash]
+    );
+    return result.rows.length > 0;
+};
+
 module.exports = {
     pool,
     // User operations
@@ -554,6 +707,25 @@ module.exports = {
     storeMerchantCategories,
     incrementCacheUsage,
     logAICategorization,
+    // Refresh token operations
+    storeRefreshToken,
+    getRefreshToken,
+    revokeRefreshToken,
+    revokeTokenFamily,
+    revokeAllUserTokens,
+    cleanupExpiredTokens,
+    // Login attempt operations
+    recordLoginAttempt,
+    getRecentFailedAttempts,
+    updateUserLockStatus,
+    // 2FA operations
+    storeTotpSecret,
+    getTotpSecret,
+    verifyTotpSetup,
+    deleteTotpSecret,
+    storeRecoveryCodes,
+    getRecoveryCodes,
+    useRecoveryCode,
     initDb,
 };
 

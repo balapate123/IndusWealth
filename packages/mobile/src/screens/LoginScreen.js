@@ -27,6 +27,11 @@ const LoginScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
+    // 2FA state
+    const [needs2FA, setNeeds2FA] = useState(false);
+    const [twoFactorCode, setTwoFactorCode] = useState('');
+    const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+
     // Custom Alert state
     const [alertVisible, setAlertVisible] = useState(false);
     const [alertConfig, setAlertConfig] = useState({
@@ -51,10 +56,27 @@ const LoginScreen = ({ navigation }) => {
             return;
         }
 
+        // If 2FA is required, validate code
+        if (needs2FA && !twoFactorCode.trim()) {
+            showAlert('Error', 'Please enter your authentication code');
+            return;
+        }
+
         setLoading(true);
         try {
             console.log('Attempting login for:', email);
-            const response = await api.auth.login(email, password);
+            const codeParam = needs2FA ? twoFactorCode.trim() : null;
+            const recoveryParam = (needs2FA && useRecoveryCode) ? codeParam : null;
+            const totpParam = (needs2FA && !useRecoveryCode) ? codeParam : null;
+
+            const response = await api.auth.login(email, password, totpParam, recoveryParam);
+
+            // Handle 2FA required
+            if (response.code === '2FA_REQUIRED') {
+                setNeeds2FA(true);
+                setTwoFactorCode('');
+                return;
+            }
 
             if (response.success) {
                 console.log('Login success:', response.user.email);
@@ -66,7 +88,6 @@ const LoginScreen = ({ navigation }) => {
                 global.CURRENT_USER_ID = response.user.id;
 
                 // Navigate to Main App
-                // We use replace to prevent going back to login
                 navigation.reset({
                     index: 0,
                     routes: [{ name: 'Main' }],
@@ -76,7 +97,16 @@ const LoginScreen = ({ navigation }) => {
             }
         } catch (error) {
             console.error('Login error:', error);
-            showAlert('Error', error.message || 'Something went wrong. Please try again.');
+            const errorCode = error.responseData?.code || error.parsedError?.code;
+
+            if (errorCode === 'ACCOUNT_LOCKED') {
+                showAlert('Account Locked', error.message || 'Too many failed attempts. Please try again later.');
+            } else if (errorCode === 'INVALID_2FA') {
+                showAlert('Invalid Code', 'The authentication code was incorrect. Please try again.');
+                setTwoFactorCode('');
+            } else {
+                showAlert('Error', error.message || 'Something went wrong. Please try again.');
+            }
         } finally {
             setLoading(false);
         }
@@ -159,6 +189,38 @@ const LoginScreen = ({ navigation }) => {
                         <TouchableOpacity style={styles.forgotButton}>
                             <Text style={styles.forgotText}>Forgot Password?</Text>
                         </TouchableOpacity>
+
+                        {/* 2FA Code Input */}
+                        {needs2FA && (
+                            <View style={{ marginBottom: 16 }}>
+                                <View style={styles.inputLabelContainer}>
+                                    <Text style={styles.inputLabel}>
+                                        {useRecoveryCode ? 'Recovery Code' : 'Authentication Code'}
+                                    </Text>
+                                </View>
+                                <View style={styles.inputContainer}>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder={useRecoveryCode ? 'Enter recovery code' : 'Enter 6-digit code'}
+                                        placeholderTextColor="#64748B"
+                                        value={twoFactorCode}
+                                        onChangeText={setTwoFactorCode}
+                                        autoCapitalize="none"
+                                        keyboardType={useRecoveryCode ? 'default' : 'number-pad'}
+                                        maxLength={useRecoveryCode ? 8 : 6}
+                                        autoFocus
+                                    />
+                                </View>
+                                <TouchableOpacity onPress={() => {
+                                    setUseRecoveryCode(!useRecoveryCode);
+                                    setTwoFactorCode('');
+                                }}>
+                                    <Text style={styles.forgotText}>
+                                        {useRecoveryCode ? 'Use authenticator app instead' : 'Use a recovery code'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
 
                         {/* Login Button */}
                         <TouchableOpacity

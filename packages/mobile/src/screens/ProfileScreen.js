@@ -32,6 +32,17 @@ const ProfileScreen = ({ navigation }) => {
     const [deletePassword, setDeletePassword] = useState('');
     const [showDeletePassword, setShowDeletePassword] = useState(false);
 
+    // 2FA state
+    const [twoFAEnabled, setTwoFAEnabled] = useState(false);
+    const [twoFAModalVisible, setTwoFAModalVisible] = useState(false);
+    const [twoFAStep, setTwoFAStep] = useState('loading'); // loading | setup | verify | codes | disable
+    const [twoFAQrCode, setTwoFAQrCode] = useState(null);
+    const [twoFASecret, setTwoFASecret] = useState('');
+    const [twoFACode, setTwoFACode] = useState('');
+    const [recoveryCodes, setRecoveryCodes] = useState([]);
+    const [twoFAPassword, setTwoFAPassword] = useState('');
+    const [twoFALoading, setTwoFALoading] = useState(false);
+
     // Alert state
     const [alertConfig, setAlertConfig] = useState({
         visible: false,
@@ -83,6 +94,14 @@ const ProfileScreen = ({ navigation }) => {
             }
         } catch (error) {
             console.error('Failed to fetch user:', error);
+        }
+
+        // Check 2FA status
+        try {
+            const status = await api.twoFactor.getStatus();
+            setTwoFAEnabled(status.enabled);
+        } catch (error) {
+            console.error('Failed to check 2FA status:', error);
         }
     };
 
@@ -207,6 +226,89 @@ const ProfileScreen = ({ navigation }) => {
         const date = new Date(selectedYear, selectedMonth - 1, selectedDay);
         setEditDob(date);
         setShowDatePicker(false);
+    };
+
+    // 2FA handlers
+    const handle2FAPress = async () => {
+        setTwoFAModalVisible(true);
+        setTwoFACode('');
+        setTwoFAPassword('');
+        setRecoveryCodes([]);
+
+        if (twoFAEnabled) {
+            setTwoFAStep('disable');
+        } else {
+            setTwoFAStep('loading');
+            setTwoFALoading(true);
+            try {
+                const response = await api.twoFactor.setup();
+                if (response.success) {
+                    setTwoFAQrCode(response.qrCode);
+                    setTwoFASecret(response.secret);
+                    setTwoFAStep('setup');
+                }
+            } catch (error) {
+                showAlert('Error', error.message || 'Failed to start 2FA setup', [
+                    { text: 'OK', onPress: hideAlert }
+                ]);
+                setTwoFAModalVisible(false);
+            } finally {
+                setTwoFALoading(false);
+            }
+        }
+    };
+
+    const handleVerify2FA = async () => {
+        if (!twoFACode.trim() || twoFACode.length !== 6) {
+            showAlert('Error', 'Please enter a valid 6-digit code', [
+                { text: 'OK', onPress: hideAlert }
+            ]);
+            return;
+        }
+        setTwoFALoading(true);
+        try {
+            const response = await api.twoFactor.verify(twoFACode);
+            if (response.success) {
+                setRecoveryCodes(response.recoveryCodes || []);
+                setTwoFAStep('codes');
+                setTwoFAEnabled(true);
+            }
+        } catch (error) {
+            showAlert('Error', error.message || 'Invalid code. Please try again.', [
+                { text: 'OK', onPress: hideAlert }
+            ]);
+            setTwoFACode('');
+        } finally {
+            setTwoFALoading(false);
+        }
+    };
+
+    const handleDisable2FA = async () => {
+        if (!twoFAPassword.trim()) {
+            showAlert('Error', 'Please enter your password', [
+                { text: 'OK', onPress: hideAlert }
+            ]);
+            return;
+        }
+        setTwoFALoading(true);
+        try {
+            const response = await api.twoFactor.disable(twoFAPassword);
+            if (response.success) {
+                setTwoFAEnabled(false);
+                setTwoFAModalVisible(false);
+                setTimeout(() => {
+                    showAlert('Success', 'Two-factor authentication has been disabled', [
+                        { text: 'OK', onPress: hideAlert }
+                    ]);
+                }, 500);
+            }
+        } catch (error) {
+            showAlert('Error', error.message || 'Failed to disable 2FA. Check your password.', [
+                { text: 'OK', onPress: hideAlert }
+            ]);
+        } finally {
+            setTwoFALoading(false);
+        }
     };
 
     const years = Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i);
@@ -351,9 +453,10 @@ const ProfileScreen = ({ navigation }) => {
                     <MenuItem
                         icon="shield"
                         label="2-Step Verification"
-                        subtitle="Extra layer of protection"
-                        showBadge // Mocking the "On" text as a pseudo-badge/text
-                        badgeText="On"
+                        subtitle={twoFAEnabled ? 'Enabled — extra layer of protection' : 'Not enabled'}
+                        showBadge
+                        badgeText={twoFAEnabled ? 'On' : 'Off'}
+                        onPress={handle2FAPress}
                     />
                 </View>
 
@@ -702,6 +805,139 @@ const ProfileScreen = ({ navigation }) => {
                                 )}
                             </TouchableOpacity>
                         </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* 2FA Modal */}
+            <Modal
+                visible={twoFAModalVisible}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setTwoFAModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.editModalContent}>
+                        <View style={styles.editModalHeader}>
+                            <Text style={styles.modalTitle}>
+                                {twoFAStep === 'disable' ? 'Disable 2FA' :
+                                 twoFAStep === 'codes' ? 'Recovery Codes' :
+                                 'Two-Factor Authentication'}
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.closeButton}
+                                onPress={() => setTwoFAModalVisible(false)}
+                            >
+                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {twoFAStep === 'loading' && (
+                            <View style={{ alignItems: 'center', padding: 40 }}>
+                                <ActivityIndicator color={COLORS.GOLD} size="large" />
+                                <Text style={[styles.modalMessage, { marginTop: 16 }]}>Setting up...</Text>
+                            </View>
+                        )}
+
+                        {twoFAStep === 'setup' && (
+                            <ScrollView>
+                                <Text style={styles.modalMessage}>
+                                    Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
+                                </Text>
+                                {twoFAQrCode && (
+                                    <View style={{ alignItems: 'center', marginVertical: 16, backgroundColor: '#FFF', borderRadius: 12, padding: 16, alignSelf: 'center' }}>
+                                        <Image source={{ uri: twoFAQrCode }} style={{ width: 200, height: 200 }} />
+                                    </View>
+                                )}
+                                <Text style={[styles.modalMessage, { fontSize: 12 }]}>
+                                    Or enter this code manually:
+                                </Text>
+                                <View style={[styles.readOnlyInput, { marginBottom: 16 }]}>
+                                    <Text style={{ color: COLORS.GOLD, fontSize: 14, fontFamily: 'monospace', letterSpacing: 2 }}>{twoFASecret}</Text>
+                                </View>
+
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>Enter the 6-digit code from your app</Text>
+                                    <TextInput
+                                        style={styles.textInput}
+                                        value={twoFACode}
+                                        onChangeText={setTwoFACode}
+                                        placeholder="000000"
+                                        placeholderTextColor={COLORS.TEXT_MUTED}
+                                        keyboardType="number-pad"
+                                        maxLength={6}
+                                        textAlign="center"
+                                    />
+                                </View>
+
+                                <TouchableOpacity
+                                    style={[styles.saveButton, twoFALoading && styles.saveButtonDisabled]}
+                                    onPress={handleVerify2FA}
+                                    disabled={twoFALoading}
+                                >
+                                    {twoFALoading ? (
+                                        <ActivityIndicator color={COLORS.BACKGROUND} />
+                                    ) : (
+                                        <Text style={styles.saveButtonText}>Verify & Enable</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </ScrollView>
+                        )}
+
+                        {twoFAStep === 'codes' && (
+                            <ScrollView>
+                                <Text style={styles.modalMessage}>
+                                    Save these recovery codes in a safe place. Each code can only be used once to log in if you lose access to your authenticator app.
+                                </Text>
+                                <View style={{ backgroundColor: '#2A2A2A', borderRadius: 12, padding: 16, marginVertical: 16 }}>
+                                    {recoveryCodes.map((code, index) => (
+                                        <Text key={index} style={{ color: COLORS.GOLD, fontSize: 16, fontFamily: 'monospace', textAlign: 'center', paddingVertical: 4, letterSpacing: 2 }}>
+                                            {code}
+                                        </Text>
+                                    ))}
+                                </View>
+                                <Text style={[styles.modalMessage, { fontSize: 12, color: '#EF4444' }]}>
+                                    These codes will not be shown again!
+                                </Text>
+                                <TouchableOpacity
+                                    style={styles.saveButton}
+                                    onPress={() => setTwoFAModalVisible(false)}
+                                >
+                                    <Text style={styles.saveButtonText}>I've Saved These Codes</Text>
+                                </TouchableOpacity>
+                            </ScrollView>
+                        )}
+
+                        {twoFAStep === 'disable' && (
+                            <View>
+                                <Text style={styles.modalMessage}>
+                                    Enter your password to disable two-factor authentication.
+                                </Text>
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>Password</Text>
+                                    <TextInput
+                                        style={styles.textInput}
+                                        value={twoFAPassword}
+                                        onChangeText={setTwoFAPassword}
+                                        placeholder="Enter your password"
+                                        placeholderTextColor={COLORS.TEXT_MUTED}
+                                        secureTextEntry
+                                        autoCapitalize="none"
+                                    />
+                                </View>
+                                <TouchableOpacity
+                                    style={[styles.deleteConfirmButton, { borderRadius: 12, paddingVertical: 16, marginTop: 8 }, twoFALoading && styles.deleteButtonDisabled]}
+                                    onPress={handleDisable2FA}
+                                    disabled={twoFALoading}
+                                >
+                                    {twoFALoading ? (
+                                        <ActivityIndicator color={COLORS.WHITE} />
+                                    ) : (
+                                        <Text style={[styles.deleteConfirmButtonText, { textAlign: 'center' }]}>Disable 2FA</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </View>
                 </View>
             </Modal>

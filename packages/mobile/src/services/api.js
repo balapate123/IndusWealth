@@ -7,8 +7,12 @@ import cache from './cache';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://induswealth.onrender.com';
 
-// In-memory token for faster access
+// In-memory tokens for faster access
 let cachedToken = null;
+let cachedRefreshToken = null;
+
+// Mutex to prevent concurrent refresh calls
+let refreshPromise = null;
 
 // Error categories for UI handling
 export const ERROR_CODES = {
@@ -18,6 +22,8 @@ export const ERROR_CODES = {
     VALIDATION: 'VALIDATION_ERROR',
     SERVER_ERROR: 'SERVER_ERROR',
     NOT_FOUND: 'NOT_FOUND',
+    TWO_FA_REQUIRED: '2FA_REQUIRED',
+    ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
 };
 
 /**
@@ -48,8 +54,28 @@ export const parseApiError = (error, responseData) => {
 
     const errorCode = responseData.code;
 
+    // Account locked
+    if (errorCode === 'ACCOUNT_LOCKED') {
+        return {
+            code: ERROR_CODES.ACCOUNT_LOCKED,
+            message: responseData.message || 'Account temporarily locked due to too many failed attempts.',
+            action: 'Please wait and try again',
+            recoverable: false,
+        };
+    }
+
+    // 2FA required
+    if (errorCode === '2FA_REQUIRED') {
+        return {
+            code: ERROR_CODES.TWO_FA_REQUIRED,
+            message: 'Two-factor authentication code required',
+            action: 'Enter your 2FA code',
+            recoverable: true,
+        };
+    }
+
     // Auth errors
-    if (errorCode === 'TOKEN_INVALID' || errorCode === 'TOKEN_REQUIRED' || errorCode === 'AUTH_ERROR') {
+    if (errorCode === 'TOKEN_INVALID' || errorCode === 'TOKEN_REQUIRED' || errorCode === 'AUTH_ERROR' || errorCode === 'TOKEN_REUSED') {
         return {
             code: ERROR_CODES.AUTH_EXPIRED,
             message: 'Your session has expired.',
@@ -134,9 +160,10 @@ export const getFreshnessText = (freshness) => {
     return '';
 };
 
-// Initialize token from storage on app start
+// Initialize tokens from storage on app start
 export const initializeAuth = async () => {
     cachedToken = await cache.getAuthToken();
+    cachedRefreshToken = await cache.getRefreshToken();
     return cachedToken;
 };
 
@@ -149,14 +176,68 @@ export const setToken = async (token) => {
     await cache.setAuthToken(token);
 };
 
-// Clear auth token
+// Set refresh token (saves to both memory and storage)
+export const setRefreshTokenValue = async (token) => {
+    cachedRefreshToken = token;
+    await cache.setRefreshToken(token);
+};
+
+// Clear all auth tokens
 export const clearToken = async () => {
     cachedToken = null;
+    cachedRefreshToken = null;
     await cache.clearAuthToken();
+    await cache.clearRefreshToken();
+};
+
+/**
+ * Attempt to refresh tokens using the stored refresh token.
+ * Uses a mutex so concurrent 401 retries don't race.
+ * @returns {boolean} true if refresh succeeded
+ */
+const tryRefresh = async () => {
+    if (!cachedRefreshToken) return false;
+
+    // If another refresh is already in progress, wait for it
+    if (refreshPromise) {
+        return refreshPromise;
+    }
+
+    refreshPromise = (async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/users/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: cachedRefreshToken }),
+            });
+
+            const data = await response.json().catch(() => null);
+
+            if (response.ok && data?.success) {
+                await setToken(data.accessToken || data.token);
+                if (data.refreshToken) {
+                    await setRefreshTokenValue(data.refreshToken);
+                }
+                return true;
+            }
+
+            // Refresh failed — clear tokens
+            await clearToken();
+            await cache.clearUserCache();
+            return false;
+        } catch (error) {
+            console.error('Token refresh failed:', error.message);
+            return false;
+        } finally {
+            refreshPromise = null;
+        }
+    })();
+
+    return refreshPromise;
 };
 
 // Helper for making API requests with JWT authentication
-const apiRequest = async (endpoint, options = {}) => {
+const apiRequest = async (endpoint, options = {}, _isRetry = false) => {
     let responseData = null;
 
     try {
@@ -183,13 +264,17 @@ const apiRequest = async (endpoint, options = {}) => {
         // Parse response
         responseData = await response.json().catch(() => null);
 
-        // Handle 401 Unauthorized - token expired or invalid
-        if (response.status === 401) {
-            // Clear invalid token
-            if (responseData?.code === 'TOKEN_INVALID' || responseData?.code === 'TOKEN_REQUIRED') {
-                await clearToken();
-                await cache.clearUserCache();
+        // Handle 401 Unauthorized — attempt token refresh (once)
+        if (response.status === 401 && !_isRetry) {
+            const refreshed = await tryRefresh();
+            if (refreshed) {
+                // Retry the original request with new token
+                return apiRequest(endpoint, options, true);
             }
+
+            // Refresh failed — clear tokens
+            await clearToken();
+            await cache.clearUserCache();
 
             const parsedError = parseApiError(new Error('Unauthorized'), responseData);
             const error = new Error(parsedError.message);
@@ -224,19 +309,41 @@ const apiRequest = async (endpoint, options = {}) => {
     }
 };
 
+/**
+ * Save both tokens from a login/signup response.
+ */
+const saveAuthTokens = async (response) => {
+    const token = response.accessToken || response.token;
+    if (token) {
+        await setToken(token);
+    }
+    if (response.refreshToken) {
+        await setRefreshTokenValue(response.refreshToken);
+    }
+};
+
 // API Methods
 export const api = {
     // Authentication
     auth: {
-        login: async (email, password) => {
+        login: async (email, password, twoFactorCode = null, recoveryCode = null) => {
+            const body = { email, password };
+            if (twoFactorCode) body.twoFactorCode = twoFactorCode;
+            if (recoveryCode) body.recoveryCode = recoveryCode;
+
             const response = await apiRequest('/users/login', {
                 method: 'POST',
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify(body),
             });
 
-            // Save token on successful login
-            if (response.success && response.token) {
-                await setToken(response.token);
+            // Handle 2FA required response
+            if (response.code === '2FA_REQUIRED') {
+                return response;
+            }
+
+            // Save tokens on successful login
+            if (response.success) {
+                await saveAuthTokens(response);
                 global.CURRENT_USER_ID = response.user.id;
             }
 
@@ -249,9 +356,9 @@ export const api = {
                 body: JSON.stringify({ name, email, password }),
             });
 
-            // Save token on successful signup
-            if (response.success && response.token) {
-                await setToken(response.token);
+            // Save tokens on successful signup
+            if (response.success) {
+                await saveAuthTokens(response);
                 global.CURRENT_USER_ID = response.user.id;
             }
 
@@ -262,7 +369,10 @@ export const api = {
 
         logout: async () => {
             try {
-                await apiRequest('/users/logout', { method: 'POST' });
+                await apiRequest('/users/logout', {
+                    method: 'POST',
+                    body: JSON.stringify({ refreshToken: cachedRefreshToken }),
+                });
             } catch (error) {
                 // Ignore logout errors
             }
@@ -274,13 +384,41 @@ export const api = {
             body: JSON.stringify(data),
         }),
 
-        changePassword: (currentPassword, newPassword) => apiRequest('/users/password', {
-            method: 'PUT',
-            body: JSON.stringify({ currentPassword, newPassword }),
-        }),
+        changePassword: async (currentPassword, newPassword) => {
+            const response = await apiRequest('/users/password', {
+                method: 'PUT',
+                body: JSON.stringify({ currentPassword, newPassword }),
+            });
+
+            // Save new tokens after password change
+            if (response.success) {
+                await saveAuthTokens(response);
+            }
+
+            return response;
+        },
 
         deleteAccount: (password) => apiRequest('/users/account', {
             method: 'DELETE',
+            body: JSON.stringify({ password }),
+        }),
+
+        checkPasswordStrength: (password) => apiRequest('/users/password-strength', {
+            method: 'POST',
+            body: JSON.stringify({ password }),
+        }),
+    },
+
+    // 2FA
+    twoFactor: {
+        getStatus: () => apiRequest('/2fa/status'),
+        setup: () => apiRequest('/2fa/setup', { method: 'POST' }),
+        verify: (code) => apiRequest('/2fa/verify', {
+            method: 'POST',
+            body: JSON.stringify({ code }),
+        }),
+        disable: (password) => apiRequest('/2fa/disable', {
+            method: 'POST',
             body: JSON.stringify({ password }),
         }),
     },

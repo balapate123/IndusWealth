@@ -18,6 +18,29 @@ import { api } from '../services/api';
 import cache from '../services/cache';
 import CustomAlert from '../components/CustomAlert';
 
+// Local password strength scoring (matches backend logic)
+const getPasswordScore = (pw) => {
+    if (!pw) return 0;
+    let score = 0;
+    if (pw.length >= 8) score++;
+    if (pw.length >= 12) score++;
+    if (pw.length >= 16) score++;
+    if (/[A-Z]/.test(pw)) score++;
+    if (/[0-9]/.test(pw)) score++;
+    if (/[^A-Za-z0-9]/.test(pw)) score++;
+    return Math.min(4, Math.floor(score * 4 / 6));
+};
+
+const getStrengthLabel = (pw) => {
+    const labels = ['Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'];
+    return labels[getPasswordScore(pw)];
+};
+
+const getStrengthColor = (pw) => {
+    const colors = ['#EF4444', '#F59E0B', '#EAB308', '#22C55E', '#10B981'];
+    return colors[getPasswordScore(pw)];
+};
+
 const SignupScreen = ({ navigation }) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -168,6 +191,33 @@ const SignupScreen = ({ navigation }) => {
                             <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#64748B" />
                         </TouchableOpacity>
                     </View>
+
+                    {/* Password Strength Indicator */}
+                    {password.length > 0 && (
+                        <View style={styles.strengthContainer}>
+                            <View style={styles.strengthBarRow}>
+                                {[0, 1, 2, 3].map((i) => {
+                                    const strength = getPasswordScore(password);
+                                    const colors = ['#EF4444', '#F59E0B', '#EAB308', '#22C55E', '#10B981'];
+                                    return (
+                                        <View
+                                            key={i}
+                                            style={[
+                                                styles.strengthSegment,
+                                                { backgroundColor: i <= strength ? colors[strength] : '#334155' }
+                                            ]}
+                                        />
+                                    );
+                                })}
+                            </View>
+                            <Text style={[styles.strengthLabel, { color: getStrengthColor(password) }]}>
+                                {getStrengthLabel(password)}
+                            </Text>
+                            {password.length > 0 && password.length < 8 && (
+                                <Text style={styles.strengthHint}>Min 8 characters, 1 uppercase, 1 number</Text>
+                            )}
+                        </View>
+                    )}
 
                     {/* Confirm Password */}
                     <Text style={styles.label}>Confirm Password</Text>
@@ -448,6 +498,30 @@ const styles = StyleSheet.create({
         marginLeft: 6,
         letterSpacing: 1,
         fontWeight: '600',
+    },
+    strengthContainer: {
+        marginTop: -12,
+        marginBottom: 20,
+    },
+    strengthBarRow: {
+        flexDirection: 'row',
+        gap: 4,
+        marginBottom: 6,
+    },
+    strengthSegment: {
+        flex: 1,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: '#334155',
+    },
+    strengthLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    strengthHint: {
+        fontSize: 11,
+        color: '#94A3B8',
+        marginTop: 2,
     },
 });
 
