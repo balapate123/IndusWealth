@@ -126,16 +126,17 @@ const ConnectBankScreen = ({ navigation, route }) => {
 
         setLoading(true);
 
-        // Timeout fallback - if Plaid Link doesn't respond in 15 seconds, stop loading
+        // Timeout fallback - if Plaid Link doesn't respond in 60 seconds, stop loading
+        // Using 60s to account for slow Plaid production API responses
         const timeoutId = setTimeout(() => {
             console.log('⏱️ Plaid Link timeout - resetting loading state');
             setLoading(false);
             showAlert(
                 'Connection Timeout',
-                'Plaid Link did not open. Please try again. If the issue persists, you may need to use a development build instead of Expo Go.',
+                'Plaid is taking longer than expected to load. Please check your internet connection and try again.',
                 [{ text: 'OK', onPress: () => setAlertVisible(false) }]
             );
-        }, 15000);
+        }, 60000);
 
         try {
             // Step 1: Get link_token from backend
