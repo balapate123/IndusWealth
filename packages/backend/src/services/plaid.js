@@ -19,13 +19,25 @@ class PlaidService {
         try {
             console.log('🔧 Creating link token for user:', userId, '| PLAID_ENV:', process.env.PLAID_ENV);
 
-            const response = await client.linkTokenCreate({
+            const linkTokenConfig = {
                 user: { client_user_id: userId || 'test_user' },
                 client_name: 'IndusWealth',
                 products: ['transactions'],
                 country_codes: ['CA'],
                 language: 'en',
-            });
+            };
+
+            // OAuth redirect URI is required for Canadian banks (all use OAuth).
+            // Must be HTTPS and registered in the Plaid Dashboard.
+            // Defaults to the Render backend endpoint; override via PLAID_OAUTH_REDIRECT_URI.
+            // Only set in production — sandbox banks don't use OAuth.
+            if (process.env.PLAID_ENV === 'production') {
+                linkTokenConfig.redirect_uri =
+                    process.env.PLAID_OAUTH_REDIRECT_URI ||
+                    'https://induswealth.onrender.com/plaid/oauth-redirect';
+            }
+
+            const response = await client.linkTokenCreate(linkTokenConfig);
 
             console.log('✅ Link token created successfully');
             return response.data;

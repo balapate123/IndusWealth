@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -12,6 +12,7 @@ import {
     TextInput,
     Modal,
     FlatList,
+    Linking,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -72,12 +73,17 @@ const ALL_BANKS = [
     { id: 'eq', name: 'EQ Bank', plaidInstitutionId: 'ins_48' },
 ];
 
+const OAUTH_REDIRECT_URI = 'https://induswealth.onrender.com/plaid/oauth-redirect';
+
 const ConnectBankScreen = ({ navigation, route }) => {
     const [selectedBank, setSelectedBank] = useState(null);
     const [loading, setLoading] = useState(false);
     const [searchModalVisible, setSearchModalVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [successModalVisible, setSuccessModalVisible] = useState(false);
+
+    // Store the link token so we can resume after an external-browser OAuth redirect
+    const linkTokenRef = useRef(null);
 
     // Custom Alert State
     const [alertVisible, setAlertVisible] = useState(false);
@@ -89,6 +95,32 @@ const ConnectBankScreen = ({ navigation, route }) => {
 
     // Detect if we're in onboarding flow or accessed from main app
     const isOnboarding = route?.params?.isOnboarding ?? false;
+
+    // Listen for the deep link that fires when the user returns from an external OAuth browser.
+    // Flow: Plaid → bank OAuth (external browser) → https redirect → induswealth:// deep link → here.
+    useEffect(() => {
+        const handleDeepLink = async ({ url }) => {
+            if (!url || !url.startsWith('induswealth://plaid-oauth')) return;
+            if (!linkTokenRef.current) return;
+
+            console.log('🔁 Resuming Plaid OAuth from deep link:', url);
+            setLoading(true);
+            try {
+                await create({ token: linkTokenRef.current });
+                open({
+                    oauthRedirectUri: url,
+                    onSuccess: handlePlaidSuccess,
+                    onExit: handlePlaidExit,
+                });
+            } catch (err) {
+                console.error('❌ Failed to resume Plaid OAuth:', err);
+                setLoading(false);
+            }
+        };
+
+        const subscription = Linking.addEventListener('url', handleDeepLink);
+        return () => subscription.remove();
+    }, []);
 
     const filteredBanks = ALL_BANKS.filter(bank =>
         bank.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -118,6 +150,64 @@ const ConnectBankScreen = ({ navigation, route }) => {
         setSearchQuery('');
     };
 
+    // Shared success handler — used by both the initial open() and the OAuth resume path
+    const handlePlaidSuccess = async (success) => {
+        console.log('🎉 Plaid Link success:', success.publicToken);
+        try {
+            const exchangeResponse = await api.exchangePublicToken(success.publicToken);
+
+            if (exchangeResponse.success) {
+                console.log('✅ Bank connected successfully!');
+
+                const cachedUser = await cache.getCachedUser();
+                if (cachedUser) {
+                    cachedUser.hasPlaidLinked = true;
+                    await cache.setCachedUser(cachedUser);
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                if (isOnboarding) {
+                    navigation.reset({
+                        index: 0,
+                        routes: [
+                            {
+                                name: 'Main',
+                                state: {
+                                    routes: [
+                                        {
+                                            name: 'Insights',
+                                            params: { forceRefresh: true, fromBankConnection: true }
+                                        }
+                                    ],
+                                    index: 0
+                                }
+                            }
+                        ],
+                    });
+                } else {
+                    setSuccessModalVisible(true);
+                }
+            } else {
+                throw new Error(exchangeResponse.message || 'Failed to save bank connection');
+            }
+        } catch (exchangeError) {
+            console.error('Exchange error:', exchangeError);
+            showAlert('Connection Error', 'Connected to bank but failed to save. Please try again.');
+        }
+        setLoading(false);
+    };
+
+    // Shared exit handler
+    const handlePlaidExit = (exit) => {
+        console.log('📤 Plaid Link exited:', JSON.stringify(exit));
+        if (exit?.error) {
+            console.error('❌ Plaid Link exit error:', exit.error);
+            showAlert('Connection Error', exit.error.displayMessage || 'Failed to connect to your bank.');
+        }
+        setLoading(false);
+    };
+
     const handleContinue = async () => {
         if (!selectedBank) {
             showAlert('Select a Bank', 'Please select your bank to continue.');
@@ -136,14 +226,14 @@ const ConnectBankScreen = ({ navigation, route }) => {
                 throw new Error('Failed to get link token');
             }
 
+            // Store token so the OAuth deep link resume handler can reuse it
+            linkTokenRef.current = linkTokenResponse.link_token;
             console.log('✅ Got link token:', linkTokenResponse.link_token.substring(0, 30) + '...');
 
             // Step 2: Create Plaid Link configuration
             console.log('🔧 Creating Plaid Link configuration...');
             try {
-                await create({
-                    token: linkTokenResponse.link_token,
-                });
+                await create({ token: linkTokenResponse.link_token });
                 console.log('✅ Plaid Link created successfully');
             } catch (createError) {
                 console.error('❌ Plaid Link create() failed:', createError);
@@ -152,70 +242,14 @@ const ConnectBankScreen = ({ navigation, route }) => {
 
             // Step 3: Open Plaid Link
             // No timeout — onSuccess and onExit handle all terminal states.
-            // Production Plaid can be slow to load; let the SDK manage its own lifecycle.
+            // oauthRedirectUri is required for Canadian banks (all use OAuth).
+            // The backend /plaid/oauth-redirect endpoint bounces back to the app via deep link.
             console.log('🚀 Opening Plaid Link...');
             try {
                 open({
-                    onSuccess: async (success) => {
-                        console.log('🎉 Plaid Link success:', success.publicToken);
-                        try {
-                            // Exchange public_token for access_token via backend
-                            const exchangeResponse = await api.exchangePublicToken(success.publicToken);
-
-                            if (exchangeResponse.success) {
-                                console.log('✅ Bank connected successfully!');
-
-                                // Update cached user to reflect Plaid linked status
-                                const cachedUser = await cache.getCachedUser();
-                                if (cachedUser) {
-                                    cachedUser.hasPlaidLinked = true;
-                                    await cache.setCachedUser(cachedUser);
-                                }
-
-                                // Wait 2 seconds for Plaid to prepare data before navigating
-                                await new Promise(resolve => setTimeout(resolve, 2000));
-
-                                // Navigate based on context
-                                if (isOnboarding) {
-                                    // For onboarding, reset and navigate directly to Insights
-                                    navigation.reset({
-                                        index: 0,
-                                        routes: [
-                                            {
-                                                name: 'Main',
-                                                state: {
-                                                    routes: [
-                                                        {
-                                                            name: 'Insights',
-                                                            params: { forceRefresh: true, fromBankConnection: true }
-                                                        }
-                                                    ],
-                                                    index: 0
-                                                }
-                                            }
-                                        ],
-                                    });
-                                } else {
-                                    // Show custom success modal
-                                    setSuccessModalVisible(true);
-                                }
-                            } else {
-                                throw new Error(exchangeResponse.message || 'Failed to save bank connection');
-                            }
-                        } catch (exchangeError) {
-                            console.error('Exchange error:', exchangeError);
-                            showAlert('Connection Error', 'Connected to bank but failed to save. Please try again.');
-                        }
-                        setLoading(false);
-                    },
-                    onExit: (exit) => {
-                        console.log('📤 Plaid Link exited:', JSON.stringify(exit));
-                        if (exit?.error) {
-                            console.error('❌ Plaid Link exit error:', exit.error);
-                            showAlert('Connection Error', exit.error.displayMessage || 'Failed to connect to your bank.');
-                        }
-                        setLoading(false);
-                    },
+                    oauthRedirectUri: OAUTH_REDIRECT_URI,
+                    onSuccess: handlePlaidSuccess,
+                    onExit: handlePlaidExit,
                 });
                 console.log('📋 Plaid Link open() called');
             } catch (openError) {

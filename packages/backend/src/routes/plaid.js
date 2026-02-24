@@ -9,6 +9,30 @@ const { successResponse } = require('../utils/responseHelper');
 
 const logger = createLogger('PLAID');
 
+// GET /plaid/oauth-redirect
+// Plaid redirects here after the user completes OAuth with their bank.
+// This page bounces the user back into the mobile app via the custom URI scheme,
+// passing all query params through so the Plaid SDK can resume the Link flow.
+// This URL must be registered in the Plaid Dashboard as an allowed redirect URI.
+router.get('/oauth-redirect', (req, res) => {
+    const params = new URLSearchParams(req.query).toString();
+    const deepLink = `induswealth://plaid-oauth${params ? `?${params}` : ''}`;
+
+    res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Returning to IndusWealth...</title>
+  <meta http-equiv="refresh" content="0; url=${deepLink}">
+  <style>body{font-family:sans-serif;text-align:center;padding:60px;background:#0a0a0a;color:#fff}</style>
+</head>
+<body>
+  <p>Connecting your bank account...</p>
+  <p><a href="${deepLink}" style="color:#D4AF37">Tap here if the app didn't open automatically</a></p>
+  <script>window.location.href = "${deepLink}";</script>
+</body>
+</html>`);
+});
+
 // POST /plaid/create_link_token
 // Creates a Plaid Link token for the authenticated user
 router.post('/create_link_token', authenticateToken, async (req, res, next) => {

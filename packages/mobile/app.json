@@ -3,6 +3,7 @@
     "name": "IndusWealth",
     "slug": "mobile",
     "version": "1.0.0",
+    "scheme": "induswealth",
     "orientation": "portrait",
     "icon": "./assets/indus-icon.png",
     "userInterfaceStyle": "dark",
@@ -26,7 +27,15 @@
         "backgroundColor": "#0A0A0A",
         "barStyle": "dark-content"
       },
-      "package": "com.induswealth.app"
+      "package": "com.induswealth.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": false,
+          "data": [{ "scheme": "induswealth" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/indus-icon.png"
