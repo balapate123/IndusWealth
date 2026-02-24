@@ -126,18 +126,6 @@ const ConnectBankScreen = ({ navigation, route }) => {
 
         setLoading(true);
 
-        // Timeout fallback - if Plaid Link doesn't respond in 60 seconds, stop loading
-        // Using 60s to account for slow Plaid production API responses
-        const timeoutId = setTimeout(() => {
-            console.log('⏱️ Plaid Link timeout - resetting loading state');
-            setLoading(false);
-            showAlert(
-                'Connection Timeout',
-                'Plaid is taking longer than expected to load. Please check your internet connection and try again.',
-                [{ text: 'OK', onPress: () => setAlertVisible(false) }]
-            );
-        }, 60000);
-
         try {
             // Step 1: Get link_token from backend
             console.log('🔗 Fetching link token from backend...');
@@ -145,7 +133,6 @@ const ConnectBankScreen = ({ navigation, route }) => {
 
             if (!linkTokenResponse.link_token) {
                 console.error('❌ No link token in response:', linkTokenResponse);
-                clearTimeout(timeoutId);
                 throw new Error('Failed to get link token');
             }
 
@@ -160,16 +147,16 @@ const ConnectBankScreen = ({ navigation, route }) => {
                 console.log('✅ Plaid Link created successfully');
             } catch (createError) {
                 console.error('❌ Plaid Link create() failed:', createError);
-                clearTimeout(timeoutId);
                 throw createError;
             }
 
             // Step 3: Open Plaid Link
+            // No timeout — onSuccess and onExit handle all terminal states.
+            // Production Plaid can be slow to load; let the SDK manage its own lifecycle.
             console.log('🚀 Opening Plaid Link...');
             try {
                 open({
                     onSuccess: async (success) => {
-                        clearTimeout(timeoutId);
                         console.log('🎉 Plaid Link success:', success.publicToken);
                         try {
                             // Exchange public_token for access_token via backend
@@ -222,7 +209,6 @@ const ConnectBankScreen = ({ navigation, route }) => {
                         setLoading(false);
                     },
                     onExit: (exit) => {
-                        clearTimeout(timeoutId);
                         console.log('📤 Plaid Link exited:', JSON.stringify(exit));
                         if (exit?.error) {
                             console.error('❌ Plaid Link exit error:', exit.error);
@@ -234,11 +220,9 @@ const ConnectBankScreen = ({ navigation, route }) => {
                 console.log('📋 Plaid Link open() called');
             } catch (openError) {
                 console.error('❌ Plaid Link open() failed:', openError);
-                clearTimeout(timeoutId);
                 throw openError;
             }
         } catch (error) {
-            clearTimeout(timeoutId);
             console.error('❌ Bank connection error:', error);
             showAlert('Connection Error', error.message || 'Failed to connect to your bank. Please try again.');
             setLoading(false);
