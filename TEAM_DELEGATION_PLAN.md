@@ -9,13 +9,13 @@
 
 ## Team Members & Roles
 
-| # | Role | Focus Area |
-|---|------|-----------|
-| 1 | **Fullstack Developer** | Backend infrastructure, API hardening, mobile integration |
-| 2 | **Digital Marketing Expert** | App store presence, branding, user acquisition prep |
-| 3 | **Software Quality Expert** | Testing infrastructure, CI/CD, code quality |
-| 4 | **Investment Portfolio Manager** | Financial accuracy review, content strategy, feature validation |
-| 5 | **Security Consultant** | Regulatory compliance, Plaid production access, government registrations |
+| # | Name | Role | Focus Area |
+|---|------|------|-----------|
+| 1 | **Vinay Patel** | Fullstack Developer | Backend infrastructure, API hardening, mobile integration |
+| 2 | **Ankit Baranwal** | Digital Marketing Expert | App store presence, branding, user acquisition prep |
+| 3 | **Shyam Patel** | Software Quality Expert | Testing infrastructure, CI/CD, code quality |
+| 4 | **Satya P** | Investment Portfolio Manager | Financial accuracy review, content strategy, feature validation |
+| 5 | **Pratik Goswami** | Security Consultant | Regulatory compliance, Plaid production access, government registrations |
 
 ---
 
@@ -29,7 +29,7 @@
 
 ---
 
-## 1. Fullstack Developer
+## 1. Vinay Patel — Fullstack Developer
 
 ### Responsibilities
 Backend infrastructure hardening, critical missing features (email verification, password reset), API improvements, and mobile app integration for new backend features.
@@ -91,7 +91,7 @@ CREATE INDEX idx_password_resets_user ON password_resets(user_id);
 | 3.5 | **Connection pool tuning** | P1 | Configure pg pool: `max: 20`, `idleTimeoutMillis: 30000`, `connectionTimeoutMillis: 5000`. Add pool error handler. See Roadmap 6.5. | Optimized DB connections |
 | 3.6 | **Database SSL** | P1 | Add `ssl: { rejectUnauthorized: true }` to pg config for production. Conditional on NODE_ENV. See Roadmap 3.3. | Encrypted DB connection |
 
-**Handoff Notes for Fullstack Developer:**
+**Handoff Notes for Vinay Patel (Fullstack Developer):**
 - All backend code is in `packages/backend/src/`
 - Use existing patterns: see `routes/twoFactor.js` for a well-structured route example
 - Use `middleware/validators.js` patterns for input validation
@@ -104,7 +104,7 @@ CREATE INDEX idx_password_resets_user ON password_resets(user_id);
 
 ---
 
-## 2. Digital Marketing Expert
+## 2. Ankit Baranwal — Digital Marketing Expert
 
 ### Responsibilities
 App store presence, branding materials, marketing copy, user acquisition strategy, and store optimization.
@@ -145,7 +145,7 @@ App store presence, branding materials, marketing copy, user acquisition strateg
 | 3.4 | **FAQ / Help Center content** | P1 | Write user-facing FAQ covering: How to connect bank, Is my data safe?, How AI insights work, How to delete account, Troubleshooting Plaid. See Roadmap 17.1. | FAQ document (10-15 questions) |
 | 3.5 | **Privacy-focused marketing messaging** | P1 | Develop key privacy messages: "Your data never leaves Canada", "No PII sent to AI", "Bank-level encryption", "You own your data". These differentiate us in the market. | Marketing copy focused on privacy/security |
 
-**Handoff Notes for Digital Marketing Expert:**
+**Handoff Notes for Ankit Baranwal (Digital Marketing Expert):**
 - Current app theme: pure black (#000000) background, gold (#C9A227) accents, Space Grotesk font
 - App category: Finance
 - Target audience: Canadian millennials/Gen Z who want to understand and improve their finances
@@ -156,7 +156,7 @@ App store presence, branding materials, marketing copy, user acquisition strateg
 
 ---
 
-## 3. Software Quality Expert
+## 3. Shyam Patel — Software Quality Expert
 
 ### Responsibilities
 Establish testing infrastructure, CI/CD pipeline, code quality tools, and test coverage for critical paths.
@@ -251,7 +251,7 @@ jobs:
 | 3.5 | **Test coverage report** | P1 | Generate HTML coverage report. Document current coverage by file. Identify gaps. Create prioritized list of what needs tests next. | Coverage report + gap analysis |
 | 3.6 | **Dependency vulnerability audit** | P1 | Run `npm audit` on both packages. Document all findings. Fix high/critical vulnerabilities. Create plan for medium ones. Remove unused dependencies (check if `flinks.js` is still referenced). See Roadmap 3.6. | Audit report with fixes |
 
-**Handoff Notes for Software Quality Expert:**
+**Handoff Notes for Shyam Patel (Software Quality Expert):**
 - Currently **zero tests** exist - you're building from scratch
 - Backend entry: `packages/backend/src/index.js`, main app: `packages/backend/src/app.js`
 - Most critical service to test first: `services/debt_calculator.js` (financial math must be correct)
@@ -263,7 +263,7 @@ jobs:
 
 ---
 
-## 4. Investment Portfolio Manager
+## 4. Satya P — Investment Portfolio Manager
 
 ### Responsibilities
 Validate financial accuracy of calculations, review AI insight quality, curate educational content, and advise on financial features.
@@ -298,7 +298,7 @@ Validate financial accuracy of calculations, review AI insight quality, curate e
 | 3.4 | **Tax-related feature opportunities** | P2 | Identify tax-related features valuable for Canadian users: RRSP contribution room tracking, TFSA contribution tracking, tax-deductible expense flagging (medical, charitable, work-from-home). | Tax feature opportunity document |
 | 3.5 | **Quarterly financial report template** | P2 | Design a quarterly financial report that the app could generate: income summary, spending by category, net worth change, debt reduction progress, subscription costs. See Roadmap 15.3. | Report template design |
 
-**Handoff Notes for Investment Portfolio Manager:**
+**Handoff Notes for Satya P (Investment Portfolio Manager):**
 - The app is **NOT** providing financial advice - it's a tracking/analysis tool
 - All AI insights must have disclaimers ("This is not financial advice")
 - Canada-specific focus: TFSA, RRSP, RESP, not American 401k/IRA
@@ -309,7 +309,7 @@ Validate financial accuracy of calculations, review AI insight quality, curate e
 
 ---
 
-## 5. Security Consultant
+## 5. Pratik Goswami — Security Consultant
 
 ### Responsibilities
 Regulatory compliance, Plaid production access, government registrations, security audit, and ongoing compliance framework.
@@ -351,7 +351,7 @@ Regulatory compliance, Plaid production access, government registrations, securi
 | 3.5 | **Security compliance roadmap** | P1 | Create a 6-month security compliance roadmap beyond these 3 weeks. What needs to happen before app store launch? What ongoing compliance obligations exist? Annual review schedule. | Long-term security roadmap |
 | 3.6 | **Plaid production follow-up** | P0 | Follow up on Plaid production application from Week 1. Address any questions or requirements from Plaid. Prepare additional documentation if requested. | Plaid application progress |
 
-**Handoff Notes for Security Consultant:**
+**Handoff Notes for Pratik Goswami (Security Consultant):**
 - All legal docs are in `docs/legal/` - review these first
 - Current security implementation details are in `PRODUCTION_ROADMAP.md` Section 3 (checkboxes show what's done)
 - Key security files to review: `services/encryption.js`, `middleware/auth.js`, `utils/loginProtection.js`, `routes/twoFactor.js`, `middleware/validators.js`
@@ -369,7 +369,7 @@ Regulatory compliance, Plaid production access, government registrations, securi
 ┌──────────────────────────────────────────────────────────────────────┐
 │                     DEPENDENCY MAP                                   │
 │                                                                      │
-│  Security Consultant                  Fullstack Developer            │
+│  Pratik (Security)                     Vinay (Fullstack)              │
 │  ┌──────────────────┐                 ┌──────────────────┐           │
 │  │ Plaid prod access │───depends on──▶│ Email service    │           │
 │  │ (Week 1)          │                │ setup (Week 1)   │           │
@@ -380,19 +380,19 @@ Regulatory compliance, Plaid production access, government registrations, securi
 │  │ rights spec (Wk3) │                │ (Week 2)         │           │
 │  └──────────────────┘                 └──────────────────┘           │
 │                                                                      │
-│  Software Quality Expert              Digital Marketing Expert       │
+│  Shyam (Quality)                      Ankit (Marketing)              │
 │  ┌──────────────────┐                 ┌──────────────────┐           │
 │  │ CI/CD pipeline    │                │ Store listings   │           │
 │  │ (Week 2)          │                │ (Week 2)         │           │
 │  └────────┬─────────┘                 └──────────────────┘           │
 │           │                                                          │
-│  ┌────────▼─────────┐                 Investment Portfolio Manager   │
+│  ┌────────▼─────────┐                 Satya (Investment PM)          │
 │  │ Dep. vuln audit   │                ┌──────────────────┐           │
 │  │ (Week 3)          │                │ Calculator audit  │           │
 │  └──────────────────┘                 │ (Week 1)         │─────┐     │
 │                                       └──────────────────┘     │     │
 │                                                                │     │
-│                              Software Quality Expert           │     │
+│                              Shyam (Quality)                   │     │
 │                              ┌──────────────────┐              │     │
 │                              │ Debt calc tests   │◀─verified──┘     │
 │                              │ (Week 1)          │                   │
@@ -402,13 +402,13 @@ Regulatory compliance, Plaid production access, government registrations, securi
 
 ### Key Coordination Points
 
-1. **Investment PM → Quality Expert** (Week 1): The portfolio manager's debt calculator audit results should inform the test cases the quality expert writes. Share findings by end of day Wednesday.
+1. **Satya P → Shyam Patel** (Week 1): Satya's debt calculator audit results should inform the test cases Shyam writes. Share findings by end of day Wednesday.
 
-2. **Security Consultant → Fullstack Developer** (Week 3): The data subject rights implementation spec from the security consultant feeds directly into the fullstack developer's future work. Deliver spec by Wednesday of Week 3.
+2. **Pratik Goswami → Vinay Patel** (Week 3): Pratik's data subject rights implementation spec feeds directly into Vinay's future work. Deliver spec by Wednesday of Week 3.
 
-3. **Fullstack Developer → Quality Expert** (Week 2): New features (email verification, password reset) need integration tests. Coordinate: developer completes feature → quality expert writes tests.
+3. **Vinay Patel → Shyam Patel** (Week 2): New features (email verification, password reset) need integration tests. Coordinate: Vinay completes feature → Shyam writes tests.
 
-4. **Security Consultant → All**: OWASP audit findings (Week 2) may generate new tasks for the fullstack developer. Share findings promptly.
+4. **Pratik Goswami → All**: OWASP audit findings (Week 2) may generate new tasks for Vinay. Share findings promptly.
 
 ---
 
@@ -484,11 +484,11 @@ By **March 14, 2026**, we should have:
 
 | Person | Access Needed |
 |--------|-------------|
-| **Fullstack Developer** | GitHub repo (write), Render.com dashboard, SendGrid account, local dev environment |
-| **Digital Marketing Expert** | Google Play Console, app screenshots/recordings, brand assets, competitor apps |
-| **Software Quality Expert** | GitHub repo (write), local dev environment, CI/CD admin (GitHub Actions) |
-| **Investment Portfolio Manager** | Mobile app (Expo Go), Plaid sandbox credentials, backend API access, legal docs |
-| **Security Consultant** | GitHub repo (read), Plaid dashboard, legal docs, Render.com dashboard (read), all security-related code |
+| **Vinay Patel** (Fullstack) | GitHub repo (write), Render.com dashboard, SendGrid account, local dev environment |
+| **Ankit Baranwal** (Marketing) | Google Play Console, app screenshots/recordings, brand assets, competitor apps |
+| **Shyam Patel** (Quality) | GitHub repo (write), local dev environment, CI/CD admin (GitHub Actions) |
+| **Satya P** (Investment PM) | Mobile app (Expo Go), Plaid sandbox credentials, backend API access, legal docs |
+| **Pratik Goswami** (Security) | GitHub repo (read), Plaid dashboard, legal docs, Render.com dashboard (read), all security-related code |
 
 ### Local Development Setup
 ```bash

@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IndusWealth — 3-Week Task Delegation Plan</title>
+    <link rel="stylesheet" href="delegation-doc.css">
+</head>
+
+<body>
+
+    <div class="doc-header">
+        <h1>IndusWealth — 3-Week Task Delegation Plan</h1>
+        <div class="subtitle">Project Delegation &amp; Coordination Document</div>
+        <div class="meta-grid">
+            <div><span class="label">Period:</span> February 24 – March 14, 2026</div>
+            <div><span class="label">Document Version:</span> 1.0</div>
+            <div><span class="label">Project Owner:</span> Away during this period</div>
+            <div><span class="label">Sync Schedule:</span> Daily async + weekly 30-min call (Fri)</div>
+            <div><span class="label">Reference:</span> <code>PRODUCTION_ROADMAP.md</code></div>
+            <div><span class="label">Prepared:</span> February 23, 2026</div>
+        </div>
+    </div>
+
+    <!-- ═══ TEAM ROLES ═══ -->
+    <h2>1. Team Members &amp; Roles</h2>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Focus Area</th>
+        </tr>
+        <tr>
+            <td>1</td>
+            <td><strong>Vinay Patel</strong></td>
+            <td>Fullstack Developer</td>
+            <td>Backend infrastructure, API hardening, mobile integration</td>
+        </tr>
+        <tr>
+            <td>2</td>
+            <td><strong>Ankit Baranwal</strong></td>
+            <td>Digital Marketing Expert</td>
+            <td>App store presence, branding, user acquisition prep</td>
+        </tr>
+        <tr>
+            <td>3</td>
+            <td><strong>Shyam Patel</strong></td>
+            <td>Software Quality Expert</td>
+            <td>Testing infrastructure, CI/CD, code quality</td>
+        </tr>
+        <tr>
+            <td>4</td>
+            <td><strong>Satya P</strong></td>
+            <td>Investment Portfolio Manager</td>
+            <td>Financial accuracy review, content strategy, feature validation</td>
+        </tr>
+        <tr>
+            <td>5</td>
+            <td><strong>Pratik Goswami</strong></td>
+            <td>Security Consultant</td>
+            <td>Regulatory compliance, Plaid production access, government registrations</td>
+        </tr>
+    </table>
+
+    <!-- ═══ WEEK OVERVIEW ═══ -->
+    <h2>2. Week-by-Week Overview</h2>
+    <table>
+        <tr>
+            <th>Week</th>
+            <th>Theme</th>
+            <th>Key Deliverables</th>
+        </tr>
+        <tr>
+            <td><strong>Week 1</strong><br>Feb 24–28</td>
+            <td>Foundation &amp; Setup</td>
+            <td>Email service, testing framework, Plaid application, store accounts, financial audit</td>
+        </tr>
+        <tr>
+            <td><strong>Week 2</strong><br>Mar 3–7</td>
+            <td>Core Implementation</td>
+            <td>Password reset, CI/CD, test coverage, store listings, compliance filings</td>
+        </tr>
+        <tr>
+            <td><strong>Week 3</strong><br>Mar 10–14</td>
+            <td>Integration &amp; Polish</td>
+            <td>Health checks, monitoring, E2E tests, marketing assets, compliance follow-up</td>
+        </tr>
+    </table>
+
+    <!-- ═══ FULLSTACK DEVELOPER ═══ -->
+    <h2 class="page-break">3. Vinay Patel — Fullstack Developer</h2>
+    <div class="callout"><strong>Responsibilities:</strong> Backend infrastructure hardening, critical missing features
+        (email verification, password reset), API improvements, and mobile app integration for new backend features.
+    </div>
+
+    <h3>Week 1: Email Service &amp; Verification (Feb 24–28)</h3>
+    <p style="font-size:12px; color:#777; margin-bottom:8px;">Roadmap Sections: 4.1, 4.2, 13.2</p>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>1.1</td>
+            <td><strong>Set up email service</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Integrate SendGrid (free tier). Create <code>services/email.js</code>. Configure
+                <code>SENDGRID_API_KEY</code> on Render.
+            </td>
+            <td>Working email service</td>
+        </tr>
+        <tr>
+            <td>1.2</td>
+            <td><strong>Email verification on signup</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Add <code>email_verified</code>, <code>verification_token</code>, <code>verification_expires</code> to
+                users table. Block Plaid linking until verified.</td>
+            <td>Verified email before bank linking</td>
+        </tr>
+        <tr>
+            <td>1.3</td>
+            <td><strong>Resend verification</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Create <code>POST /users/resend-verification</code>. Rate limit: 3/hour/email.</td>
+            <td>Resend with rate limit</td>
+        </tr>
+        <tr>
+            <td>1.4</td>
+            <td><strong>Mobile: verification flow</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Verification pending screen, "check your email" message, resend button, deep link/token entry.</td>
+            <td>Mobile verification UX</td>
+        </tr>
+        <tr>
+            <td>1.5</td>
+            <td><strong>Environment validation</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Validate all env vars on boot: JWT_SECRET (≥32 chars), DATABASE_URL, PLAID keys, ENCRYPTION_KEY (64
+                hex), SENDGRID_API_KEY. Fail fast.</td>
+            <td>Server refuses to start with weak config</td>
+        </tr>
+    </table>
+
+    <div class="callout blue"><strong>DB Migration Required:</strong> Add <code>email_verified</code>,
+        <code>verification_token</code>, <code>verification_expires</code> columns + create <code>password_resets</code>
+        table with indexes.
+    </div>
+
+    <h3>Week 2: Password Reset &amp; API Hardening (Mar 3–7)</h3>
+    <p style="font-size:12px; color:#777; margin-bottom:8px;">Roadmap Sections: 4.2, 5.2, 7.3</p>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>2.1</td>
+            <td><strong>Password reset (backend)</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Forgot-password + reset-password endpoints. 1hr token, 3 req/hr limit, revoke all sessions on reset.
+            </td>
+            <td>Full password reset API</td>
+        </tr>
+        <tr>
+            <td>2.2</td>
+            <td><strong>Password reset (mobile)</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>"Forgot Password?" link, ForgotPasswordScreen, ResetPasswordScreen.</td>
+            <td>Mobile forgot password UX</td>
+        </tr>
+        <tr>
+            <td>2.3</td>
+            <td><strong>Health check endpoint</strong></td>
+            <td class="priority-p1">P1</td>
+            <td><code>GET /health</code> checking DB, Plaid, memory, uptime, version.</td>
+            <td>Health endpoint</td>
+        </tr>
+        <tr>
+            <td>2.4</td>
+            <td><strong>Graceful shutdown</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>SIGTERM/SIGINT handlers. Close HTTP, drain DB pool, log shutdown.</td>
+            <td>Clean shutdown</td>
+        </tr>
+        <tr>
+            <td>2.5</td>
+            <td><strong>Uncaught exception handling</strong></td>
+            <td class="priority-p1">P1</td>
+            <td><code>uncaughtException</code> + <code>unhandledRejection</code> handlers. Log, close, exit code 1.</td>
+            <td>No silent crashes</td>
+        </tr>
+        <tr>
+            <td>2.6</td>
+            <td><strong>Input validation</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Extend validators to ALL endpoints — dates, amounts, array sizes, string lengths.</td>
+            <td>All endpoints validated</td>
+        </tr>
+    </table>
+
+    <h3>Week 3: Monitoring &amp; Polish (Mar 10–14)</h3>
+    <p style="font-size:12px; color:#777; margin-bottom:8px;">Roadmap Sections: 11.1, 11.5, 5.3, 6.5</p>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>3.1</td>
+            <td><strong>Sentry (backend)</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Install <code>@sentry/node</code>. Init before routes, error handler after. User context (ID only).</td>
+            <td>Backend error tracking</td>
+        </tr>
+        <tr>
+            <td>3.2</td>
+            <td><strong>Sentry (mobile)</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Install <code>sentry-expo</code>. Capture JS errors + native crashes. User context on login.</td>
+            <td>Mobile crash reporting</td>
+        </tr>
+        <tr>
+            <td>3.3</td>
+            <td><strong>Audit logging</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Create <code>audit_log</code> table + service. Log: login, password change, Plaid, 2FA, data export,
+                delete.</td>
+            <td>Security audit trail</td>
+        </tr>
+        <tr>
+            <td>3.4</td>
+            <td><strong>Response compression</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Install + configure <code>compression</code> middleware.</td>
+            <td>Gzip responses</td>
+        </tr>
+        <tr>
+            <td>3.5</td>
+            <td><strong>Connection pool tuning</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>pg pool: max 20, idle 30s, timeout 5s + error handler.</td>
+            <td>Optimized DB connections</td>
+        </tr>
+        <tr>
+            <td>3.6</td>
+            <td><strong>Database SSL</strong></td>
+            <td class="priority-p1">P1</td>
+            <td><code>ssl: { rejectUnauthorized: true }</code> for production.</td>
+            <td>Encrypted DB connection</td>
+        </tr>
+    </table>
+
+    <div class="callout green"><strong>Handoff Notes for Vinay:</strong> All backend code in
+        <code>packages/backend/src/</code>.
+        Use <code>routes/twoFactor.js</code> as a well-structured route example. DB migrations go in
+        <code>packages/backend/db/</code>. Test with Plaid sandbox: <code>user_good / pass_good</code>.
+    </div>
+
+    <!-- ═══ DIGITAL MARKETING ═══ -->
+    <h2 class="page-break">4. Ankit Baranwal — Digital Marketing Expert</h2>
+    <div class="callout"><strong>Responsibilities:</strong> App store presence, branding materials, marketing copy, user
+        acquisition strategy, and store optimization.</div>
+
+    <h3>Week 1: Research &amp; Accounts (Feb 24–28)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>1.1</td>
+            <td><strong>Google Play Developer account</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Register ($25 fee). Complete identity verification. Takes several days.</td>
+            <td>Active developer account</td>
+        </tr>
+        <tr>
+            <td>1.2</td>
+            <td><strong>Apple Developer research</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Review requirements ($99/yr). Personal vs organization account decision.</td>
+            <td>Decision document</td>
+        </tr>
+        <tr>
+            <td>1.3</td>
+            <td><strong>Competitive analysis</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Top 10 Canadian finance apps: Wealthsimple, KOHO, Moka, YNAB, etc.</td>
+            <td>Analysis report</td>
+        </tr>
+        <tr>
+            <td>1.4</td>
+            <td><strong>App name &amp; keyword research</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>ASO keywords, name availability, trademark check.</td>
+            <td>Keyword list</td>
+        </tr>
+        <tr>
+            <td>1.5</td>
+            <td><strong>Brand style guide draft</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Document: dark theme (#000), gold accents (#C9A227), Space Grotesk, premium aesthetic.</td>
+            <td>Brand reference</td>
+        </tr>
+    </table>
+
+    <h3>Week 2: Store Listing Preparation (Mar 3–7)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>2.1</td>
+            <td><strong>App store descriptions</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Short (80 chars) + full (4000 chars). Target Canadian audience. Highlight privacy.</td>
+            <td>Store copy (both platforms)</td>
+        </tr>
+        <tr>
+            <td>2.2</td>
+            <td><strong>App icon design</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>1024×1024 base. Distinct at small sizes. Dark + gold brand.</td>
+            <td>Icon design/brief</td>
+        </tr>
+        <tr>
+            <td>2.3</td>
+            <td><strong>Screenshot planning</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>5–8 screenshots: Dashboard, AI Insights, Debt Attack, Analytics, Academy, 2FA.</td>
+            <td>Screenshot mockup plan</td>
+        </tr>
+        <tr>
+            <td>2.4</td>
+            <td><strong>Feature graphic</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Google Play feature graphic (1024×500).</td>
+            <td>Feature graphic</td>
+        </tr>
+        <tr>
+            <td>2.5</td>
+            <td><strong>Content rating</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Complete Google Play rating for finance category.</td>
+            <td>Completed rating</td>
+        </tr>
+    </table>
+
+    <h3>Week 3: Marketing Strategy &amp; Assets (Mar 10–14)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>3.1</td>
+            <td><strong>Splash screen design</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Dark + gold, IndusWealth logo, smooth transition.</td>
+            <td>Splash screen</td>
+        </tr>
+        <tr>
+            <td>3.2</td>
+            <td><strong>Pre-launch landing page</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Email signup, features overview, privacy messaging.</td>
+            <td>Wireframe + copy</td>
+        </tr>
+        <tr>
+            <td>3.3</td>
+            <td><strong>Social media strategy</strong></td>
+            <td class="priority-p3">P3</td>
+            <td>LinkedIn + Instagram/TikTok. Content calendar for launch month.</td>
+            <td>Social media plan</td>
+        </tr>
+        <tr>
+            <td>3.4</td>
+            <td><strong>FAQ / Help Center</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>10–15 user-facing questions covering key flows and security.</td>
+            <td>FAQ document</td>
+        </tr>
+        <tr>
+            <td>3.5</td>
+            <td><strong>Privacy marketing</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Key messages: "No PII sent to AI", "Bank-level encryption", "You own your data".</td>
+            <td>Privacy-focused copy</td>
+        </tr>
+    </table>
+
+    <div class="callout green"><strong>Handoff Notes for Ankit:</strong> Theme: pure black (#000) + gold (#C9A227) +
+        Space
+        Grotesk. Target: Canadian millennials/Gen Z. Canada-only (Plaid CA, Ontario jurisdiction). Privacy is a major
+        selling point.</div>
+
+    <!-- ═══ QA ═══ -->
+    <h2 class="page-break">5. Shyam Patel — Software Quality Expert</h2>
+    <div class="callout"><strong>Responsibilities:</strong> Establish testing infrastructure, CI/CD pipeline, code
+        quality tools, and test coverage for critical paths.</div>
+
+    <h3>Week 1: Testing Infrastructure (Feb 24–28)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>1.1</td>
+            <td><strong>Jest backend setup</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Install Jest, config, test scripts, separate test database.</td>
+            <td>Backend testing ready</td>
+        </tr>
+        <tr>
+            <td>1.2</td>
+            <td><strong>Jest mobile setup</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Install Jest + React Native Testing Library. Expo preset.</td>
+            <td>Mobile testing ready</td>
+        </tr>
+        <tr>
+            <td>1.3</td>
+            <td><strong>Test utilities</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Mock DB, Plaid, Gemini. Test user factory. JWT generator.</td>
+            <td>Test utility library</td>
+        </tr>
+        <tr>
+            <td>1.4</td>
+            <td><strong>Debt calculator tests</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>All 3 strategies, edge cases (zero balance/APR, single debt). Target: 90%+ coverage.</td>
+            <td>Debt calc test suite</td>
+        </tr>
+        <tr>
+            <td>1.5</td>
+            <td><strong>Auth middleware tests</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>JWT gen/validation, refresh rotation, expired/invalid tokens, reuse detection.</td>
+            <td>Auth middleware tests</td>
+        </tr>
+    </table>
+
+    <h3>Week 2: CI/CD &amp; Integration Tests (Mar 3–7)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>2.1</td>
+            <td><strong>Supertest setup</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>API testing with Express app + test database.</td>
+            <td>API testing framework</td>
+        </tr>
+        <tr>
+            <td>2.2</td>
+            <td><strong>Auth flow integration tests</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>signup → login → token → protected route. Invalid JWT → 401. Rate limit → 429.</td>
+            <td>Auth integration tests</td>
+        </tr>
+        <tr>
+            <td>2.3</td>
+            <td><strong>Business logic tests</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Custom debt → payoff → verify math. Transactions (mocked Plaid).</td>
+            <td>Business logic tests</td>
+        </tr>
+        <tr>
+            <td>2.4</td>
+            <td><strong>GitHub Actions CI</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Jobs: lint, test (unit+integration), build, audit. Trigger on push + PR.</td>
+            <td>CI pipeline running</td>
+        </tr>
+        <tr>
+            <td>2.5</td>
+            <td><strong>ESLint + Prettier</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Install, configure, fix existing errors.</td>
+            <td>Code quality tooling</td>
+        </tr>
+    </table>
+
+    <h3>Week 3: Coverage &amp; Quality Gates (Mar 10–14)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>3.1</td>
+            <td><strong>Remaining service tests</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>categorization, ai_insights, encryption, passwordValidator.</td>
+            <td>Additional tests</td>
+        </tr>
+        <tr>
+            <td>3.2</td>
+            <td><strong>Mobile unit tests</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>api.js (requests, token refresh), cache.js (storage, expiry).</td>
+            <td>Mobile tests</td>
+        </tr>
+        <tr>
+            <td>3.3</td>
+            <td><strong>Coverage thresholds</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Global ≥60%. debt_calculator ≥90%, auth ≥80%.</td>
+            <td>Coverage gates</td>
+        </tr>
+        <tr>
+            <td>3.4</td>
+            <td><strong>Pre-commit hooks</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Husky + lint-staged.</td>
+            <td>Pre-commit gate</td>
+        </tr>
+        <tr>
+            <td>3.5</td>
+            <td><strong>Coverage report</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>HTML coverage, gaps, prioritized next-test list.</td>
+            <td>Report + gap analysis</td>
+        </tr>
+        <tr>
+            <td>3.6</td>
+            <td><strong>Dependency audit</strong></td>
+            <td class="priority-p1">P1</td>
+            <td><code>npm audit</code> both packages. Fix high/critical. Remove unused deps.</td>
+            <td>Audit report</td>
+        </tr>
+    </table>
+
+    <div class="callout red"><strong>Important for Shyam:</strong> Currently <strong>zero tests</strong> exist —
+        building from
+        scratch. Most critical: <code>services/debt_calculator.js</code> (financial math) and
+        <code>middleware/auth.js</code> (security).
+    </div>
+
+    <!-- ═══ INVESTMENT PM ═══ -->
+    <h2 class="page-break">6. Satya P — Investment Portfolio Manager</h2>
+    <div class="callout"><strong>Responsibilities:</strong> Validate financial accuracy of calculations, review AI
+        insight quality, curate educational content, and advise on financial features.</div>
+
+    <h3>Week 1: Financial Accuracy Audit (Feb 24–28)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>1.1</td>
+            <td><strong>Audit debt calculator math</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Verify compound interest, amortization, Snowball/Avalanche ordering, payment allocation.</td>
+            <td>Math verification report</td>
+        </tr>
+        <tr>
+            <td>1.2</td>
+            <td><strong>Verify default APRs</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>CC 22%, LOC 11%, Personal 10%, Student 6%, Mortgage 5%. Reasonable for Canada 2026?</td>
+            <td>Recommended APR table</td>
+        </tr>
+        <tr>
+            <td>1.3</td>
+            <td><strong>Review AI prompts</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Verify insights are actionable, Canada-specific (TFSA/RRSP not 401k), no regulated advice.</td>
+            <td>Prompt recommendations</td>
+        </tr>
+        <tr>
+            <td>1.4</td>
+            <td><strong>Validate categorization</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>16 categories + intent mapping (Fixed Needs, Growth, Lifestyle). Comprehensive?</td>
+            <td>Category review</td>
+        </tr>
+        <tr>
+            <td>1.5</td>
+            <td><strong>Review disclaimers</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Verify disclaimers cover AI, debt calc, analytics, Academy. No financial advice language.</td>
+            <td>Disclaimer report</td>
+        </tr>
+    </table>
+
+    <h3>Week 2: Content &amp; Feature Strategy (Mar 3–7)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>2.1</td>
+            <td><strong>Wealth Academy content audit</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Assess trusted sources. Canada-specific sources prioritized?</td>
+            <td>Content recommendations</td>
+        </tr>
+        <tr>
+            <td>2.2</td>
+            <td><strong>Article categories</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Review 6 categories. Propose additions (e.g., "Canadian Benefits").</td>
+            <td>Category recs + URLs</td>
+        </tr>
+        <tr>
+            <td>2.3</td>
+            <td><strong>Canadian product coverage</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>TFSA limits 2026, RRSP deadlines, RESP grants, GIS, CCB, Ontario tax brackets.</td>
+            <td>Gap analysis</td>
+        </tr>
+        <tr>
+            <td>2.4</td>
+            <td><strong>Budgeting feature spec</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Category budgets, monthly vs bi-weekly, Canadian benchmarks.</td>
+            <td>Budget spec</td>
+        </tr>
+        <tr>
+            <td>2.5</td>
+            <td><strong>Investment readiness scoring</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Criteria: emergency fund, debt-to-income, minimum savings rate. Canada-first.</td>
+            <td>Readiness criteria</td>
+        </tr>
+    </table>
+
+    <h3>Week 3: UX &amp; Recommendations (Mar 10–14)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>3.1</td>
+            <td><strong>End-to-end app test</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Full user journey. Document confusing flows, missing info, UX pain points.</td>
+            <td>UX feedback report</td>
+        </tr>
+        <tr>
+            <td>3.2</td>
+            <td><strong>Net worth tracking spec</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Which accounts, joint accounts, trend presentation.</td>
+            <td>Feature spec</td>
+        </tr>
+        <tr>
+            <td>3.3</td>
+            <td><strong>Savings goals spec</strong></td>
+            <td class="priority-p3">P3</td>
+            <td>Goal types, progress tracking, AI suggestions.</td>
+            <td>Feature spec</td>
+        </tr>
+        <tr>
+            <td>3.4</td>
+            <td><strong>Tax feature opportunities</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>RRSP/TFSA tracking, tax-deductible flagging.</td>
+            <td>Opportunity document</td>
+        </tr>
+        <tr>
+            <td>3.5</td>
+            <td><strong>Quarterly report template</strong></td>
+            <td class="priority-p2">P2</td>
+            <td>Income, spending, net worth, debt reduction, subscriptions.</td>
+            <td>Template design</td>
+        </tr>
+    </table>
+
+    <!-- ═══ SECURITY ═══ -->
+    <h2 class="page-break">7. Pratik Goswami — Security Consultant</h2>
+    <div class="callout"><strong>Responsibilities:</strong> Regulatory compliance, Plaid production access, government
+        registrations, security audit, and ongoing compliance framework.</div>
+
+    <h3>Week 1: Regulatory Assessment &amp; Plaid (Feb 24–28)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>1.1</td>
+            <td><strong>Plaid production application</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Start application. Security questionnaire, data handling, compliance. Reviews take 2–4 weeks.</td>
+            <td>Application submitted</td>
+        </tr>
+        <tr>
+            <td>1.2</td>
+            <td><strong>Plaid compliance requirements</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Document all production requirements, security controls, policies, certifications.</td>
+            <td>Requirements checklist</td>
+        </tr>
+        <tr>
+            <td>1.3</td>
+            <td><strong>PIPEDA compliance audit</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Review Privacy Policy against PIPEDA's 10 principles. Consent, access rights, breach notification.</td>
+            <td>PIPEDA gap analysis</td>
+        </tr>
+        <tr>
+            <td>1.4</td>
+            <td><strong>Security implementation review</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Audit: AES-256-GCM, token rotation, lockout, 2FA, input validation.</td>
+            <td>Security audit findings</td>
+        </tr>
+        <tr>
+            <td>1.5</td>
+            <td><strong>DPA review</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>DPA status: Plaid, Google/Gemini, Render.com. PII to Gemini? (No — aggregated only.)</td>
+            <td>DPA status report</td>
+        </tr>
+    </table>
+
+    <h3>Week 2: Government &amp; Compliance (Mar 3–7)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>2.1</td>
+            <td><strong>FINTRAC assessment</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Read-only app → likely not MSB. Document reasoning. Contact FINTRAC if needed.</td>
+            <td>FINTRAC determination</td>
+        </tr>
+        <tr>
+            <td>2.2</td>
+            <td><strong>Provincial securities</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Confirm no OSC/CIRO registration needed. No advice, no trades, no money management.</td>
+            <td>Regulatory classification</td>
+        </tr>
+        <tr>
+            <td>2.3</td>
+            <td><strong>Quebec Law 25</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Privacy impact assessment, privacy officer, incident response, transparency.</td>
+            <td>Quebec compliance checklist</td>
+        </tr>
+        <tr>
+            <td>2.4</td>
+            <td><strong>Data residency</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Verify Render hosting region, PostgreSQL location, Canadian requirements.</td>
+            <td>Data residency report</td>
+        </tr>
+        <tr>
+            <td>2.5</td>
+            <td><strong>OWASP Top 10</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>SQL injection, XSS, broken access control, misconfiguration, vulnerable deps.</td>
+            <td>OWASP audit report</td>
+        </tr>
+    </table>
+
+    <h3>Week 3: Compliance Framework (Mar 10–14)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Priority</th>
+            <th>Details</th>
+            <th>Deliverable</th>
+        </tr>
+        <tr>
+            <td>3.1</td>
+            <td><strong>Data subject rights spec</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Access (export format), Deletion (order), Rectification, Portability (JSON+CSV).</td>
+            <td>Implementation spec</td>
+        </tr>
+        <tr>
+            <td>3.2</td>
+            <td><strong>Consent management design</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Granular consent: Plaid, Gemini, content recs. Record, track, withdraw.</td>
+            <td>Consent spec</td>
+        </tr>
+        <tr>
+            <td>3.3</td>
+            <td><strong>Incident response plan</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Detection, classification, containment, notification (OPC 72hrs), recovery, post-mortem.</td>
+            <td>IRP document</td>
+        </tr>
+        <tr>
+            <td>3.4</td>
+            <td><strong>Pen test recommendation</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>Scope, high-risk areas, 2–3 Canadian firms, cost + timeline.</td>
+            <td>Pen test recommendation</td>
+        </tr>
+        <tr>
+            <td>3.5</td>
+            <td><strong>Security roadmap</strong></td>
+            <td class="priority-p1">P1</td>
+            <td>6-month plan beyond these 3 weeks. Pre-launch requirements, annual review.</td>
+            <td>Long-term roadmap</td>
+        </tr>
+        <tr>
+            <td>3.6</td>
+            <td><strong>Plaid follow-up</strong></td>
+            <td class="priority-p0">P0</td>
+            <td>Follow up on Week 1 application. Address Plaid questions.</td>
+            <td>Application progress</td>
+        </tr>
+    </table>
+
+    <!-- ═══ DEPENDENCIES ═══ -->
+    <h2 class="page-break">8. Cross-Team Dependencies</h2>
+
+    <h3>Key Coordination Points</h3>
+    <ol>
+        <li><strong>Satya P → Shyam Patel</strong> (Week 1): Satya's debt calculator audit results inform Shyam's test
+            cases.
+            Share findings by end of day Wednesday.</li>
+        <li><strong>Pratik Goswami → Vinay Patel</strong> (Week 3): Pratik's data subject rights spec feeds into Vinay's
+            future work. Deliver by Wednesday Week 3.</li>
+        <li><strong>Vinay Patel → Shyam Patel</strong> (Week 2): New features (email, password reset) need
+            integration tests. Vinay completes → Shyam writes tests.</li>
+        <li><strong>Pratik Goswami → All</strong>: OWASP audit findings (Week 2) may generate new tasks for
+            Vinay. Share promptly.</li>
+    </ol>
+
+    <!-- ═══ COMMUNICATION ═══ -->
+    <h2>9. Communication Plan</h2>
+    <table>
+        <tr>
+            <th>Cadence</th>
+            <th>Format</th>
+            <th>Details</th>
+        </tr>
+        <tr>
+            <td><strong>Daily</strong></td>
+            <td>Async standup (Slack/Teams)</td>
+            <td>Post by 10 AM: yesterday, today, blockers</td>
+        </tr>
+        <tr>
+            <td><strong>Weekly</strong></td>
+            <td>Video call (Fridays, 30 min)</td>
+            <td>Progress review, dependency resolution, decisions</td>
+        </tr>
+        <tr>
+            <td><strong>Week 3 Friday</strong></td>
+            <td>Final handoff meeting</td>
+            <td>Remote meeting with project owner</td>
+        </tr>
+    </table>
+    <div class="callout red"><strong>Escalation:</strong> Blocked for 4+ hours → post in group chat immediately.
+        Critical security issue → alert project owner directly.</div>
+
+    <h3>Shared Resources</h3>
+    <ul>
+        <li><strong>Repository</strong> — All code changes through pull requests</li>
+        <li><strong>Documentation</strong> — All specs/reports in <code>docs/</code></li>
+        <li><strong>Roadmap</strong> — Update <code>PRODUCTION_ROADMAP.md</code> checkboxes as tasks complete</li>
+    </ul>
+
+    <!-- ═══ SUCCESS CRITERIA ═══ -->
+    <h2 class="page-break">10. 3-Week Success Criteria</h2>
+    <p style="font-size:13px; margin-bottom:12px;">By <strong>March 14, 2026</strong>, the following should be achieved:
+    </p>
+
+    <h3>Must Complete</h3>
+    <ul class="checklist">
+        <li>Email service integrated and working (SendGrid)</li>
+        <li>Email verification on signup</li>
+        <li>Password reset flow (backend + mobile)</li>
+        <li>Environment validation on server startup</li>
+        <li>Jest testing framework set up (backend + mobile)</li>
+        <li>Debt calculator tests written and passing (90%+ coverage)</li>
+        <li>Auth flow integration tests</li>
+        <li>GitHub Actions CI pipeline running</li>
+        <li>Sentry error tracking live (backend + mobile)</li>
+        <li>Google Play Developer account created</li>
+        <li>Plaid production access application submitted</li>
+        <li>PIPEDA compliance gap analysis completed</li>
+        <li>Debt calculator math verified by financial expert</li>
+        <li>AI insight prompts reviewed for Canadian relevance</li>
+        <li>Financial disclaimers validated</li>
+    </ul>
+
+    <h3>Should Complete</h3>
+    <ul class="checklist">
+        <li>Health check endpoint</li>
+        <li>Graceful shutdown handling</li>
+        <li>ESLint + Prettier configured</li>
+        <li>App store descriptions written</li>
+        <li>App icon designed</li>
+        <li>FINTRAC determination documented</li>
+        <li>OWASP Top 10 review completed</li>
+        <li>Audit logging implemented</li>
+        <li>60%+ backend test coverage</li>
+        <li>Pre-commit hooks set up</li>
+    </ul>
+
+    <h3>Nice to Have</h3>
+    <ul class="checklist">
+        <li>Budgeting feature specification</li>
+        <li>Net worth tracking specification</li>
+        <li>Pre-launch landing page plan</li>
+        <li>Penetration testing firm identified</li>
+        <li>Coverage threshold enforcement in CI</li>
+        <li>Social media strategy drafted</li>
+    </ul>
+
+    <!-- ═══ ACCESS ═══ -->
+    <h2>11. Access &amp; Setup Requirements</h2>
+    <table>
+        <tr>
+            <th>Person (Role)</th>
+            <th>Access Needed</th>
+        </tr>
+        <tr>
+            <td><strong>Vinay Patel</strong> (Fullstack)</td>
+            <td>GitHub (write), Render.com dashboard, SendGrid, local dev env</td>
+        </tr>
+        <tr>
+            <td><strong>Ankit Baranwal</strong> (Marketing)</td>
+            <td>Google Play Console, app screenshots, brand assets, competitor apps</td>
+        </tr>
+        <tr>
+            <td><strong>Shyam Patel</strong> (Quality)</td>
+            <td>GitHub (write), local dev env, CI/CD admin (GitHub Actions)</td>
+        </tr>
+        <tr>
+            <td><strong>Satya P</strong> (Investment PM)</td>
+            <td>Mobile app (Expo Go), Plaid sandbox credentials, API access, legal docs</td>
+        </tr>
+        <tr>
+            <td><strong>Pratik Goswami</strong> (Security)</td>
+            <td>GitHub (read), Plaid dashboard, legal docs, Render.com (read), security code</td>
+        </tr>
+    </table>
+
+    <h3>Key Reference Documents</h3>
+    <table>
+        <tr>
+            <th>Document</th>
+            <th>Location</th>
+            <th>Purpose</th>
+        </tr>
+        <tr>
+            <td>Production Roadmap</td>
+            <td><code>PRODUCTION_ROADMAP.md</code></td>
+            <td>Full task checklist (20 sections)</td>
+        </tr>
+        <tr>
+            <td>Demo Guide</td>
+            <td><code>DEMO_GUIDE.md</code></td>
+            <td>Project demonstration walkthrough</td>
+        </tr>
+        <tr>
+            <td>Terms of Service</td>
+            <td><code>docs/legal/TERMS_OF_SERVICE.md</code></td>
+            <td>Legal terms</td>
+        </tr>
+        <tr>
+            <td>Privacy Policy</td>
+            <td><code>docs/legal/PRIVACY_POLICY.md</code></td>
+            <td>PIPEDA-compliant privacy policy</td>
+        </tr>
+        <tr>
+            <td>Financial Disclaimer</td>
+            <td><code>docs/legal/FINANCIAL_DISCLAIMER.md</code></td>
+            <td>"Not financial advice" disclaimers</td>
+        </tr>
+        <tr>
+            <td>Data Processing</td>
+            <td><code>docs/legal/DATA_PROCESSING.md</code></td>
+            <td>Data handling documentation</td>
+        </tr>
+        <tr>
+            <td>Developer Guide</td>
+            <td><code>CLAUDE.md</code></td>
+            <td>Developer setup + architecture guide</td>
+        </tr>
+    </table>
+
+    <div class="doc-footer">
+        <strong>IndusWealth</strong> — 3-Week Task Delegation Plan · Confidential · February 2026<br>
+        This document should be reviewed in the kickoff meeting and adjusted based on team member availability and
+        expertise.
+    </div>
+
+</body>
+
+</html>

@@ -1,780 +1,1474 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IndusWealth — Project Demo | Feb 24, 2026</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.0/reveal.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.0/theme/black.min.css">
-<style>
-  :root {
-    --gold: #C9A84C;
-    --gold-light: #E8C96A;
-    --indigo: #3B4FBF;
-    --bg: #0A0A0F;
-    --surface: #13131A;
-    --surface2: #1C1C28;
-    --text: #F0F0F5;
-    --muted: #8888AA;
-  }
-  .reveal { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
-  .reveal h1,.reveal h2,.reveal h3,.reveal h4 { font-family: 'Space Grotesk', sans-serif; color: var(--text); text-transform: none; letter-spacing: -0.02em; }
-  .reveal h1 { font-size: 2.6em; font-weight: 700; }
-  .reveal h2 { font-size: 1.8em; font-weight: 600; color: var(--gold); margin-bottom: 0.5em; }
-  .reveal h3 { font-size: 1.2em; font-weight: 600; color: var(--gold-light); margin-bottom: 0.3em; }
-  .reveal section { padding: 20px 60px; }
-  .reveal .slides section { text-align: left; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IndusWealth — Project Demo | Feb 24, 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.0/reveal.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.0/theme/black.min.css">
+  <style>
+    :root {
+      --gold: #C9A84C;
+      --gold-light: #E8C96A;
+      --indigo: #3B4FBF;
+      --bg: #0A0A0F;
+      --surface: #13131A;
+      --surface2: #1C1C28;
+      --text: #F0F0F5;
+      --muted: #8888AA;
+    }
 
-  /* Title slide */
-  .title-slide { text-align: center !important; }
-  .logo-mark { font-size: 3.5em; font-weight: 700; font-family: 'Space Grotesk', sans-serif;
-    background: linear-gradient(135deg, var(--gold) 0%, #fff 60%, var(--gold-light) 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-  .tagline { color: var(--muted); font-size: 1.1em; margin-top: 0.5em; }
-  .meta-row { margin-top: 2em; display: flex; justify-content: center; gap: 2em; flex-wrap: wrap; }
-  .meta-chip { background: var(--surface2); border: 1px solid #333355; border-radius: 8px; padding: 8px 18px;
-    font-size: 0.75em; color: var(--muted); }
+    .reveal {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
 
-  /* Cards */
-  .card { background: var(--surface); border: 1px solid #2A2A3E; border-radius: 14px; padding: 20px 24px; margin: 8px 0; }
-  .card-gold { border-color: var(--gold); }
-  .card-indigo { border-color: var(--indigo); }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .reveal h1,
+    .reveal h2,
+    .reveal h3,
+    .reveal h4 {
+      font-family: 'Space Grotesk', sans-serif;
+      color: var(--text);
+      text-transform: none;
+      letter-spacing: -0.02em;
+    }
 
-  /* Badges */
-  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.68em; font-weight: 600; margin-right: 6px; }
-  .badge-gold { background: rgba(201,168,76,0.2); color: var(--gold); border: 1px solid var(--gold); }
-  .badge-red { background: rgba(220,60,60,0.2); color: #FF6B6B; border: 1px solid #FF6B6B; }
-  .badge-green { background: rgba(60,180,100,0.2); color: #5EC97A; border: 1px solid #5EC97A; }
-  .badge-blue { background: rgba(80,120,255,0.2); color: #7BA4FF; border: 1px solid #7BA4FF; }
-  .badge-purple { background: rgba(160,80,220,0.2); color: #C07AFF; border: 1px solid #C07AFF; }
+    .reveal h1 {
+      font-size: 2.2em;
+      font-weight: 700;
+    }
 
-  /* Table */
-  .reveal table { width: 100%; border-collapse: collapse; font-size: 0.78em; }
-  .reveal table th { background: var(--surface2); color: var(--gold); padding: 8px 12px; border-bottom: 1px solid #333355; font-family: 'Space Grotesk', sans-serif; }
-  .reveal table td { padding: 7px 12px; border-bottom: 1px solid #1E1E2E; color: #CCC; }
-  .reveal table tr:hover td { background: var(--surface2); }
+    .reveal h2 {
+      font-size: 1.5em;
+      font-weight: 600;
+      color: var(--gold);
+      margin-bottom: 0.2em;
+    }
 
-  /* Highlight */
-  .hl { color: var(--gold); font-weight: 600; }
-  .hl-blue { color: #7BA4FF; font-weight: 600; }
-  .hl-green { color: #5EC97A; font-weight: 600; }
-  .hl-red { color: #FF6B6B; font-weight: 600; }
+    .reveal h3 {
+      font-size: 1em;
+      font-weight: 600;
+      color: var(--gold-light);
+      margin-bottom: 0.2em;
+    }
 
-  /* Section header */
-  .section-number { font-size: 0.7em; color: var(--muted); font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; }
+    .reveal section {
+      padding: 8px 40px;
+    }
 
-  /* Divider */
-  .gold-line { width: 60px; height: 3px; background: linear-gradient(90deg, var(--gold), transparent); border-radius: 2px; margin: 10px 0 18px 0; }
+    .reveal .slides section {
+      text-align: left;
+    }
 
-  /* Code block */
-  .code-block { background: #0D0D18; border: 1px solid #2A2A3E; border-radius: 10px; padding: 14px 18px;
-    font-family: monospace; font-size: 0.7em; color: #CCC; line-height: 1.5; white-space: pre; overflow-x: auto; }
+    /* Title slide */
+    .title-slide {
+      text-align: center !important;
+    }
 
-  /* Arch boxes */
-  .arch-row { display: flex; align-items: center; gap: 0; margin: 12px 0; }
-  .arch-box { background: var(--surface); border: 1px solid #333355; border-radius: 10px; padding: 12px 18px; text-align: center; font-size: 0.8em; font-weight: 600; }
-  .arch-box.gold-box { border-color: var(--gold); color: var(--gold); }
-  .arch-box.indigo-box { border-color: var(--indigo); color: #7BA4FF; }
-  .arch-box.green-box { border-color: #3CB464; color: #5EC97A; }
-  .arch-arrow { color: var(--muted); font-size: 1.2em; padding: 0 8px; }
+    .logo-mark {
+      font-size: 3.5em;
+      font-weight: 700;
+      font-family: 'Space Grotesk', sans-serif;
+      background: linear-gradient(135deg, var(--gold) 0%, #fff 60%, var(--gold-light) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
 
-  /* Progress dots */
-  .reveal .progress { background: #1C1C28; }
-  .reveal .progress span { background: var(--gold); }
+    .tagline {
+      color: var(--muted);
+      font-size: 1.1em;
+      margin-top: 0.5em;
+    }
 
-  /* Emoji bullet */
-  .e { margin-right: 8px; }
+    .meta-row {
+      margin-top: 2em;
+      display: flex;
+      justify-content: center;
+      gap: 2em;
+      flex-wrap: wrap;
+    }
 
-  /* List */
-  ul.styled { list-style: none; padding: 0; margin: 0; }
-  ul.styled li { padding: 6px 0; padding-left: 1.2em; position: relative; font-size: 0.88em; color: #CCC; }
-  ul.styled li::before { content: "▸"; color: var(--gold); position: absolute; left: 0; }
+    .meta-chip {
+      background: var(--surface2);
+      border: 1px solid #333355;
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-size: 0.75em;
+      color: var(--muted);
+    }
 
-  /* Big stat */
-  .stat { text-align: center; }
-  .stat .num { font-family: 'Space Grotesk', sans-serif; font-size: 2.8em; font-weight: 700;
-    background: linear-gradient(135deg, var(--gold), var(--gold-light)); -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent; background-clip: text; }
-  .stat .label { font-size: 0.75em; color: var(--muted); margin-top: 4px; }
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid #2A2A3E;
+      border-radius: 12px;
+      padding: 10px 16px;
+      margin: 4px 0;
+    }
 
-  /* Slide-in defaults from reveal */
-  .reveal .fragment.fade-up { transform: translateY(20px); }
+    .card-gold {
+      border-color: var(--gold);
+    }
 
-  /* Footnote */
-  .footnote { font-size: 0.6em; color: var(--muted); margin-top: 1.5em; border-top: 1px solid #222233; padding-top: 0.8em; }
+    .card-indigo {
+      border-color: var(--indigo);
+    }
 
-  /* Priority cards */
-  .p0 { border-left: 4px solid #FF6B6B; }
-  .p1 { border-left: 4px solid var(--gold); }
-  .p2 { border-left: 4px solid #7BA4FF; }
-  .p3 { border-left: 4px solid var(--muted); }
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
 
-  .demo-cred { background: #0D0D18; border: 1px solid var(--gold); border-radius: 10px; padding: 14px 20px; 
-    font-family: monospace; font-size: 0.85em; color: var(--gold-light); margin: 10px 0; }
-</style>
+    .grid3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.68em;
+      font-weight: 600;
+      margin-right: 6px;
+    }
+
+    .badge-gold {
+      background: rgba(201, 168, 76, 0.2);
+      color: var(--gold);
+      border: 1px solid var(--gold);
+    }
+
+    .badge-red {
+      background: rgba(220, 60, 60, 0.2);
+      color: #FF6B6B;
+      border: 1px solid #FF6B6B;
+    }
+
+    .badge-green {
+      background: rgba(60, 180, 100, 0.2);
+      color: #5EC97A;
+      border: 1px solid #5EC97A;
+    }
+
+    .badge-blue {
+      background: rgba(80, 120, 255, 0.2);
+      color: #7BA4FF;
+      border: 1px solid #7BA4FF;
+    }
+
+    .badge-purple {
+      background: rgba(160, 80, 220, 0.2);
+      color: #C07AFF;
+      border: 1px solid #C07AFF;
+    }
+
+    /* Table */
+    .reveal table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78em;
+    }
+
+    .reveal table th {
+      background: var(--surface2);
+      color: var(--gold);
+      padding: 8px 12px;
+      border-bottom: 1px solid #333355;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    .reveal table td {
+      padding: 7px 12px;
+      border-bottom: 1px solid #1E1E2E;
+      color: #CCC;
+    }
+
+    .reveal table tr:hover td {
+      background: var(--surface2);
+    }
+
+    /* Highlight */
+    .hl {
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    .hl-blue {
+      color: #7BA4FF;
+      font-weight: 600;
+    }
+
+    .hl-green {
+      color: #5EC97A;
+      font-weight: 600;
+    }
+
+    .hl-red {
+      color: #FF6B6B;
+      font-weight: 600;
+    }
+
+    /* Section header */
+    .section-number {
+      font-size: 0.65em;
+      color: var(--muted);
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    /* Divider */
+    .gold-line {
+      width: 60px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--gold), transparent);
+      border-radius: 2px;
+      margin: 6px 0 10px 0;
+    }
+
+    /* Code block */
+    .code-block {
+      background: #0D0D18;
+      border: 1px solid #2A2A3E;
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-family: monospace;
+      font-size: 0.7em;
+      color: #CCC;
+      line-height: 1.5;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    /* Arch boxes */
+    .arch-row {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 12px 0;
+    }
+
+    .arch-box {
+      background: var(--surface);
+      border: 1px solid #333355;
+      border-radius: 10px;
+      padding: 12px 18px;
+      text-align: center;
+      font-size: 0.8em;
+      font-weight: 600;
+    }
+
+    .arch-box.gold-box {
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    .arch-box.indigo-box {
+      border-color: var(--indigo);
+      color: #7BA4FF;
+    }
+
+    .arch-box.green-box {
+      border-color: #3CB464;
+      color: #5EC97A;
+    }
+
+    .arch-arrow {
+      color: var(--muted);
+      font-size: 1.2em;
+      padding: 0 8px;
+    }
+
+    /* Progress dots */
+    .reveal .progress {
+      background: #1C1C28;
+    }
+
+    .reveal .progress span {
+      background: var(--gold);
+    }
+
+    /* Emoji bullet */
+    .e {
+      margin-right: 8px;
+    }
+
+    /* List */
+    ul.styled {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    ul.styled li {
+      padding: 3px 0;
+      padding-left: 1.2em;
+      position: relative;
+      font-size: 0.82em;
+      color: #CCC;
+    }
+
+    ul.styled li::before {
+      content: "▸";
+      color: var(--gold);
+      position: absolute;
+      left: 0;
+    }
+
+    /* Big stat */
+    .stat {
+      text-align: center;
+    }
+
+    .stat .num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 2.8em;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--gold), var(--gold-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .stat .label {
+      font-size: 0.75em;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* Slide-in defaults from reveal */
+    .reveal .fragment.fade-up {
+      transform: translateY(20px);
+    }
+
+    /* Footnote */
+    .footnote {
+      font-size: 0.6em;
+      color: var(--muted);
+      margin-top: 1.5em;
+      border-top: 1px solid #222233;
+      padding-top: 0.8em;
+    }
+
+    /* Priority cards */
+    .p0 {
+      border-left: 4px solid #FF6B6B;
+    }
+
+    .p1 {
+      border-left: 4px solid var(--gold);
+    }
+
+    .p2 {
+      border-left: 4px solid #7BA4FF;
+    }
+
+    .p3 {
+      border-left: 4px solid var(--muted);
+    }
+
+    .demo-cred {
+      background: #0D0D18;
+      border: 1px solid var(--gold);
+      border-radius: 10px;
+      padding: 14px 20px;
+      font-family: monospace;
+      font-size: 0.85em;
+      color: var(--gold-light);
+      margin: 10px 0;
+    }
+
+    /* Phone frames clickable */
+    .phone-frame {
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .phone-frame:hover {
+      transform: scale(1.03);
+      box-shadow: 0 8px 32px rgba(201, 168, 76, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    /* Lightbox overlay */
+    .lightbox-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      cursor: zoom-out;
+    }
+
+    .lightbox-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .lightbox-overlay img {
+      max-width: 90vw;
+      max-height: 88vh;
+      border-radius: 24px;
+      box-shadow: 0 16px 64px rgba(0, 0, 0, 0.8);
+      transform: scale(0.85);
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .lightbox-overlay.active img {
+      transform: scale(1);
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 24px;
+      right: 32px;
+      font-size: 2em;
+      color: #888;
+      cursor: pointer;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 300;
+      transition: color 0.2s;
+    }
+
+    .lightbox-close:hover {
+      color: var(--gold);
+    }
+
+    .lightbox-label {
+      position: absolute;
+      bottom: 32px;
+      color: var(--muted);
+      font-size: 0.85em;
+      font-family: 'Space Grotesk', sans-serif;
+      letter-spacing: 0.05em;
+    }
+
+    /* Phone mockup frame */
+    .phone-frame {
+      background: #1A1A2E;
+      border: 2px solid #333355;
+      border-radius: 22px;
+      padding: 5px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      display: inline-block;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .phone-frame img {
+      border-radius: 18px;
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 380px;
+      object-fit: cover;
+      object-position: top;
+    }
+
+    .phone-frame-sm {
+      max-width: 155px;
+    }
+
+    .phone-frame-md {
+      max-width: 185px;
+    }
+
+    .phone-frame-lg {
+      max-width: 260px;
+    }
+
+    .phone-frame-xl {
+      max-width: 300px;
+    }
+
+    .phone-notch {
+      width: 80px;
+      height: 5px;
+      background: #333355;
+      border-radius: 0 0 8px 8px;
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+
+    /* Screenshot gallery layouts */
+    .screenshot-row {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .screenshot-pair {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .screenshot-label {
+      text-align: center;
+      font-size: 0.68em;
+      color: var(--muted);
+      margin-top: 8px;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    /* Slide with screenshot beside content */
+    .split-layout {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .split-layout-reverse {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    /* App icon styling */
+    .app-icon {
+      width: 100px;
+      height: 100px;
+      border-radius: 22px;
+      border: 2px solid var(--gold);
+      box-shadow: 0 4px 20px rgba(201, 168, 76, 0.3);
+      margin: 0 auto 16px;
+      display: block;
+    }
+
+    .app-icon-sm {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      border: 1px solid var(--gold);
+      vertical-align: middle;
+    }
+  </style>
 </head>
+
 <body>
-<div class="reveal">
-<div class="slides">
+  <div class="reveal">
+    <div class="slides">
 
-<!-- ── SLIDE 1: Title ── -->
-<section class="title-slide" data-background-gradient="radial-gradient(ellipse at 20% 50%, #1A1A3E 0%, #0A0A0F 60%)">
-  <div class="logo-mark">IndusWealth</div>
-  <p class="tagline">Canada's AI-Powered Personal Finance Platform</p>
-  <div style="margin-top:1.5em; display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
-    <span class="badge badge-gold">React Native</span>
-    <span class="badge badge-blue">Node.js + Express</span>
-    <span class="badge badge-green">Plaid SDK</span>
-    <span class="badge badge-purple">Gemini AI</span>
-    <span class="badge" style="background:rgba(255,255,255,0.1);color:#aaa;border-color:#444;">PostgreSQL 15</span>
-  </div>
-  <div class="meta-row">
-    <div class="meta-chip">📅 February 24, 2026</div>
-    <div class="meta-chip">⏱ ~45 min Demo + Q&A</div>
-    <div class="meta-chip">👥 Internal Team Review</div>
-  </div>
-  <p class="footnote" style="text-align:center; border:none; margin-top:2em;">For internal demonstration purposes only · Do not distribute</p>
-</section>
+      <!-- ── SLIDE 1: Title ── -->
+      <section class="title-slide"
+        data-background-gradient="radial-gradient(ellipse at 20% 50%, #1A1A3E 0%, #0A0A0F 60%)">
+        <img src="assets/indus-icon.png" class="app-icon" alt="IndusWealth Icon">
+        <div class="logo-mark">IndusWealth</div>
+        <p class="tagline">Canada's AI-Powered Personal Finance Platform</p>
+        <div style="margin-top:1.5em; display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+          <span class="badge badge-gold">React Native</span>
+          <span class="badge badge-blue">Node.js + Express</span>
+          <span class="badge badge-green">Plaid SDK</span>
+          <span class="badge badge-purple">Gemini AI</span>
+          <span class="badge" style="background:rgba(255,255,255,0.1);color:#aaa;border-color:#444;">PostgreSQL
+            15</span>
+        </div>
+        <div class="meta-row">
+          <div class="meta-chip">📅 February 24, 2026</div>
+          <div class="meta-chip">⏱ ~45 min Demo + Q&A</div>
+          <div class="meta-chip">👥 Internal Team Review</div>
+        </div>
+        <p class="footnote" style="text-align:center; border:none; margin-top:2em;">For internal demonstration purposes
+          only · Do not distribute</p>
+      </section>
 
-<!-- ── SLIDE 2: Agenda ── -->
-<section>
-  <div class="section-number">Overview</div>
-  <h2>What We'll Cover Today</h2>
-  <div class="gold-line"></div>
-  <div class="grid2" style="margin-top:1em;">
-    <div class="card card-gold">
-      <h3>🎯 Product</h3>
-      <ul class="styled">
-        <li>What is IndusWealth?</li>
-        <li>Key differentiators</li>
-        <li>Tech stack overview</li>
-      </ul>
-    </div>
-    <div class="card">
-      <h3>🏗 Architecture</h3>
-      <ul class="styled">
-        <li>System diagram</li>
-        <li>Monorepo structure</li>
-        <li>Key design decisions</li>
-      </ul>
-    </div>
-    <div class="card">
-      <h3>📱 Live Demo</h3>
-      <ul class="styled">
-        <li>8 feature walkthroughs</li>
-        <li>Auth → Dashboard → AI</li>
-        <li>Debt Attack & Analytics</li>
-      </ul>
-    </div>
-    <div class="card card-gold">
-      <h3>🛡 Backend & Security</h3>
-      <ul class="styled">
-        <li>10 API route groups</li>
-        <li>Security features</li>
-        <li>Database schema</li>
-      </ul>
-    </div>
-    <div class="card">
-      <h3>⚖️ Legal & Compliance</h3>
-      <ul class="styled">
-        <li>PIPEDA status</li>
-        <li>Drafted documents</li>
-        <li>Remaining work</li>
-      </ul>
-    </div>
-    <div class="card">
-      <h3>🚀 Production Gaps</h3>
-      <ul class="styled">
-        <li>P0 blockers</li>
-        <li>P1–P3 roadmap</li>
-        <li>Next steps</li>
-      </ul>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 2: Agenda ── -->
+      <section>
+        <div class="section-number">Overview</div>
+        <h2>What We'll Cover Today</h2>
+        <div class="gold-line"></div>
+        <div class="grid2" style="margin-top:1em;">
+          <div class="card card-gold">
+            <h3>🎯 Product</h3>
+            <ul class="styled">
+              <li>What is IndusWealth?</li>
+              <li>Key differentiators</li>
+              <li>Tech stack overview</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>🏗 Architecture</h3>
+            <ul class="styled">
+              <li>System diagram</li>
+              <li>Monorepo structure</li>
+              <li>Key design decisions</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>📱 Live Demo</h3>
+            <ul class="styled">
+              <li>8 feature walkthroughs</li>
+              <li>Auth → Dashboard → AI</li>
+              <li>Debt Attack & Analytics</li>
+            </ul>
+          </div>
+          <div class="card card-gold">
+            <h3>🛡 Backend & Security</h3>
+            <ul class="styled">
+              <li>10 API route groups</li>
+              <li>Security features</li>
+              <li>Database schema</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>⚖️ Legal & Compliance</h3>
+            <ul class="styled">
+              <li>PIPEDA status</li>
+              <li>Drafted documents</li>
+              <li>Remaining work</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>🚀 Production Gaps</h3>
+            <ul class="styled">
+              <li>P0 blockers</li>
+              <li>P1–P3 roadmap</li>
+              <li>Next steps</li>
+            </ul>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 3: Elevator Pitch ── -->
-<section>
-  <div class="section-number">Section 1 · Product Overview</div>
-  <h2>What Is IndusWealth?</h2>
-  <div class="gold-line"></div>
-  <div class="card card-gold" style="font-size:1em; line-height:1.7; margin-bottom:1.2em;">
-    A <span class="hl">personal finance mobile app</span> built for <span class="hl">Canadian users</span> that connects to real bank accounts via <span class="hl-blue">Plaid</span>, generates <span class="hl">AI-powered insights</span> using <span class="hl-purple" style="color:#C07AFF; font-weight:600;">Google Gemini</span>, and helps users eliminate debt with proven payoff strategies.
-  </div>
-  <div class="grid2">
-    <div class="card fragment fade-up">
-      <h3>🍁 Canada-First</h3>
-      <p style="font-size:0.82em; color:#CCC;">Built for Canadian banking, PIPEDA compliance, and Canadian financial products (TFSA, RRSP, LOC)</p>
-    </div>
-    <div class="card fragment fade-up">
-      <h3>🤖 AI-Powered</h3>
-      <p style="font-size:0.82em; color:#CCC;">Gemini Flash 2.0 generates personalized insights — no PII ever sent to the AI model</p>
-    </div>
-    <div class="card fragment fade-up">
-      <h3>🔒 Privacy-First</h3>
-      <p style="font-size:0.82em; color:#CCC;">AES-256-GCM encryption, TOTP 2FA, JWT token rotation with family-based reuse detection</p>
-    </div>
-    <div class="card fragment fade-up">
-      <h3>💸 Debt Attack</h3>
-      <p style="font-size:0.82em; color:#CCC;">Snowball & Avalanche calculators with real Plaid liabilities + custom debts in one unified view</p>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 3: Elevator Pitch ── -->
+      <section>
+        <div class="section-number">Section 1 · Product Overview</div>
+        <h2>What Is IndusWealth?</h2>
+        <div class="gold-line"></div>
+        <div class="card card-gold" style="font-size:1em; line-height:1.7; margin-bottom:1.2em;">
+          A <span class="hl">personal finance mobile app</span> built for <span class="hl">Canadian users</span> that
+          connects to real bank accounts via <span class="hl-blue">Plaid</span>, generates <span class="hl">AI-powered
+            insights</span> using <span class="hl-purple" style="color:#C07AFF; font-weight:600;">Google Gemini</span>,
+          and helps users eliminate debt with proven payoff strategies.
+        </div>
+        <div class="grid2">
+          <div class="card fragment fade-up">
+            <h3>🍁 Canada-First</h3>
+            <p style="font-size:0.82em; color:#CCC;">Built for Canadian banking, PIPEDA compliance, and Canadian
+              financial products (TFSA, RRSP, LOC)</p>
+          </div>
+          <div class="card fragment fade-up">
+            <h3>🤖 AI-Powered</h3>
+            <p style="font-size:0.82em; color:#CCC;">Gemini Flash 2.0 generates personalized insights — no PII ever sent
+              to the AI model</p>
+          </div>
+          <div class="card fragment fade-up">
+            <h3>🔒 Privacy-First</h3>
+            <p style="font-size:0.82em; color:#CCC;">AES-256-GCM encryption, TOTP 2FA, JWT token rotation with
+              family-based reuse detection</p>
+          </div>
+          <div class="card fragment fade-up">
+            <h3>💸 Debt Attack</h3>
+            <p style="font-size:0.82em; color:#CCC;">Snowball & Avalanche calculators with real Plaid liabilities +
+              custom debts in one unified view</p>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 4: Tech Stack ── -->
-<section>
-  <div class="section-number">Section 1 · Product Overview</div>
-  <h2>Tech Stack At a Glance</h2>
-  <div class="gold-line"></div>
-  <table>
-    <thead><tr><th>Layer</th><th>Technology</th><th>Details</th></tr></thead>
-    <tbody>
-      <tr><td>📱 Mobile</td><td><span class="hl">React Native (Expo SDK 54)</span></td><td>React Navigation 6, 14 screens</td></tr>
-      <tr><td>⚙️ Backend</td><td><span class="hl-blue">Node.js + Express 5.2</span></td><td>10 route groups, PostgreSQL 15</td></tr>
-      <tr><td>🏦 Bank Data</td><td><span class="hl-green">Plaid SDK v41</span></td><td>Sandbox mode, Canada-only</td></tr>
-      <tr><td>🤖 AI</td><td><span class="hl-purple" style="color:#C07AFF;font-weight:600;">Google Gemini Flash 2.0</span></td><td>6-hour cache · No PII sent</td></tr>
-      <tr><td>🔐 Auth</td><td><span class="hl">JWT + TOTP 2FA</span></td><td>15min access / 30d refresh tokens</td></tr>
-      <tr><td>☁️ Hosting</td><td><span class="hl-blue">Render.com + EAS</span></td><td>Backend + DB · Mobile builds</td></tr>
-    </tbody>
-  </table>
-  <div class="card" style="margin-top:1.2em; font-size:0.82em; color:#CCC; background: linear-gradient(90deg, rgba(59,79,191,0.15), transparent);">
-    <span class="hl">Monorepo structure:</span> &nbsp;<code style="color:var(--gold)">packages/backend</code> + <code style="color:var(--gold)">packages/mobile</code> + <code style="color:var(--gold)">docs/legal</code>
-  </div>
-</section>
+      <!-- ── SLIDE 4: Tech Stack ── -->
+      <section>
+        <div class="section-number">Section 1 · Product Overview</div>
+        <h2>Tech Stack At a Glance</h2>
+        <div class="gold-line"></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Layer</th>
+              <th>Technology</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>📱 Mobile</td>
+              <td><span class="hl">React Native (Expo SDK 54)</span></td>
+              <td>React Navigation 6, 14 screens</td>
+            </tr>
+            <tr>
+              <td>⚙️ Backend</td>
+              <td><span class="hl-blue">Node.js + Express 5.2</span></td>
+              <td>10 route groups, PostgreSQL 15</td>
+            </tr>
+            <tr>
+              <td>🏦 Bank Data</td>
+              <td><span class="hl-green">Plaid SDK v41</span></td>
+              <td>Sandbox mode, Canada-only</td>
+            </tr>
+            <tr>
+              <td>🤖 AI</td>
+              <td><span class="hl-purple" style="color:#C07AFF;font-weight:600;">Google Gemini Flash 2.0</span></td>
+              <td>6-hour cache · No PII sent</td>
+            </tr>
+            <tr>
+              <td>🔐 Auth</td>
+              <td><span class="hl">JWT + TOTP 2FA</span></td>
+              <td>15min access / 30d refresh tokens</td>
+            </tr>
+            <tr>
+              <td>☁️ Hosting</td>
+              <td><span class="hl-blue">Render.com + EAS</span></td>
+              <td>Backend + DB · Mobile builds</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="card"
+          style="margin-top:1.2em; font-size:0.82em; color:#CCC; background: linear-gradient(90deg, rgba(59,79,191,0.15), transparent);">
+          <span class="hl">Monorepo structure:</span> &nbsp;<code style="color:var(--gold)">packages/backend</code> +
+          <code style="color:var(--gold)">packages/mobile</code> + <code style="color:var(--gold)">docs/legal</code>
+        </div>
+      </section>
 
-<!-- ── SLIDE 5: Architecture ── -->
-<section>
-  <div class="section-number">Section 2 · Architecture</div>
-  <h2>System Architecture</h2>
-  <div class="gold-line"></div>
-  <div style="text-align:center;">
-    <div class="arch-box gold-box" style="display:inline-block; min-width:280px; font-size:0.9em; padding:16px 24px;">
-      📱 Mobile App (Expo SDK 54)<br>
-      <span style="font-size:0.75em; color:var(--muted); font-weight:400;">14 Screens · 2-Layer Cache (AsyncStorage)</span>
-    </div>
-    <div style="color:var(--gold); font-size:0.75em; margin:6px 0;">HTTPS · JWT Bearer Token ↓</div>
-    <div class="arch-box indigo-box" style="display:inline-block; min-width:280px; font-size:0.9em; padding:16px 24px;">
-      ⚙️ Express API Server<br>
-      <span style="font-size:0.75em; color:var(--muted); font-weight:400;">10 Route Groups · auth · rate-limit · helmet · validators</span>
-    </div>
-    <div style="display:flex; justify-content:center; gap:30px; margin-top:18px;">
-      <div>
-        <div style="color:var(--muted); font-size:0.7em; margin-bottom:6px;">↙ DB</div>
-        <div class="arch-box green-box" style="font-size:0.8em; padding:12px 18px;">🗄 PostgreSQL 15<br><span style="font-size:0.8em; color:var(--muted);">20 tables</span></div>
-      </div>
-      <div>
-        <div style="color:var(--muted); font-size:0.7em; margin-bottom:6px;">↓ Banking</div>
-        <div class="arch-box" style="font-size:0.8em; padding:12px 18px; border-color:#5EC97A; color:#5EC97A;">🏦 Plaid<br><span style="font-size:0.8em; color:var(--muted);">Canada</span></div>
-      </div>
-      <div>
-        <div style="color:var(--muted); font-size:0.7em; margin-bottom:6px;">↘ AI</div>
-        <div class="arch-box" style="font-size:0.8em; padding:12px 18px; border-color:#C07AFF; color:#C07AFF;">🤖 Gemini<br><span style="font-size:0.8em; color:var(--muted);">Flash 2.0</span></div>
-      </div>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 5: Architecture ── -->
+      <section>
+        <div class="section-number">Section 2 · Architecture</div>
+        <h2>System Architecture</h2>
+        <div class="gold-line"></div>
+        <div style="text-align:center;">
+          <div class="arch-box gold-box"
+            style="display:inline-block; min-width:280px; font-size:0.9em; padding:16px 24px;">
+            📱 Mobile App (Expo SDK 54)<br>
+            <span style="font-size:0.75em; color:var(--muted); font-weight:400;">14 Screens · 2-Layer Cache
+              (AsyncStorage)</span>
+          </div>
+          <div style="color:var(--gold); font-size:0.75em; margin:6px 0;">HTTPS · JWT Bearer Token ↓</div>
+          <div class="arch-box indigo-box"
+            style="display:inline-block; min-width:280px; font-size:0.9em; padding:16px 24px;">
+            ⚙️ Express API Server<br>
+            <span style="font-size:0.75em; color:var(--muted); font-weight:400;">10 Route Groups · auth · rate-limit ·
+              helmet · validators</span>
+          </div>
+          <div style="display:flex; justify-content:center; gap:30px; margin-top:18px;">
+            <div>
+              <div style="color:var(--muted); font-size:0.7em; margin-bottom:6px;">↙ DB</div>
+              <div class="arch-box green-box" style="font-size:0.8em; padding:12px 18px;">🗄 PostgreSQL 15<br><span
+                  style="font-size:0.8em; color:var(--muted);">20 tables</span></div>
+            </div>
+            <div>
+              <div style="color:var(--muted); font-size:0.7em; margin-bottom:6px;">↓ Banking</div>
+              <div class="arch-box" style="font-size:0.8em; padding:12px 18px; border-color:#5EC97A; color:#5EC97A;">🏦
+                Plaid<br><span style="font-size:0.8em; color:var(--muted);">Canada</span></div>
+            </div>
+            <div>
+              <div style="color:var(--muted); font-size:0.7em; margin-bottom:6px;">↘ AI</div>
+              <div class="arch-box" style="font-size:0.8em; padding:12px 18px; border-color:#C07AFF; color:#C07AFF;">🤖
+                Gemini<br><span style="font-size:0.8em; color:var(--muted);">Flash 2.0</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 6: Key Arch Decisions ── -->
-<section>
-  <div class="section-number">Section 2 · Architecture</div>
-  <h2>Key Design Decisions</h2>
-  <div class="gold-line"></div>
-  <div class="grid2">
-    <div class="card card-gold">
-      <h3>🔁 Two-Layer Caching</h3>
-      <p style="font-size:0.82em;color:#CCC;">Mobile AsyncStorage + server PostgreSQL. 24-hour sync policy avoids excessive Plaid API calls and keeps costs low.</p>
-    </div>
-    <div class="card">
-      <h3>🛡 No PII to AI</h3>
-      <p style="font-size:0.82em;color:#CCC;">Only aggregated financial summaries sent to Gemini. No account numbers, names, or merchant details ever leave the server.</p>
-    </div>
-    <div class="card">
-      <h3>🔑 Token Family Rotation</h3>
-      <p style="font-size:0.82em;color:#CCC;">Refresh tokens use family-based reuse detection. If a token is reused, the entire family is invalidated immediately.</p>
-    </div>
-    <div class="card card-gold">
-      <h3>🔐 Encrypted at Rest</h3>
-      <p style="font-size:0.82em;color:#CCC;">All Plaid access tokens stored with AES-256-GCM encryption. TOTP secrets also encrypted before database storage.</p>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 6: Key Arch Decisions ── -->
+      <section>
+        <div class="section-number">Section 2 · Architecture</div>
+        <h2>Key Design Decisions</h2>
+        <div class="gold-line"></div>
+        <div class="grid2">
+          <div class="card card-gold">
+            <h3>🔁 Two-Layer Caching</h3>
+            <p style="font-size:0.82em;color:#CCC;">Mobile AsyncStorage + server PostgreSQL. 24-hour sync policy avoids
+              excessive Plaid API calls and keeps costs low.</p>
+          </div>
+          <div class="card">
+            <h3>🛡 No PII to AI</h3>
+            <p style="font-size:0.82em;color:#CCC;">Only aggregated financial summaries sent to Gemini. No account
+              numbers, names, or merchant details ever leave the server.</p>
+          </div>
+          <div class="card">
+            <h3>🔑 Token Family Rotation</h3>
+            <p style="font-size:0.82em;color:#CCC;">Refresh tokens use family-based reuse detection. If a token is
+              reused, the entire family is invalidated immediately.</p>
+          </div>
+          <div class="card card-gold">
+            <h3>🔐 Encrypted at Rest</h3>
+            <p style="font-size:0.82em;color:#CCC;">All Plaid access tokens stored with AES-256-GCM encryption. TOTP
+              secrets also encrypted before database storage.</p>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 7: Demo Intro ── -->
-<section data-background-gradient="radial-gradient(ellipse at 80% 50%, #1A2060 0%, #0A0A0F 60%)">
-  <div style="text-align:center; padding: 2em 0;">
-    <div style="font-size:3em; margin-bottom:0.3em;">📱</div>
-    <h1 style="color:var(--gold);">Live Demo</h1>
-    <p style="color:var(--muted); font-size:1em;">8 Feature Walkthroughs · ~25 minutes</p>
-    <div class="demo-cred" style="display:inline-block; margin-top:1.5em; text-align:left;">
-      <div style="color:var(--muted); font-size:0.8em; margin-bottom:6px;">Demo Credentials</div>
-      <div>Email: <span style="color:white;">demo@induswealth.com</span></div>
-      <div>Password: <span style="color:white;">demo123</span></div>
-      <div style="margin-top:8px; color:var(--muted); font-size:0.85em;">Plaid Sandbox: user_good / pass_good</div>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 7: Demo Intro ── -->
+      <section data-background-gradient="radial-gradient(ellipse at 80% 50%, #1A2060 0%, #0A0A0F 60%)">
+        <div style="text-align:center; padding: 2em 0;">
+          <div style="font-size:3em; margin-bottom:0.3em;">📱</div>
+          <h1 style="color:var(--gold);">Live Demo</h1>
+          <p style="color:var(--muted); font-size:1em;">8 Feature Walkthroughs · ~25 minutes</p>
+          <div class="demo-cred" style="display:inline-block; margin-top:1.5em; text-align:left;">
+            <div style="color:var(--muted); font-size:0.8em; margin-bottom:6px;">Demo Credentials</div>
+            <div>Email: <span style="color:white;">demo@induswealth.com</span></div>
+            <div>Password: <span style="color:white;">demo123</span></div>
+            <div style="margin-top:8px; color:var(--muted); font-size:0.85em;">Plaid Sandbox: user_good / pass_good
+            </div>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 8: Authentication ── -->
-<section>
-  <div class="section-number">Demo 3.1 · Authentication (3 min)</div>
-  <h2>Authentication Flow</h2>
-  <div class="gold-line"></div>
-  <div class="grid2">
-    <div>
-      <div class="card card-gold" style="margin-bottom:10px;">
-        <h3>Login Screen</h3>
-        <ul class="styled">
-          <li>Dark theme with gold accents</li>
-          <li>Space Grotesk font</li>
-          <li>Email + password form</li>
-          <li>Locks after 5 failed attempts (15 min)</li>
-        </ul>
-      </div>
-      <div class="card" style="margin-bottom:10px;">
-        <h3>Signup Screen</h3>
-        <ul class="styled">
-          <li>Password strength indicator (0–4 score)</li>
-          <li>Visual strength bar</li>
-          <li>ToS + Privacy Policy acceptance</li>
-        </ul>
-      </div>
-    </div>
-    <div class="card">
-      <h3>🔐 2FA Flow (TOTP)</h3>
-      <ul class="styled">
-        <li>6-digit TOTP code entry</li>
-        <li>QR code setup scan</li>
-        <li>8 recovery codes generated</li>
-        <li>Encrypted secret storage</li>
-      </ul>
-      <div style="margin-top:1em; padding:10px; background:var(--surface2); border-radius:8px; font-size:0.78em; color:var(--muted);">
-        Password requirements: 8+ chars · 1 uppercase · 1 number
-      </div>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 8: Authentication ── -->
+      <section>
+        <div class="section-number">Demo 3.1 · Authentication (3 min)</div>
+        <h2>Authentication Flow</h2>
+        <div class="gold-line"></div>
+        <div class="split-layout">
+          <div>
+            <div class="card card-gold" style="margin-bottom:10px;">
+              <h3>Login Screen</h3>
+              <ul class="styled">
+                <li>Dark theme with gold accents</li>
+                <li>Space Grotesk font</li>
+                <li>Email + password form</li>
+                <li>Locks after 5 failed attempts (15 min)</li>
+              </ul>
+            </div>
+            <div class="card" style="margin-bottom:10px;">
+              <h3>Signup Screen</h3>
+              <ul class="styled">
+                <li>Password strength indicator (0–4 score)</li>
+                <li>Visual strength bar</li>
+                <li>ToS + Privacy Policy acceptance</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>🔐 2FA Flow (TOTP)</h3>
+              <ul class="styled" style="font-size:0.82em;">
+                <li>6-digit TOTP code entry · QR code setup</li>
+                <li>8 recovery codes · Encrypted secrets</li>
+              </ul>
+            </div>
+          </div>
+          <div class="screenshot-pair">
+            <div>
+              <div class="phone-frame phone-frame-sm">
+                <div class="phone-notch"></div><img src="assets/Screenshot_20260224-190551.png" alt="Login Screen">
+              </div>
+              <div class="screenshot-label">Login</div>
+            </div>
+            <div>
+              <div class="phone-frame phone-frame-sm">
+                <div class="phone-notch"></div><img src="assets/Screenshot_20260224-190556.png" alt="Signup Screen">
+              </div>
+              <div class="screenshot-label">Signup</div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 9: Home Dashboard ── -->
-<section>
-  <div class="section-number">Demo 3.2 · Home Dashboard (4 min)</div>
-  <h2>Home Dashboard</h2>
-  <div class="gold-line"></div>
-  <div class="grid2">
-    <div>
-      <div class="card card-gold">
-        <h3>What's Displayed</h3>
-        <ul class="styled">
-          <li><span class="hl">Total Balance</span> — aggregated all accounts</li>
-          <li><span class="hl">Balance Trend Chart</span> — SVG mini-chart</li>
-          <li><span class="hl">Account Cards</span> — 8-color rotation</li>
-          <li><span class="hl">Recent Transactions</span> — last 20 with categories</li>
-        </ul>
-      </div>
-    </div>
-    <div>
-      <div class="card" style="margin-bottom:10px;">
-        <h3>🔄 Pull-to-Refresh</h3>
-        <p style="font-size:0.82em;color:#CCC;">Syncs live with Plaid. 24-hour cache policy to control API costs.</p>
-      </div>
-      <div class="card">
-        <h3>Privacy Toggle</h3>
-        <p style="font-size:0.82em;color:#CCC;">Balance can be hidden / shown with one tap for privacy in public.</p>
-      </div>
-      <div class="card">
-        <h3>Navigation</h3>
-        <p style="font-size:0.82em;color:#CCC;">Tap any account card → account-specific transaction view.</p>
-      </div>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 9: Home Dashboard ── -->
+      <section>
+        <div class="section-number">Demo 3.2 · Home Dashboard (4 min)</div>
+        <h2>Home Dashboard</h2>
+        <div class="gold-line"></div>
+        <div class="split-layout">
+          <div>
+            <div class="card card-gold" style="margin-bottom:10px;">
+              <h3>What's Displayed</h3>
+              <ul class="styled">
+                <li><span class="hl">Total Balance</span> — aggregated all accounts</li>
+                <li><span class="hl">Balance Trend Chart</span> — SVG mini-chart</li>
+                <li><span class="hl">Account Cards</span> — 8-color rotation</li>
+                <li><span class="hl">Recent Transactions</span> — last 20 with categories</li>
+              </ul>
+            </div>
+            <div class="card" style="margin-bottom:10px;">
+              <h3>🔄 Pull-to-Refresh</h3>
+              <p style="font-size:0.82em;color:#CCC;">Syncs live with Plaid. 24-hour cache policy to control API costs.
+              </p>
+            </div>
+            <div class="card" style="margin-bottom:10px;">
+              <h3>Privacy Toggle</h3>
+              <p style="font-size:0.82em;color:#CCC;">Balance can be hidden / shown with one tap for privacy in public.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Navigation</h3>
+              <p style="font-size:0.82em;color:#CCC;">Tap any account card → account-specific transaction view.</p>
+            </div>
+          </div>
+          <div class="screenshot-pair">
+            <div>
+              <div class="phone-frame phone-frame-sm">
+                <div class="phone-notch"></div><img src="assets/Screenshot_20260224-190321.png" alt="Home Dashboard">
+              </div>
+              <div class="screenshot-label">Home Dashboard</div>
+            </div>
+            <div>
+              <div class="phone-frame phone-frame-sm">
+                <div class="phone-notch"></div><img src="assets/Screenshot_20260223-232913.png"
+                  alt="Plaid Bank Connection">
+              </div>
+              <div class="screenshot-label">Plaid Connect</div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 10: AI Insights ── -->
-<section>
-  <div class="section-number">Demo 3.3 · AI Insights (4 min)</div>
-  <h2>AI-Powered Insights</h2>
-  <div class="gold-line"></div>
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-    <div>
-      <div class="card" style="border-left:4px solid #FF6B6B; margin-bottom:10px;">
-        <div class="badge badge-red">HIGH</div>
-        <p style="font-size:0.82em; color:#CCC; margin-top:8px;">e.g. "You have no emergency fund — 3 months of expenses at risk"</p>
-      </div>
-      <div class="card" style="border-left:4px solid var(--gold); margin-bottom:10px;">
-        <div class="badge badge-gold">MEDIUM</div>
-        <p style="font-size:0.82em; color:#CCC; margin-top:8px;">e.g. "Open a TFSA — you have unused contribution room"</p>
-      </div>
-      <div class="card" style="border-left:4px solid #5EC97A;">
-        <div class="badge badge-green">LOW</div>
-        <p style="font-size:0.82em; color:#CCC; margin-top:8px;">e.g. "Reduce dining spending — 18% above your average"</p>
-      </div>
-    </div>
-    <div>
-      <div class="card card-gold" style="margin-bottom:10px;">
-        <h3>7 Insight Categories</h3>
-        <ul class="styled" style="font-size:0.85em;">
-          <li>Tax-Advantaged (TFSA/RRSP)</li>
-          <li>Spending Optimization</li>
-          <li>Debt Payoff</li>
-          <li>Savings · Cash Flow</li>
-          <li>Investment Readiness</li>
-          <li>Milestones</li>
-        </ul>
-      </div>
-      <div class="card">
-        <h3>✅ Dismiss Flow</h3>
-        <ul class="styled" style="font-size:0.82em;">
-          <li>Not interested</li>
-          <li>Already done</li>
-          <li>Remind me later</li>
-          <li>Links to educational articles</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-  <div class="card" style="margin-top:10px; font-size:0.78em; color:var(--muted); background: rgba(59,79,191,0.1); border-color:var(--indigo);">
-    ⚡ Powered by Gemini Flash 2.0 · 6-hour server-side cache · Only aggregated data sent — never PII
-  </div>
-</section>
+      <!-- ── SLIDE 10: AI Insights ── -->
+      <section>
+        <div class="section-number">Demo 3.3 · AI Insights (4 min)</div>
+        <h2>AI-Powered Insights</h2>
+        <div class="gold-line"></div>
+        <div class="split-layout">
+          <div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+              <div class="card" style="border-left:4px solid #FF6B6B;">
+                <div class="badge badge-red">HIGH</div>
+                <p style="font-size:0.75em; color:#CCC; margin-top:6px;">"No emergency fund — 3 months at risk"</p>
+              </div>
+              <div class="card" style="border-left:4px solid var(--gold);">
+                <div class="badge badge-gold">MEDIUM</div>
+                <p style="font-size:0.75em; color:#CCC; margin-top:6px;">"Open a TFSA — unused contribution room"</p>
+              </div>
+            </div>
+            <div class="card card-gold" style="margin-bottom:10px;">
+              <h3>7 Insight Categories</h3>
+              <ul class="styled" style="font-size:0.82em;">
+                <li>Tax-Advantaged (TFSA/RRSP) · Spending Optimization</li>
+                <li>Debt Payoff · Savings · Cash Flow</li>
+                <li>Investment Readiness · Milestones</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>✅ Dismiss Flow</h3>
+              <ul class="styled" style="font-size:0.82em;">
+                <li>Not interested · Already done · Remind me later</li>
+                <li>Links to educational articles</li>
+              </ul>
+            </div>
+            <div class="card"
+              style="margin-top:10px; font-size:0.75em; color:var(--muted); background: rgba(59,79,191,0.1); border-color:var(--indigo);">
+              ⚡ Gemini Flash 2.0 · 6hr cache · No PII sent
+            </div>
+          </div>
+          <div>
+            <div class="phone-frame phone-frame-md">
+              <div class="phone-notch"></div><img src="assets/Screenshot_20260224-190325.png" alt="AI Insights Screen">
+            </div>
+            <div class="screenshot-label">AI Insights</div>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 11: Debt Attack ── -->
-<section>
-  <div class="section-number">Demo 3.4 · Debt Attack (5 min)</div>
-  <h2>Debt Attack Calculator</h2>
-  <div class="gold-line"></div>
-  <div class="grid3" style="margin-bottom:12px;">
-    <div class="card" style="text-align:center;">
-      <div style="font-size:1.5em;">😐</div>
-      <h3>Status Quo</h3>
-      <p style="font-size:0.78em; color:var(--muted);">Minimum payments only</p>
-    </div>
-    <div class="card card-gold" style="text-align:center;">
-      <div style="font-size:1.5em;">⛄</div>
-      <h3>Snowball</h3>
-      <p style="font-size:0.78em; color:var(--muted);">Smallest balance first — psychological wins</p>
-    </div>
-    <div class="card" style="text-align:center; border-color:var(--indigo);">
-      <div style="font-size:1.5em;">🏔</div>
-      <h3>Avalanche</h3>
-      <p style="font-size:0.78em; color:var(--muted);">Highest APR first — saves most interest</p>
-    </div>
-  </div>
-  <div class="grid2">
-    <div class="card">
-      <h3>Extra Payment Slider</h3>
-      <p style="font-size:0.82em;color:#CCC;">$0 — $5,000/month. Real-time recalculation as slider moves.</p>
-      <p style="font-size:0.82em;color:var(--gold);">"You save $X,XXX in interest and Y months"</p>
-    </div>
-    <div class="card card-gold">
-      <h3>Custom Debts</h3>
-      <ul class="styled" style="font-size:0.82em;">
-        <li>Add personal loans, car payments</li>
-        <li>APR override for Plaid accounts</li>
-        <li>Default APRs: CC 22% · LOC 11% · Student 6%</li>
-        <li>Real Plaid liabilities + custom in one view</li>
-      </ul>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 11: Debt Attack ── -->
+      <section>
+        <div class="section-number">Demo 3.4 · Debt Attack (5 min)</div>
+        <h2>Debt Attack Calculator</h2>
+        <div class="gold-line"></div>
+        <div class="split-layout">
+          <div>
+            <div class="grid3" style="margin-bottom:10px;">
+              <div class="card" style="text-align:center;">
+                <div style="font-size:1.2em;">😐</div>
+                <h3 style="font-size:0.9em;">Status Quo</h3>
+                <p style="font-size:0.7em; color:var(--muted);">Min payments</p>
+              </div>
+              <div class="card card-gold" style="text-align:center;">
+                <div style="font-size:1.2em;">⛄</div>
+                <h3 style="font-size:0.9em;">Snowball</h3>
+                <p style="font-size:0.7em; color:var(--muted);">Smallest first</p>
+              </div>
+              <div class="card" style="text-align:center; border-color:var(--indigo);">
+                <div style="font-size:1.2em;">🏔</div>
+                <h3 style="font-size:0.9em;">Avalanche</h3>
+                <p style="font-size:0.7em; color:var(--muted);">Highest APR</p>
+              </div>
+            </div>
+            <div class="card" style="margin-bottom:10px;">
+              <h3>Extra Payment Slider</h3>
+              <p style="font-size:0.82em;color:#CCC;">$0 — $5,000/month. Real-time recalculation.</p>
+              <p style="font-size:0.82em;color:var(--gold);">"Save $X,XXX in interest and Y months"</p>
+            </div>
+            <div class="card card-gold">
+              <h3>Custom Debts</h3>
+              <ul class="styled" style="font-size:0.82em;">
+                <li>Personal loans, car payments, APR override</li>
+                <li>Default APRs: CC 22% · LOC 11% · Student 6%</li>
+                <li>Real Plaid liabilities + custom in one view</li>
+              </ul>
+            </div>
+          </div>
+          <div>
+            <div class="phone-frame phone-frame-md">
+              <div class="phone-notch"></div><img src="assets/Screenshot_20260224-190358.png" alt="Debt Attack Plan">
+            </div>
+            <div class="screenshot-label">Debt Attack Plan</div>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 12: Analytics ── -->
-<section>
-  <div class="section-number">Demo 3.5 · Analytics (3 min)</div>
-  <h2>Analytics Dashboard</h2>
-  <div class="gold-line"></div>
-  <div class="grid2">
-    <div>
-      <div class="card card-gold" style="margin-bottom:10px;">
-        <h3>Spending Intent Breakdown</h3>
-        <ul class="styled" style="font-size:0.85em;">
-          <li>Fixed Needs (rent, utilities)</li>
-          <li>Growth (investments, learning)</li>
-          <li>Lifestyle (dining, entertainment)</li>
-        </ul>
-      </div>
-      <div class="card">
-        <h3>Category Breakdown</h3>
-        <p style="font-size:0.82em;color:#CCC;">Horizontal bar charts across 16 spending categories with gold gradient fills</p>
-      </div>
-    </div>
-    <div>
-      <div class="card" style="margin-bottom:10px;">
-        <h3>📊 Top Merchants</h3>
-        <p style="font-size:0.82em;color:#CCC;">This month vs last month side-by-side comparison</p>
-      </div>
-      <div class="card">
-        <h3>📈 Monthly Savings</h3>
-        <p style="font-size:0.82em;color:#CCC;">Income − Expenses = savings rate with monthly progress indicator (% month elapsed vs % budget spent)</p>
-      </div>
-    </div>
-  </div>
-  <div style="font-size:0.75em; color:var(--muted); margin-top:10px; text-align:center;">Victory Native charts · Gold gradient fills · Current vs previous month comparison</div>
-</section>
+      <!-- ── SLIDE 12: Analytics ── -->
+      <section>
+        <div class="section-number">Demo 3.5 · Analytics (3 min)</div>
+        <h2>Analytics Dashboard</h2>
+        <div class="gold-line"></div>
+        <div class="split-layout">
+          <div>
+            <div class="card card-gold" style="margin-bottom:10px;">
+              <h3>Spending Intent Breakdown</h3>
+              <ul class="styled" style="font-size:0.85em;">
+                <li>Fixed Needs (rent, utilities)</li>
+                <li>Growth (investments, learning)</li>
+                <li>Lifestyle (dining, entertainment)</li>
+              </ul>
+            </div>
+            <div class="card" style="margin-bottom:10px;">
+              <h3>Category Breakdown</h3>
+              <p style="font-size:0.82em;color:#CCC;">16 spending categories with gold gradient bar charts</p>
+            </div>
+            <div class="card" style="margin-bottom:10px;">
+              <h3>📊 Top Merchants</h3>
+              <p style="font-size:0.82em;color:#CCC;">This month vs last month comparison</p>
+            </div>
+            <div class="card">
+              <h3>📈 Monthly Savings</h3>
+              <p style="font-size:0.82em;color:#CCC;">Income − Expenses = savings rate with burn rate indicator</p>
+            </div>
+          </div>
+          <div class="screenshot-pair">
+            <div>
+              <div class="phone-frame phone-frame-sm">
+                <div class="phone-notch"></div><img src="assets/Screenshot_20260224-190412.png" alt="Wealth Narrative">
+              </div>
+              <div class="screenshot-label">Net Worth</div>
+            </div>
+            <div>
+              <div class="phone-frame phone-frame-sm">
+                <div class="phone-notch"></div><img src="assets/Screenshot_20260224-190416.png"
+                  alt="Category Breakdown">
+              </div>
+              <div class="screenshot-label">Categories</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:0.72em; color:var(--muted); margin-top:8px; text-align:center;">Victory Native charts ·
+          Gold gradient fills · Current vs previous month comparison</div>
+      </section>
 
-<!-- ── SLIDE 13: Watchdog + Academy + Profile ── -->
-<section>
-  <div class="section-number">Demo 3.6 → 3.8</div>
-  <h2>Watchdog · Wealth Academy · Profile</h2>
-  <div class="gold-line"></div>
-  <div class="grid3">
-    <div class="card" style="border-color:var(--indigo);">
-      <h3>🐕 Watchdog</h3>
-      <p style="font-size:0.78em;color:#CCC; margin-bottom:8px;">Recurring expense detector</p>
-      <ul class="styled" style="font-size:0.78em;">
-        <li>Streaming subscriptions</li>
-        <li>Utilities detection</li>
-        <li>Actions: Negotiate, Stop, Monitor, Keep</li>
-        <li><span class="hl-red">MVP — needs enhancement</span></li>
-      </ul>
-    </div>
-    <div class="card card-gold">
-      <h3>🎓 Wealth Academy</h3>
-      <ul class="styled" style="font-size:0.78em;">
-        <li>Tabs: All, Budgeting, Investing, Debt, Taxes, Savings, Bookmarks</li>
-        <li>Article cards w/ read time + source</li>
-        <li>WebView reader</li>
-        <li>AI-linked articles</li>
-        <li>7-day cache</li>
-      </ul>
-    </div>
-    <div class="card">
-      <h3>👤 Profile & Security</h3>
-      <ul class="styled" style="font-size:0.78em;">
-        <li>Edit name, DOB</li>
-        <li>Change password</li>
-        <li>2FA setup / disable</li>
-        <li>View recovery codes</li>
-        <li>Logout all sessions</li>
-        <li>Disconnect bank</li>
-        <li>Delete account</li>
-      </ul>
-    </div>
-  </div>
-  <div style="font-size:0.72em; color:var(--muted); margin-top:10px;">Wealth Academy sources: NerdWallet · Investopedia · MoneySense · Canada.ca</div>
-</section>
+      <!-- ── SLIDE 13: Watchdog + Academy + Profile ── -->
+      <section>
+        <div class="section-number">Demo 3.6 → 3.8</div>
+        <h2>Watchdog · Wealth Academy · Profile</h2>
+        <div class="gold-line"></div>
+        <div class="grid3">
+          <div class="card" style="border-color:var(--indigo);">
+            <h3>🐕 Watchdog</h3>
+            <p style="font-size:0.78em;color:#CCC; margin-bottom:8px;">Recurring expense detector</p>
+            <ul class="styled" style="font-size:0.78em;">
+              <li>Streaming subscriptions</li>
+              <li>Utilities detection</li>
+              <li>Actions: Negotiate, Stop, Monitor, Keep</li>
+              <li><span class="hl-red">MVP — needs enhancement</span></li>
+            </ul>
+          </div>
+          <div class="card card-gold">
+            <h3>🎓 Wealth Academy</h3>
+            <ul class="styled" style="font-size:0.78em;">
+              <li>Tabs: All, Budgeting, Investing, Debt, Taxes, Savings, Bookmarks</li>
+              <li>Article cards w/ read time + source</li>
+              <li>WebView reader</li>
+              <li>AI-linked articles</li>
+              <li>7-day cache</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>👤 Profile & Security</h3>
+            <ul class="styled" style="font-size:0.78em;">
+              <li>Edit name, DOB</li>
+              <li>Change password</li>
+              <li>2FA setup / disable</li>
+              <li>View recovery codes</li>
+              <li>Logout all sessions</li>
+              <li>Disconnect bank</li>
+              <li>Delete account</li>
+            </ul>
+          </div>
+        </div>
+        <div style="font-size:0.72em; color:var(--muted); margin-top:10px;">Wealth Academy sources: NerdWallet ·
+          Investopedia · MoneySense · Canada.ca</div>
+      </section>
 
-<!-- ── SLIDE 14: API Overview ── -->
-<section>
-  <div class="section-number">Section 4 · Backend & Security</div>
-  <h2>API Overview — 10 Route Groups</h2>
-  <div class="gold-line"></div>
-  <table>
-    <thead><tr><th>Route Group</th><th>Key Features</th></tr></thead>
-    <tbody>
-      <tr><td><code>/users</code></td><td>signup, login, refresh, logout, profile · JWT + lockout</td></tr>
-      <tr><td><code>/plaid</code></td><td>link_token, exchange, disconnect · AES-256-GCM token storage</td></tr>
-      <tr><td><code>/transactions</code></td><td>list, notes · 24hr cache · pagination</td></tr>
-      <tr><td><code>/accounts</code></td><td>list, balances · aggregated totals</td></tr>
-      <tr><td><code>/debt</code></td><td>analysis, calculate, custom CRUD · 3-strategy calculator</td></tr>
-      <tr><td><code>/analytics</code></td><td>spending breakdown · intent-based categories</td></tr>
-      <tr><td><code>/insights</code></td><td>AI generation, dismiss · 6hr cache · Gemini</td></tr>
-      <tr><td><code>/educational</code></td><td>articles, bookmarks · 7-day cache</td></tr>
-      <tr><td><code>/2fa</code></td><td>setup, verify, disable, recovery · TOTP + encrypted secrets</td></tr>
-      <tr><td><code>/watchdog</code></td><td>recurring detection · action tracking</td></tr>
-    </tbody>
-  </table>
-</section>
+      <!-- ── SLIDE 14: API Overview ── -->
+      <section>
+        <div class="section-number">Section 4 · Backend & Security</div>
+        <h2>API Overview — 10 Route Groups</h2>
+        <div class="gold-line"></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Route Group</th>
+              <th>Key Features</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>/users</code></td>
+              <td>signup, login, refresh, logout, profile · JWT + lockout</td>
+            </tr>
+            <tr>
+              <td><code>/plaid</code></td>
+              <td>link_token, exchange, disconnect · AES-256-GCM token storage</td>
+            </tr>
+            <tr>
+              <td><code>/transactions</code></td>
+              <td>list, notes · 24hr cache · pagination</td>
+            </tr>
+            <tr>
+              <td><code>/accounts</code></td>
+              <td>list, balances · aggregated totals</td>
+            </tr>
+            <tr>
+              <td><code>/debt</code></td>
+              <td>analysis, calculate, custom CRUD · 3-strategy calculator</td>
+            </tr>
+            <tr>
+              <td><code>/analytics</code></td>
+              <td>spending breakdown · intent-based categories</td>
+            </tr>
+            <tr>
+              <td><code>/insights</code></td>
+              <td>AI generation, dismiss · 6hr cache · Gemini</td>
+            </tr>
+            <tr>
+              <td><code>/educational</code></td>
+              <td>articles, bookmarks · 7-day cache</td>
+            </tr>
+            <tr>
+              <td><code>/2fa</code></td>
+              <td>setup, verify, disable, recovery · TOTP + encrypted secrets</td>
+            </tr>
+            <tr>
+              <td><code>/watchdog</code></td>
+              <td>recurring detection · action tracking</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
 
-<!-- ── SLIDE 15: Security ── -->
-<section>
-  <div class="section-number">Section 4 · Security</div>
-  <h2>Security Features Implemented</h2>
-  <div class="gold-line"></div>
-  <div class="grid2">
-    <div>
-      <div class="card card-gold" style="margin-bottom:10px;">
-        <h3>🔐 Auth & Tokens</h3>
-        <ul class="styled" style="font-size:0.82em;">
-          <li>AES-256-GCM for Plaid access tokens</li>
-          <li>Refresh token family rotation + reuse detection</li>
-          <li>Account lockout — 5 fails → 15 min cooldown</li>
-          <li>TOTP 2FA with 8 recovery codes (SHA-256 hashed)</li>
-        </ul>
-      </div>
-      <div class="card">
-        <h3>🛡 Transport & Headers</h3>
-        <ul class="styled" style="font-size:0.82em;">
-          <li>Helmet security headers (HSTS, CSP)</li>
-          <li>CORS restriction (configurable origins)</li>
-          <li>Request body limit — 10kb</li>
-          <li>Request ID tracking for all API calls</li>
-        </ul>
-      </div>
-    </div>
-    <div>
-      <div class="card">
-        <h3>📋 Input & Rate Limiting</h3>
-        <ul class="styled" style="font-size:0.82em;">
-          <li>express-validator on all routes</li>
-          <li>Rate limiting — general + stricter on auth endpoints</li>
-          <li>Trust proxy configured for Render deployment</li>
-        </ul>
-      </div>
-      <div class="card card-gold" style="margin-top:10px;">
-        <h3>🗄 Database Schema</h3>
-        <p style="font-size:0.82em;color:#CCC;margin-bottom:6px;"><span class="hl">20 tables across 4 domains:</span></p>
-        <ul class="styled" style="font-size:0.8em;">
-          <li><span class="hl-blue">Core:</span> users, accounts, transactions, sync_log</li>
-          <li><span class="hl-green">Debt:</span> custom_debts, debt_apr_overrides</li>
-          <li><span class="hl-purple" style="color:#C07AFF;">AI/Content:</span> insights, dismissals, articles, bookmarks…</li>
-          <li><span class="hl-red">Security:</span> refresh_tokens, login_attempts, totp_secrets, recovery_codes</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 15: Security ── -->
+      <section>
+        <div class="section-number">Section 4 · Security</div>
+        <h2>Security Features Implemented</h2>
+        <div class="gold-line"></div>
+        <div class="grid2">
+          <div>
+            <div class="card card-gold" style="margin-bottom:10px;">
+              <h3>🔐 Auth & Tokens</h3>
+              <ul class="styled" style="font-size:0.82em;">
+                <li>AES-256-GCM for Plaid access tokens</li>
+                <li>Refresh token family rotation + reuse detection</li>
+                <li>Account lockout — 5 fails → 15 min cooldown</li>
+                <li>TOTP 2FA with 8 recovery codes (SHA-256 hashed)</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>🛡 Transport & Headers</h3>
+              <ul class="styled" style="font-size:0.82em;">
+                <li>Helmet security headers (HSTS, CSP)</li>
+                <li>CORS restriction (configurable origins)</li>
+                <li>Request body limit — 10kb</li>
+                <li>Request ID tracking for all API calls</li>
+              </ul>
+            </div>
+          </div>
+          <div>
+            <div class="card">
+              <h3>📋 Input & Rate Limiting</h3>
+              <ul class="styled" style="font-size:0.82em;">
+                <li>express-validator on all routes</li>
+                <li>Rate limiting — general + stricter on auth endpoints</li>
+                <li>Trust proxy configured for Render deployment</li>
+              </ul>
+            </div>
+            <div class="card card-gold" style="margin-top:10px;">
+              <h3>🗄 Database Schema</h3>
+              <p style="font-size:0.82em;color:#CCC;margin-bottom:6px;"><span class="hl">20 tables across 4
+                  domains:</span></p>
+              <ul class="styled" style="font-size:0.8em;">
+                <li><span class="hl-blue">Core:</span> users, accounts, transactions, sync_log</li>
+                <li><span class="hl-green">Debt:</span> custom_debts, debt_apr_overrides</li>
+                <li><span class="hl-purple" style="color:#C07AFF;">AI/Content:</span> insights, dismissals, articles,
+                  bookmarks…</li>
+                <li><span class="hl-red">Security:</span> refresh_tokens, login_attempts, totp_secrets, recovery_codes
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 16: Legal ── -->
-<section>
-  <div class="section-number">Section 5 · Legal & Compliance</div>
-  <h2>Legal Status</h2>
-  <div class="gold-line"></div>
-  <div class="grid2">
-    <div>
-      <h3 style="color:var(--gold-light);">✅ Completed (in docs/legal/)</h3>
-      <table style="margin-top:10px;">
-        <thead><tr><th>Document</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td>Terms of Service</td><td><span class="badge badge-green">Drafted</span></td></tr>
-          <tr><td>Privacy Policy (PIPEDA)</td><td><span class="badge badge-green">Drafted</span></td></tr>
-          <tr><td>Financial Disclaimer</td><td><span class="badge badge-green">Drafted</span></td></tr>
-          <tr><td>Cookie & Tracking Policy</td><td><span class="badge badge-green">Drafted</span></td></tr>
-          <tr><td>Data Processing Agreement</td><td><span class="badge badge-green">Drafted</span></td></tr>
-          <tr><td>Sub-processors List</td><td><span class="badge badge-green">Documented</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div>
-      <h3 style="color:#FF6B6B;">🔲 Remaining Work</h3>
-      <ul class="styled" style="margin-top:12px; font-size:0.85em;">
-        <li>Display ToS/Privacy during signup with explicit acceptance</li>
-        <li>Store acceptance timestamps in DB</li>
-        <li>PIPEDA data subject access requests (export all data)</li>
-        <li>Complete data deletion verification</li>
-        <li>Plaid production access application + security questionnaire</li>
-        <li>WCAG 2.1 Level AA accessibility audit</li>
-      </ul>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 16: Legal ── -->
+      <section>
+        <div class="section-number">Section 5 · Legal & Compliance</div>
+        <h2>Legal Status</h2>
+        <div class="gold-line"></div>
+        <div class="grid2">
+          <div>
+            <h3 style="color:var(--gold-light);">✅ Completed (in docs/legal/)</h3>
+            <table style="margin-top:10px;">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Terms of Service</td>
+                  <td><span class="badge badge-green">Drafted</span></td>
+                </tr>
+                <tr>
+                  <td>Privacy Policy (PIPEDA)</td>
+                  <td><span class="badge badge-green">Drafted</span></td>
+                </tr>
+                <tr>
+                  <td>Financial Disclaimer</td>
+                  <td><span class="badge badge-green">Drafted</span></td>
+                </tr>
+                <tr>
+                  <td>Cookie & Tracking Policy</td>
+                  <td><span class="badge badge-green">Drafted</span></td>
+                </tr>
+                <tr>
+                  <td>Data Processing Agreement</td>
+                  <td><span class="badge badge-green">Drafted</span></td>
+                </tr>
+                <tr>
+                  <td>Sub-processors List</td>
+                  <td><span class="badge badge-green">Documented</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h3 style="color:#FF6B6B;">🔲 Remaining Work</h3>
+            <ul class="styled" style="margin-top:12px; font-size:0.85em;">
+              <li>Display ToS/Privacy during signup with explicit acceptance</li>
+              <li>Store acceptance timestamps in DB</li>
+              <li>PIPEDA data subject access requests (export all data)</li>
+              <li>Complete data deletion verification</li>
+              <li>Plaid production access application + security questionnaire</li>
+              <li>WCAG 2.1 Level AA accessibility audit</li>
+            </ul>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 17: Production Gaps ── -->
-<section>
-  <div class="section-number">Section 6 · Production Gaps</div>
-  <h2>What's Missing Before Launch</h2>
-  <div class="gold-line"></div>
-  <div class="grid2">
-    <div class="card p0" style="margin-bottom:10px;">
-      <h3><span class="hl-red">P0 — Blockers (Must Have)</span></h3>
-      <ul class="styled" style="font-size:0.82em;">
-        <li>Email verification on signup</li>
-        <li>Password reset ("Forgot Password")</li>
-        <li>Email service (SendGrid / Postmark)</li>
-        <li>Environment validation on startup</li>
-        <li>Database backup verification</li>
-        <li>Error tracking (Sentry)</li>
-      </ul>
-    </div>
-    <div class="card p1" style="margin-bottom:10px;">
-      <h3><span class="hl">P1 — Required (Quality)</span></h3>
-      <ul class="styled" style="font-size:0.82em;">
-        <li>Automated testing — currently 0% coverage</li>
-        <li>CI/CD pipeline (GitHub Actions)</li>
-        <li>API documentation (OpenAPI/Swagger)</li>
-        <li>Uptime monitoring</li>
-        <li>Audit logging</li>
-        <li>Health check endpoint</li>
-      </ul>
-    </div>
-    <div class="card p2">
-      <h3><span class="hl-blue">P2 — Polish</span></h3>
-      <ul class="styled" style="font-size:0.82em;">
-        <li>Push notifications</li>
-        <li>In-app notification center</li>
-        <li>Onboarding walkthrough</li>
-        <li>Biometric auth (Touch/Face ID)</li>
-        <li>Performance optimization</li>
-      </ul>
-    </div>
-    <div class="card p3">
-      <h3 style="color:var(--muted);">P3 — Nice to Have</h3>
-      <ul class="styled" style="font-size:0.82em; color:var(--muted);">
-        <li>Budgeting features</li>
-        <li>Net worth tracking</li>
-        <li>Savings goals</li>
-        <li>App Store optimization</li>
-        <li>Light mode theme</li>
-      </ul>
-    </div>
-  </div>
-</section>
+      <!-- ── SLIDE 17: Production Gaps ── -->
+      <section>
+        <div class="section-number">Section 6 · Production Gaps</div>
+        <h2>What's Missing Before Launch</h2>
+        <div class="gold-line"></div>
+        <div class="grid2">
+          <div class="card p0" style="margin-bottom:10px;">
+            <h3><span class="hl-red">P0 — Blockers (Must Have)</span></h3>
+            <ul class="styled" style="font-size:0.82em;">
+              <li>Email verification on signup</li>
+              <li>Password reset ("Forgot Password")</li>
+              <li>Email service (SendGrid / Postmark)</li>
+              <li>Environment validation on startup</li>
+              <li>Database backup verification</li>
+              <li>Error tracking (Sentry)</li>
+            </ul>
+          </div>
+          <div class="card p1" style="margin-bottom:10px;">
+            <h3><span class="hl">P1 — Required (Quality)</span></h3>
+            <ul class="styled" style="font-size:0.82em;">
+              <li>Automated testing — currently 0% coverage</li>
+              <li>CI/CD pipeline (GitHub Actions)</li>
+              <li>API documentation (OpenAPI/Swagger)</li>
+              <li>Uptime monitoring</li>
+              <li>Audit logging</li>
+              <li>Health check endpoint</li>
+            </ul>
+          </div>
+          <div class="card p2">
+            <h3><span class="hl-blue">P2 — Polish</span></h3>
+            <ul class="styled" style="font-size:0.82em;">
+              <li>Push notifications</li>
+              <li>In-app notification center</li>
+              <li>Onboarding walkthrough</li>
+              <li>Biometric auth (Touch/Face ID)</li>
+              <li>Performance optimization</li>
+            </ul>
+          </div>
+          <div class="card p3">
+            <h3 style="color:var(--muted);">P3 — Nice to Have</h3>
+            <ul class="styled" style="font-size:0.82em; color:var(--muted);">
+              <li>Budgeting features</li>
+              <li>Net worth tracking</li>
+              <li>Savings goals</li>
+              <li>App Store optimization</li>
+              <li>Light mode theme</li>
+            </ul>
+          </div>
+        </div>
+      </section>
 
-<!-- ── SLIDE 18: Stats ── -->
-<section>
-  <div class="section-number">Summary</div>
-  <h2>By The Numbers</h2>
-  <div class="gold-line"></div>
-  <div class="grid3" style="margin-bottom:18px;">
-    <div class="card stat"><div class="num">14</div><div class="label">App Screens</div></div>
-    <div class="card stat"><div class="num">10</div><div class="label">API Route Groups</div></div>
-    <div class="card stat"><div class="num">20</div><div class="label">DB Tables</div></div>
-    <div class="card stat"><div class="num">7</div><div class="label">AI Insight Categories</div></div>
-    <div class="card stat"><div class="num">3</div><div class="label">Debt Strategies</div></div>
-    <div class="card stat"><div class="num">6</div><div class="label">Legal Documents</div></div>
-  </div>
-  <div class="card card-gold" style="text-align:center; font-size:0.9em;">
-    🚀 Backend live at <span class="hl">https://induswealth.onrender.com</span> · Mobile builds via EAS
-  </div>
-</section>
+      <!-- ── SLIDE 18: Stats ── -->
+      <section>
+        <div class="section-number">Summary</div>
+        <h2>By The Numbers</h2>
+        <div class="gold-line"></div>
+        <div class="grid3" style="margin-bottom:18px;">
+          <div class="card stat">
+            <div class="num">14</div>
+            <div class="label">App Screens</div>
+          </div>
+          <div class="card stat">
+            <div class="num">10</div>
+            <div class="label">API Route Groups</div>
+          </div>
+          <div class="card stat">
+            <div class="num">20</div>
+            <div class="label">DB Tables</div>
+          </div>
+          <div class="card stat">
+            <div class="num">7</div>
+            <div class="label">AI Insight Categories</div>
+          </div>
+          <div class="card stat">
+            <div class="num">3</div>
+            <div class="label">Debt Strategies</div>
+          </div>
+          <div class="card stat">
+            <div class="num">6</div>
+            <div class="label">Legal Documents</div>
+          </div>
+        </div>
+        <div class="card card-gold" style="text-align:center; font-size:0.9em;">
+          🚀 Backend live at <span class="hl">https://induswealth.onrender.com</span> · Mobile builds via EAS
+        </div>
+      </section>
 
-<!-- ── SLIDE 19: Closing ── -->
-<section data-background-gradient="radial-gradient(ellipse at 30% 70%, #1A1A3E 0%, #0A0A0F 60%)">
-  <div style="text-align:center; padding: 1em 0;">
-    <div class="logo-mark" style="font-size:2.5em;">IndusWealth</div>
-    <div class="gold-line" style="margin: 16px auto;"></div>
-    <h3 style="color:var(--muted); font-weight:400; font-size:1em; margin:0 auto; max-width:600px;">
-      A complete, production-near personal finance platform — built for Canadians, powered by AI, secured by design.
-    </h3>
-    <div style="margin-top:2em; display:flex; justify-content:center; gap:16px; flex-wrap:wrap;">
-      <div class="card" style="min-width:180px; text-align:center;">
-        <div style="font-size:1.5em;">💬</div>
-        <div style="margin-top:6px; font-size:0.8em; color:var(--muted);">Questions?</div>
-      </div>
-      <div class="card card-gold" style="min-width:180px; text-align:center;">
-        <div style="font-size:1.5em;">🔬</div>
-        <div style="margin-top:6px; font-size:0.8em;">Code Review</div>
-      </div>
-      <div class="card" style="min-width:180px; text-align:center;">
-        <div style="font-size:1.5em;">🗺</div>
-        <div style="margin-top:6px; font-size:0.8em; color:var(--muted);">Roadmap Discussion</div>
-      </div>
-    </div>
-    <p class="footnote" style="text-align:center; border-color:#1A1A2E; margin-top:2em;">Internal team demo · February 24, 2026 · Do not distribute externally</p>
-  </div>
-</section>
+      <!-- ── SLIDE 19: Closing ── -->
+      <section data-background-gradient="radial-gradient(ellipse at 30% 70%, #1A1A3E 0%, #0A0A0F 60%)">
+        <div style="text-align:center; padding: 1em 0;">
+          <img src="assets/indus-icon.png" class="app-icon" style="width:72px; height:72px; margin-bottom:12px;"
+            alt="IndusWealth Icon">
+          <div class="logo-mark" style="font-size:2.5em;">IndusWealth</div>
+          <div class="gold-line" style="margin: 16px auto;"></div>
+          <h3 style="color:var(--muted); font-weight:400; font-size:1em; margin:0 auto; max-width:600px;">
+            A complete, production-near personal finance platform — built for Canadians, powered by AI, secured by
+            design.
+          </h3>
+          <div style="margin-top:2em; display:flex; justify-content:center; gap:16px; flex-wrap:wrap;">
+            <div class="card" style="min-width:180px; text-align:center;">
+              <div style="font-size:1.5em;">💬</div>
+              <div style="margin-top:6px; font-size:0.8em; color:var(--muted);">Questions?</div>
+            </div>
+            <div class="card card-gold" style="min-width:180px; text-align:center;">
+              <div style="font-size:1.5em;">🔬</div>
+              <div style="margin-top:6px; font-size:0.8em;">Code Review</div>
+            </div>
+            <div class="card" style="min-width:180px; text-align:center;">
+              <div style="font-size:1.5em;">🗺</div>
+              <div style="margin-top:6px; font-size:0.8em; color:var(--muted);">Roadmap Discussion</div>
+            </div>
+          </div>
+          <p class="footnote" style="text-align:center; border-color:#1A1A2E; margin-top:2em;">Internal team demo ·
+            February 24, 2026 · Do not distribute externally</p>
+        </div>
+      </section>
 
-</div><!-- /slides -->
-</div><!-- /reveal -->
+    </div><!-- /slides -->
+  </div><!-- /reveal -->
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.0/reveal.min.js"></script>
-<script>
-  Reveal.initialize({
-    hash: true,
-    slideNumber: 'c/t',
-    transition: 'fade',
-    transitionSpeed: 'fast',
-    backgroundTransition: 'fade',
-    controls: true,
-    progress: true,
-    center: false,
-    width: 1200,
-    height: 700,
-    margin: 0.04,
-    plugins: []
-  });
-</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.0/reveal.min.js"></script>
+  <script>
+    Reveal.initialize({
+      hash: true,
+      slideNumber: 'c/t',
+      transition: 'fade',
+      transitionSpeed: 'fast',
+      backgroundTransition: 'fade',
+      controls: true,
+      progress: true,
+      center: false,
+      width: 1200,
+      height: 820,
+      margin: 0.02,
+      plugins: []
+    });
+
+    // Lightbox for screenshots
+    (function () {
+      // Create lightbox elements
+      var overlay = document.createElement('div');
+      overlay.className = 'lightbox-overlay';
+      overlay.innerHTML = '<span class="lightbox-close">&times;</span><img src="" alt=""><div class="lightbox-label"></div>';
+      document.body.appendChild(overlay);
+
+      var lbImg = overlay.querySelector('img');
+      var lbLabel = overlay.querySelector('.lightbox-label');
+      var lbClose = overlay.querySelector('.lightbox-close');
+
+      function openLightbox(src, label) {
+        lbImg.src = src;
+        lbLabel.textContent = label || '';
+        overlay.classList.add('active');
+      }
+
+      function closeLightbox() {
+        overlay.classList.remove('active');
+      }
+
+      // Click on any phone-frame image to open
+      document.querySelectorAll('.phone-frame img').forEach(function (img) {
+        img.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var label = '';
+          var labelEl = img.closest('.phone-frame').parentElement.querySelector('.screenshot-label');
+          if (labelEl) label = labelEl.textContent;
+          openLightbox(img.src, label);
+        });
+      });
+
+      // Also make the phone-frame itself clickable
+      document.querySelectorAll('.phone-frame').forEach(function (frame) {
+        frame.addEventListener('click', function (e) {
+          var img = frame.querySelector('img');
+          if (img) {
+            var label = '';
+            var labelEl = frame.parentElement.querySelector('.screenshot-label');
+            if (labelEl) label = labelEl.textContent;
+            openLightbox(img.src, label);
+          }
+        });
+      });
+
+      // Close on overlay click, close button, or Escape
+      overlay.addEventListener('click', closeLightbox);
+      lbClose.addEventListener('click', closeLightbox);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeLightbox();
+      });
+
+      // Prevent closing when clicking the image itself
+      lbImg.addEventListener('click', function (e) { e.stopPropagation(); });
+    })();
+  </script>
 </body>
+
 </html>
