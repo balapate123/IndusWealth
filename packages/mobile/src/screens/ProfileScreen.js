@@ -477,6 +477,66 @@ const ProfileScreen = ({ navigation }) => {
                     />
                 </View>
 
+                {/* Quick Access - Navigation shortcuts */}
+                <Text style={styles.sectionHeader}>QUICK ACCESS</Text>
+                <View style={styles.sectionCard}>
+                    <MenuItem
+                        icon="home"
+                        label="Home"
+                        subtitle="Accounts & transactions overview"
+                        onPress={() => navigation.navigate('Main', { screen: 'Home' })}
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="bulb"
+                        label="AI Insights"
+                        subtitle="Personalized financial insights"
+                        onPress={() => navigation.navigate('Main', { screen: 'Insights' })}
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="trending-down"
+                        label="Debt Optimizer"
+                        subtitle="Debt attack calculator & plans"
+                        onPress={() => navigation.navigate('Main', { screen: 'Wealth' })}
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="eye"
+                        label="Watchdog"
+                        subtitle="Recurring expense tracker"
+                        onPress={() => navigation.navigate('Main', { screen: 'Watchdog' })}
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="bar-chart"
+                        label="Analytics"
+                        subtitle="Spending trends & charts"
+                        onPress={() => navigation.navigate('Analytics')}
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="list"
+                        label="All Transactions"
+                        subtitle="Full transaction history"
+                        onPress={() => navigation.navigate('AllTransactions')}
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="wallet"
+                        label="All Accounts"
+                        subtitle="View all linked accounts"
+                        onPress={() => navigation.navigate('AllAccounts')}
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="school"
+                        label="Wealth Academy"
+                        subtitle="Financial education articles"
+                        onPress={() => navigation.navigate('WealthAcademy')}
+                    />
+                </View>
+
                 {/* Support & Legal */}
                 <Text style={styles.sectionHeader}>SUPPORT & LEGAL</Text>
                 <View style={styles.sectionCard}>
@@ -821,8 +881,8 @@ const ProfileScreen = ({ navigation }) => {
                         <View style={styles.editModalHeader}>
                             <Text style={styles.modalTitle}>
                                 {twoFAStep === 'disable' ? 'Disable 2FA' :
-                                 twoFAStep === 'codes' ? 'Recovery Codes' :
-                                 'Two-Factor Authentication'}
+                                    twoFAStep === 'codes' ? 'Recovery Codes' :
+                                        'Two-Factor Authentication'}
                             </Text>
                             <TouchableOpacity
                                 style={styles.closeButton}
