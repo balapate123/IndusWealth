@@ -41,11 +41,10 @@ app.use(helmet({
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
-// CORS — restricted in production, open in development
+// CORS — allow all origins since the API serves both mobile (no CORS) and web clients.
+// All endpoints are protected by JWT authentication, so origin restriction is not needed.
 const corsOptions = {
-    origin: process.env.NODE_ENV === 'production'
-        ? (process.env.CORS_ORIGINS || 'https://induswealth.com').split(',').map(s => s.trim())
-        : true,
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],

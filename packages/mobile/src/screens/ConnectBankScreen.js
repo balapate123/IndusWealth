@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { create, open, dismissLink, LinkSuccess, LinkExit } from 'react-native-plaid-link-sdk';
+import { create, open, dismissLink } from '../services/plaidLink';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import { api } from '../services/api';
 import cache from '../services/cache';
