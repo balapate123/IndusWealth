@@ -8,6 +8,7 @@ const CACHE_KEYS = {
     AUTH_TOKEN: '@induswealth_auth_token',
     REFRESH_TOKEN: '@induswealth_refresh_token',
     LAST_FETCH: '@induswealth_last_fetch',
+    PROFILE_PICTURE: '@induswealth_profile_picture',
 };
 
 // ============ AUTH TOKEN ============
@@ -163,6 +164,29 @@ export const clearUserCache = async () => {
     }
 };
 
+// ============ PROFILE PICTURE ============
+
+export const getProfilePicture = async () => {
+    try {
+        return await AsyncStorage.getItem(CACHE_KEYS.PROFILE_PICTURE);
+    } catch (error) {
+        console.error('Error reading profile picture:', error);
+        return null;
+    }
+};
+
+export const setProfilePicture = async (uri) => {
+    try {
+        if (uri) {
+            await AsyncStorage.setItem(CACHE_KEYS.PROFILE_PICTURE, uri);
+        } else {
+            await AsyncStorage.removeItem(CACHE_KEYS.PROFILE_PICTURE);
+        }
+    } catch (error) {
+        console.error('Error saving profile picture:', error);
+    }
+};
+
 // ============ CACHE MANAGEMENT ============
 
 export const clearAllCache = async () => {
@@ -224,6 +248,9 @@ export default {
     getCachedUser,
     setCachedUser,
     clearUserCache,
+    // Profile picture
+    getProfilePicture,
+    setProfilePicture,
     clearAllCache,
     getLastFetchTime,
     isCacheStale,

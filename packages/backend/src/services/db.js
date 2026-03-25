@@ -104,6 +104,14 @@ const initDb = async () => {
             await pool.query(securitySql);
         }
 
+        // Run feedback table migration
+        const feedbackSqlPath = path.join(__dirname, '../../db/add_feedback_table.sql');
+        if (fs.existsSync(feedbackSqlPath)) {
+            const feedbackSql = fs.readFileSync(feedbackSqlPath, 'utf8');
+            console.log('🔄 Running feedback table migration...');
+            await pool.query(feedbackSql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);

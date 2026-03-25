@@ -8,13 +8,15 @@ import {
     ScrollView,
     Switch,
     StatusBar,
-    Alert, // Keep for fallback if needed, or remove if fully replaced. Kept for safety, though unused for main flows now.
+    Alert,
     Modal,
     TextInput,
     ActivityIndicator,
-    Platform
+    Platform,
+    Linking,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import cache from '../services/cache';
 import api from '../services/api';
@@ -22,6 +24,9 @@ import CustomAlert from '../components/CustomAlert';
 
 const ProfileScreen = ({ navigation }) => {
     const [user, setUser] = useState({ name: 'User', email: 'user@example.com' });
+    const [profilePicture, setProfilePicture] = useState(null);
+    const [accounts, setAccounts] = useState([]);
+    const [accountsLoading, setAccountsLoading] = useState(true);
     const [faceIdEnabled, setFaceIdEnabled] = useState(true);
     const [darkThemeEnabled, setDarkThemeEnabled] = useState(true);
     const [logoutModalVisible, setLogoutModalVisible] = useState(false);
@@ -32,10 +37,19 @@ const ProfileScreen = ({ navigation }) => {
     const [deletePassword, setDeletePassword] = useState('');
     const [showDeletePassword, setShowDeletePassword] = useState(false);
 
+    // Change password state
+    const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmNewPassword, setConfirmNewPassword] = useState('');
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [changingPassword, setChangingPassword] = useState(false);
+
     // 2FA state
     const [twoFAEnabled, setTwoFAEnabled] = useState(false);
     const [twoFAModalVisible, setTwoFAModalVisible] = useState(false);
-    const [twoFAStep, setTwoFAStep] = useState('loading'); // loading | setup | verify | codes | disable
+    const [twoFAStep, setTwoFAStep] = useState('loading');
     const [twoFAQrCode, setTwoFAQrCode] = useState(null);
     const [twoFASecret, setTwoFASecret] = useState('');
     const [twoFACode, setTwoFACode] = useState('');
@@ -55,23 +69,18 @@ const ProfileScreen = ({ navigation }) => {
     const [editName, setEditName] = useState('');
     const [editDob, setEditDob] = useState(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
-
-    // Date picker state
     const [selectedYear, setSelectedYear] = useState(2000);
     const [selectedMonth, setSelectedMonth] = useState(1);
     const [selectedDay, setSelectedDay] = useState(1);
 
     useEffect(() => {
         loadUser();
+        loadProfilePicture();
+        loadAccounts();
     }, []);
 
     const showAlert = (title, message, buttons = []) => {
-        setAlertConfig({
-            visible: true,
-            title,
-            message,
-            buttons
-        });
+        setAlertConfig({ visible: true, title, message, buttons });
     };
 
     const hideAlert = () => {
@@ -79,13 +88,9 @@ const ProfileScreen = ({ navigation }) => {
     };
 
     const loadUser = async () => {
-        // Try cache first
         const cachedUser = await cache.getCachedUser();
-        if (cachedUser) {
-            setUser(cachedUser);
-        }
+        if (cachedUser) setUser(cachedUser);
 
-        // Fetch fresh data from API
         try {
             const response = await api.auth.me();
             if (response.success && response.user) {
@@ -96,12 +101,121 @@ const ProfileScreen = ({ navigation }) => {
             console.error('Failed to fetch user:', error);
         }
 
-        // Check 2FA status
         try {
             const status = await api.twoFactor.getStatus();
             setTwoFAEnabled(status.enabled);
         } catch (error) {
             console.error('Failed to check 2FA status:', error);
+        }
+    };
+
+    const loadProfilePicture = async () => {
+        const uri = await cache.getProfilePicture();
+        if (uri) setProfilePicture(uri);
+    };
+
+    const loadAccounts = async () => {
+        setAccountsLoading(true);
+        try {
+            const cachedAccounts = await cache.getCachedAccounts();
+            if (cachedAccounts?.accounts) {
+                setAccounts(cachedAccounts.accounts);
+            }
+            const response = await api.getAccounts();
+            if (response.success && response.accounts) {
+                setAccounts(response.accounts);
+            }
+        } catch (error) {
+            console.error('Failed to load accounts:', error);
+        } finally {
+            setAccountsLoading(false);
+        }
+    };
+
+    // Profile picture
+    const handleChangeProfilePicture = () => {
+        showAlert('Change Profile Picture', 'Choose an option', [
+            {
+                text: 'Camera',
+                onPress: async () => {
+                    hideAlert();
+                    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                    if (status !== 'granted') {
+                        setTimeout(() => showAlert('Permission Required', 'Camera permission is needed to take a photo.', [
+                            { text: 'OK', onPress: hideAlert }
+                        ]), 300);
+                        return;
+                    }
+                    const result = await ImagePicker.launchCameraAsync({
+                        allowsEditing: true,
+                        aspect: [1, 1],
+                        quality: 0.7,
+                    });
+                    if (!result.canceled && result.assets?.[0]) {
+                        const uri = result.assets[0].uri;
+                        setProfilePicture(uri);
+                        await cache.setProfilePicture(uri);
+                    }
+                },
+            },
+            {
+                text: 'Gallery',
+                onPress: async () => {
+                    hideAlert();
+                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (status !== 'granted') {
+                        setTimeout(() => showAlert('Permission Required', 'Photo library permission is needed.', [
+                            { text: 'OK', onPress: hideAlert }
+                        ]), 300);
+                        return;
+                    }
+                    const result = await ImagePicker.launchImageLibraryAsync({
+                        allowsEditing: true,
+                        aspect: [1, 1],
+                        quality: 0.7,
+                    });
+                    if (!result.canceled && result.assets?.[0]) {
+                        const uri = result.assets[0].uri;
+                        setProfilePicture(uri);
+                        await cache.setProfilePicture(uri);
+                    }
+                },
+            },
+            { text: 'Cancel', onPress: hideAlert },
+        ]);
+    };
+
+    // Change password
+    const handleChangePassword = async () => {
+        if (!currentPassword.trim()) {
+            showAlert('Error', 'Please enter your current password.', [{ text: 'OK', onPress: hideAlert }]);
+            return;
+        }
+        if (newPassword.length < 8) {
+            showAlert('Error', 'New password must be at least 8 characters.', [{ text: 'OK', onPress: hideAlert }]);
+            return;
+        }
+        if (newPassword !== confirmNewPassword) {
+            showAlert('Error', 'New passwords do not match.', [{ text: 'OK', onPress: hideAlert }]);
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            const response = await api.auth.changePassword(currentPassword, newPassword);
+            if (response.success) {
+                setChangePasswordModalVisible(false);
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmNewPassword('');
+                setTimeout(() => {
+                    showAlert('Success', 'Password changed successfully.', [{ text: 'OK', onPress: hideAlert }]);
+                }, 500);
+            }
+        } catch (error) {
+            showAlert('Error', error.message || 'Failed to change password.', [{ text: 'OK', onPress: hideAlert }]);
+        } finally {
+            setChangingPassword(false);
         }
     };
 
@@ -111,15 +225,9 @@ const ProfileScreen = ({ navigation }) => {
 
     const confirmLogout = async () => {
         setLogoutModalVisible(false);
-        // Clear session
         await cache.clearUserCache();
-        // Reset Global User ID
         global.CURRENT_USER_ID = undefined;
-        // Navigate to Auth Stack
-        navigation.reset({
-            index: 0,
-            routes: [{ name: 'Auth' }],
-        });
+        navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
     };
 
     const handleDeleteAccount = () => {
@@ -130,9 +238,7 @@ const ProfileScreen = ({ navigation }) => {
 
     const confirmDeleteAccount = async () => {
         if (!deletePassword.trim()) {
-            showAlert('Error', 'Please enter your password to confirm deletion', [
-                { text: 'OK', onPress: hideAlert }
-            ]);
+            showAlert('Error', 'Please enter your password to confirm deletion', [{ text: 'OK', onPress: hideAlert }]);
             return;
         }
 
@@ -141,21 +247,12 @@ const ProfileScreen = ({ navigation }) => {
             const response = await api.auth.deleteAccount(deletePassword);
             if (response.success) {
                 setDeleteModalVisible(false);
-                // Clear session
                 await cache.clearUserCache();
-                // Reset Global User ID
                 global.CURRENT_USER_ID = undefined;
-                // Navigate to Auth Stack
-                navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'Auth' }],
-                });
+                navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
             }
         } catch (error) {
-            console.error('Failed to delete account:', error);
-            showAlert('Error', error.message || 'Failed to delete account. Please check your password and try again.', [
-                { text: 'OK', onPress: hideAlert }
-            ]);
+            showAlert('Error', error.message || 'Failed to delete account.', [{ text: 'OK', onPress: hideAlert }]);
         } finally {
             setDeleting(false);
         }
@@ -163,7 +260,6 @@ const ProfileScreen = ({ navigation }) => {
 
     const openEditModal = () => {
         setEditName(user.name || '');
-        // Parse existing DOB if available
         if (user.dateOfBirth) {
             const date = new Date(user.dateOfBirth);
             setEditDob(date);
@@ -181,9 +277,7 @@ const ProfileScreen = ({ navigation }) => {
 
     const handleSaveProfile = async () => {
         if (!editName.trim()) {
-            showAlert('Error', 'Please enter your name', [
-                { text: 'OK', onPress: hideAlert }
-            ]);
+            showAlert('Error', 'Please enter your name', [{ text: 'OK', onPress: hideAlert }]);
             return;
         }
 
@@ -191,13 +285,11 @@ const ProfileScreen = ({ navigation }) => {
         try {
             const updateData = { name: editName.trim() };
             if (editDob) {
-                // Format date as YYYY-MM-DD
                 updateData.dateOfBirth = editDob.toISOString().split('T')[0];
             }
 
             const response = await api.auth.updateProfile(updateData);
             if (response.success) {
-                // Update local state
                 const updatedUser = {
                     ...user,
                     name: editName.trim(),
@@ -207,16 +299,11 @@ const ProfileScreen = ({ navigation }) => {
                 await cache.setCachedUser(updatedUser);
                 setEditModalVisible(false);
                 setTimeout(() => {
-                    showAlert('Success', 'Profile updated successfully', [
-                        { text: 'OK', onPress: hideAlert }
-                    ]);
-                }, 500); // Small delay to allow modal to close smoothly
+                    showAlert('Success', 'Profile updated successfully', [{ text: 'OK', onPress: hideAlert }]);
+                }, 500);
             }
         } catch (error) {
-            console.error('Failed to update profile:', error);
-            showAlert('Error', error.message || 'Failed to update profile', [
-                { text: 'OK', onPress: hideAlert }
-            ]);
+            showAlert('Error', error.message || 'Failed to update profile', [{ text: 'OK', onPress: hideAlert }]);
         } finally {
             setSaving(false);
         }
@@ -248,9 +335,7 @@ const ProfileScreen = ({ navigation }) => {
                     setTwoFAStep('setup');
                 }
             } catch (error) {
-                showAlert('Error', error.message || 'Failed to start 2FA setup', [
-                    { text: 'OK', onPress: hideAlert }
-                ]);
+                showAlert('Error', error.message || 'Failed to start 2FA setup', [{ text: 'OK', onPress: hideAlert }]);
                 setTwoFAModalVisible(false);
             } finally {
                 setTwoFALoading(false);
@@ -260,9 +345,7 @@ const ProfileScreen = ({ navigation }) => {
 
     const handleVerify2FA = async () => {
         if (!twoFACode.trim() || twoFACode.length !== 6) {
-            showAlert('Error', 'Please enter a valid 6-digit code', [
-                { text: 'OK', onPress: hideAlert }
-            ]);
+            showAlert('Error', 'Please enter a valid 6-digit code', [{ text: 'OK', onPress: hideAlert }]);
             return;
         }
         setTwoFALoading(true);
@@ -274,9 +357,7 @@ const ProfileScreen = ({ navigation }) => {
                 setTwoFAEnabled(true);
             }
         } catch (error) {
-            showAlert('Error', error.message || 'Invalid code. Please try again.', [
-                { text: 'OK', onPress: hideAlert }
-            ]);
+            showAlert('Error', error.message || 'Invalid code. Please try again.', [{ text: 'OK', onPress: hideAlert }]);
             setTwoFACode('');
         } finally {
             setTwoFALoading(false);
@@ -285,9 +366,7 @@ const ProfileScreen = ({ navigation }) => {
 
     const handleDisable2FA = async () => {
         if (!twoFAPassword.trim()) {
-            showAlert('Error', 'Please enter your password', [
-                { text: 'OK', onPress: hideAlert }
-            ]);
+            showAlert('Error', 'Please enter your password', [{ text: 'OK', onPress: hideAlert }]);
             return;
         }
         setTwoFALoading(true);
@@ -297,34 +376,25 @@ const ProfileScreen = ({ navigation }) => {
                 setTwoFAEnabled(false);
                 setTwoFAModalVisible(false);
                 setTimeout(() => {
-                    showAlert('Success', 'Two-factor authentication has been disabled', [
-                        { text: 'OK', onPress: hideAlert }
-                    ]);
+                    showAlert('Success', 'Two-factor authentication has been disabled', [{ text: 'OK', onPress: hideAlert }]);
                 }, 500);
             }
         } catch (error) {
-            showAlert('Error', error.message || 'Failed to disable 2FA. Check your password.', [
-                { text: 'OK', onPress: hideAlert }
-            ]);
+            showAlert('Error', error.message || 'Failed to disable 2FA.', [{ text: 'OK', onPress: hideAlert }]);
         } finally {
             setTwoFALoading(false);
         }
     };
 
+    // Helpers
     const years = Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i);
     const months = [
-        { value: 1, label: 'January' },
-        { value: 2, label: 'February' },
-        { value: 3, label: 'March' },
-        { value: 4, label: 'April' },
-        { value: 5, label: 'May' },
-        { value: 6, label: 'June' },
-        { value: 7, label: 'July' },
-        { value: 8, label: 'August' },
-        { value: 9, label: 'September' },
-        { value: 10, label: 'October' },
-        { value: 11, label: 'November' },
-        { value: 12, label: 'December' },
+        { value: 1, label: 'January' }, { value: 2, label: 'February' },
+        { value: 3, label: 'March' }, { value: 4, label: 'April' },
+        { value: 5, label: 'May' }, { value: 6, label: 'June' },
+        { value: 7, label: 'July' }, { value: 8, label: 'August' },
+        { value: 9, label: 'September' }, { value: 10, label: 'October' },
+        { value: 11, label: 'November' }, { value: 12, label: 'December' },
     ];
     const getDaysInMonth = (year, month) => new Date(year, month, 0).getDate();
     const days = Array.from({ length: getDaysInMonth(selectedYear, selectedMonth) }, (_, i) => i + 1);
@@ -333,14 +403,19 @@ const ProfileScreen = ({ navigation }) => {
         if (!dateString) return 'Not set';
         try {
             const date = new Date(dateString);
-            return date.toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            });
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
         } catch {
             return 'Not set';
         }
+    };
+
+    const getLinkedAccountsSummary = () => {
+        if (accountsLoading) return 'Loading...';
+        if (accounts.length === 0) return 'No accounts linked';
+        const names = accounts.map(a => a.institution_name || a.name || a.official_name).filter(Boolean);
+        const unique = [...new Set(names)];
+        if (unique.length === 0) return `${accounts.length} account${accounts.length > 1 ? 's' : ''} linked`;
+        return unique.join(', ');
     };
 
     const MenuItem = ({ icon, label, subtitle, showToggle, value, onToggle, showBadge, badgeText, onPress }) => (
@@ -355,7 +430,7 @@ const ProfileScreen = ({ navigation }) => {
 
             {showToggle ? (
                 <Switch
-                    trackColor={{ false: "#767577", true: "#4CAF50" }} // Green for ON
+                    trackColor={{ false: "#767577", true: "#4CAF50" }}
                     thumbColor={COLORS.WHITE}
                     ios_backgroundColor="#3e3e3e"
                     onValueChange={onToggle}
@@ -387,22 +462,22 @@ const ProfileScreen = ({ navigation }) => {
                 {/* User Profile Card */}
                 <View style={styles.profileSection}>
                     <View style={styles.avatarContainer}>
-                        {/* Placeholder Avatar */}
-                        <Image
-                            source={{ uri: 'https://i.pravatar.cc/300?img=5' }}
-                            style={styles.avatar}
-                        />
-                        <TouchableOpacity style={styles.editIcon} onPress={openEditModal}>
-                            <Ionicons name="pencil" size={12} color={COLORS.WHITE} />
+                        {profilePicture ? (
+                            <Image source={{ uri: profilePicture }} style={styles.avatar} />
+                        ) : (
+                            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                                <Ionicons name="person" size={44} color={COLORS.TEXT_MUTED} />
+                            </View>
+                        )}
+                        <TouchableOpacity style={styles.editIcon} onPress={handleChangeProfilePicture}>
+                            <Ionicons name="camera" size={12} color={COLORS.WHITE} />
                         </TouchableOpacity>
                     </View>
                     <Text style={styles.userName}>{user.name}</Text>
-
                     <View style={styles.premiumBadge}>
                         <MaterialCommunityIcons name="shield-check" size={16} color="#FFD700" />
                         <Text style={styles.premiumText}>PREMIUM MEMBER</Text>
                     </View>
-
                     <Text style={styles.userId}>IndusWealth ID: {user.id ? 8839000 + user.id : '...'}</Text>
                 </View>
 
@@ -426,9 +501,10 @@ const ProfileScreen = ({ navigation }) => {
                     <MenuItem
                         icon="business"
                         label="Linked Accounts"
-                        subtitle="RBC Royal Bank, TD Canada..."
+                        subtitle={getLinkedAccountsSummary()}
                         showBadge
-                        badgeText="2 Active"
+                        badgeText={accountsLoading ? '...' : `${accounts.length} Active`}
+                        onPress={() => navigation.navigate('AllAccounts')}
                     />
                 </View>
 
@@ -436,18 +512,17 @@ const ProfileScreen = ({ navigation }) => {
                 <Text style={styles.sectionHeader}>SECURITY</Text>
                 <View style={styles.sectionCard}>
                     <MenuItem
-                        icon="refresh"
+                        icon="key"
                         label="Change Password"
-                        subtitle="Last updated 30 days ago"
-                    />
-                    <View style={styles.divider} />
-                    <MenuItem
-                        icon="scan"
-                        label="Face ID Login"
-                        subtitle="Secure biometric access"
-                        showToggle
-                        value={faceIdEnabled}
-                        onToggle={setFaceIdEnabled}
+                        subtitle="Update your account password"
+                        onPress={() => {
+                            setCurrentPassword('');
+                            setNewPassword('');
+                            setConfirmNewPassword('');
+                            setShowCurrentPassword(false);
+                            setShowNewPassword(false);
+                            setChangePasswordModalVisible(true);
+                        }}
                     />
                     <View style={styles.divider} />
                     <MenuItem
@@ -460,106 +535,55 @@ const ProfileScreen = ({ navigation }) => {
                     />
                 </View>
 
-                {/* Preferences */}
-                <Text style={styles.sectionHeader}>PREFERENCES</Text>
-                <View style={styles.sectionCard}>
-                    <MenuItem
-                        icon="notifications"
-                        label="Notifications"
-                    />
-                    <View style={styles.divider} />
-                    <MenuItem
-                        icon="moon"
-                        label="Dark Theme"
-                        showToggle
-                        value={darkThemeEnabled}
-                        onToggle={setDarkThemeEnabled}
-                    />
-                </View>
-
-                {/* Quick Access - Navigation shortcuts */}
+                {/* Quick Access */}
                 <Text style={styles.sectionHeader}>QUICK ACCESS</Text>
                 <View style={styles.sectionCard}>
-                    <MenuItem
-                        icon="home"
-                        label="Home"
-                        subtitle="Accounts & transactions overview"
-                        onPress={() => navigation.navigate('Main', { screen: 'Home' })}
-                    />
+                    <MenuItem icon="home" label="Home" subtitle="Accounts & transactions overview" onPress={() => navigation.navigate('Main', { screen: 'Home' })} />
                     <View style={styles.divider} />
-                    <MenuItem
-                        icon="bulb"
-                        label="AI Insights"
-                        subtitle="Personalized financial insights"
-                        onPress={() => navigation.navigate('Main', { screen: 'Insights' })}
-                    />
+                    <MenuItem icon="bulb" label="AI Insights" subtitle="Personalized financial insights" onPress={() => navigation.navigate('Main', { screen: 'Insights' })} />
                     <View style={styles.divider} />
-                    <MenuItem
-                        icon="trending-down"
-                        label="Debt Optimizer"
-                        subtitle="Debt attack calculator & plans"
-                        onPress={() => navigation.navigate('Main', { screen: 'Wealth' })}
-                    />
+                    <MenuItem icon="trending-down" label="Debt Optimizer" subtitle="Debt attack calculator & plans" onPress={() => navigation.navigate('Main', { screen: 'Wealth' })} />
                     <View style={styles.divider} />
-                    <MenuItem
-                        icon="eye"
-                        label="Watchdog"
-                        subtitle="Recurring expense tracker"
-                        onPress={() => navigation.navigate('Main', { screen: 'Watchdog' })}
-                    />
+                    <MenuItem icon="eye" label="Watchdog" subtitle="Recurring expense tracker" onPress={() => navigation.navigate('Main', { screen: 'Watchdog' })} />
                     <View style={styles.divider} />
-                    <MenuItem
-                        icon="bar-chart"
-                        label="Analytics"
-                        subtitle="Spending trends & charts"
-                        onPress={() => navigation.navigate('Analytics')}
-                    />
+                    <MenuItem icon="bar-chart" label="Analytics" subtitle="Spending trends & charts" onPress={() => navigation.navigate('Analytics')} />
                     <View style={styles.divider} />
-                    <MenuItem
-                        icon="list"
-                        label="All Transactions"
-                        subtitle="Full transaction history"
-                        onPress={() => navigation.navigate('AllTransactions')}
-                    />
+                    <MenuItem icon="list" label="All Transactions" subtitle="Full transaction history" onPress={() => navigation.navigate('AllTransactions')} />
                     <View style={styles.divider} />
-                    <MenuItem
-                        icon="wallet"
-                        label="All Accounts"
-                        subtitle="View all linked accounts"
-                        onPress={() => navigation.navigate('AllAccounts')}
-                    />
+                    <MenuItem icon="wallet" label="All Accounts" subtitle="View all linked accounts" onPress={() => navigation.navigate('AllAccounts')} />
                     <View style={styles.divider} />
-                    <MenuItem
-                        icon="school"
-                        label="Wealth Academy"
-                        subtitle="Financial education articles"
-                        onPress={() => navigation.navigate('WealthAcademy')}
-                    />
+                    <MenuItem icon="school" label="Wealth Academy" subtitle="Financial education articles" onPress={() => navigation.navigate('WealthAcademy')} />
                 </View>
 
                 {/* Support & Legal */}
                 <Text style={styles.sectionHeader}>SUPPORT & LEGAL</Text>
                 <View style={styles.sectionCard}>
                     <MenuItem
+                        icon="chatbubbles"
+                        label="Send Feedback"
+                        subtitle="Help us improve IndusWealth"
+                        onPress={() => navigation.navigate('Feedback')}
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
                         icon="help-circle"
                         label="Help & Support"
-                        subtitle="FAQs and contact us"
+                        subtitle="support@induswealth.com"
+                        onPress={() => Linking.openURL('mailto:support@induswealth.com')}
+                    />
+                    <View style={styles.divider} />
+                    <MenuItem
+                        icon="shield-checkmark"
+                        label="Privacy Policy"
+                        subtitle="How we protect your data"
+                        onPress={() => navigation.navigate('LegalDoc', { docType: 'privacy' })}
                     />
                     <View style={styles.divider} />
                     <MenuItem
                         icon="document-text"
-                        label="Privacy Policy"
-                    />
-                    <View style={styles.divider} />
-                    <MenuItem
-                        icon="newspaper"
                         label="Terms of Service"
-                    />
-                    <View style={styles.divider} />
-                    <MenuItem
-                        icon="star"
-                        label="Rate IndusWealth"
-                        subtitle="Share your feedback"
+                        subtitle="Terms and conditions"
+                        onPress={() => navigation.navigate('LegalDoc', { docType: 'terms' })}
                     />
                 </View>
 
@@ -590,25 +614,16 @@ const ProfileScreen = ({ navigation }) => {
             </ScrollView>
 
             {/* Edit Profile Modal */}
-            <Modal
-                visible={editModalVisible}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setEditModalVisible(false)}
-            >
+            <Modal visible={editModalVisible} transparent={true} animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.editModalContent}>
                         <View style={styles.editModalHeader}>
                             <Text style={styles.modalTitle}>Edit Profile</Text>
-                            <TouchableOpacity
-                                style={styles.closeButton}
-                                onPress={() => setEditModalVisible(false)}
-                            >
+                            <TouchableOpacity style={styles.closeButton} onPress={() => setEditModalVisible(false)}>
                                 <Ionicons name="close" size={24} color={COLORS.WHITE} />
                             </TouchableOpacity>
                         </View>
 
-                        {/* Name Input */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Name</Text>
                             <TextInput
@@ -621,110 +636,56 @@ const ProfileScreen = ({ navigation }) => {
                             />
                         </View>
 
-                        {/* Date of Birth Input */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Date of Birth</Text>
-                            <TouchableOpacity
-                                style={styles.dateInput}
-                                onPress={() => setShowDatePicker(true)}
-                            >
+                            <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(true)}>
                                 <Text style={editDob ? styles.dateText : styles.datePlaceholder}>
-                                    {editDob ? editDob.toLocaleDateString('en-US', {
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric'
-                                    }) : 'Select your date of birth'}
+                                    {editDob ? editDob.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Select your date of birth'}
                                 </Text>
                                 <Ionicons name="calendar-outline" size={20} color={COLORS.GOLD} />
                             </TouchableOpacity>
                         </View>
 
-                        {/* Custom Date Picker */}
                         {showDatePicker && (
                             <View style={styles.datePickerContainer}>
                                 <View style={styles.datePickerRow}>
-                                    {/* Month Picker */}
                                     <View style={styles.pickerColumn}>
                                         <Text style={styles.pickerLabel}>Month</Text>
                                         <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
                                             {months.map((month) => (
-                                                <TouchableOpacity
-                                                    key={month.value}
-                                                    style={[
-                                                        styles.pickerItem,
-                                                        selectedMonth === month.value && styles.pickerItemSelected
-                                                    ]}
-                                                    onPress={() => setSelectedMonth(month.value)}
-                                                >
-                                                    <Text style={[
-                                                        styles.pickerItemText,
-                                                        selectedMonth === month.value && styles.pickerItemTextSelected
-                                                    ]}>
-                                                        {month.label.substring(0, 3)}
-                                                    </Text>
+                                                <TouchableOpacity key={month.value} style={[styles.pickerItem, selectedMonth === month.value && styles.pickerItemSelected]} onPress={() => setSelectedMonth(month.value)}>
+                                                    <Text style={[styles.pickerItemText, selectedMonth === month.value && styles.pickerItemTextSelected]}>{month.label.substring(0, 3)}</Text>
                                                 </TouchableOpacity>
                                             ))}
                                         </ScrollView>
                                     </View>
-
-                                    {/* Day Picker */}
                                     <View style={styles.pickerColumn}>
                                         <Text style={styles.pickerLabel}>Day</Text>
                                         <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
                                             {days.map((day) => (
-                                                <TouchableOpacity
-                                                    key={day}
-                                                    style={[
-                                                        styles.pickerItem,
-                                                        selectedDay === day && styles.pickerItemSelected
-                                                    ]}
-                                                    onPress={() => setSelectedDay(day)}
-                                                >
-                                                    <Text style={[
-                                                        styles.pickerItemText,
-                                                        selectedDay === day && styles.pickerItemTextSelected
-                                                    ]}>
-                                                        {day}
-                                                    </Text>
+                                                <TouchableOpacity key={day} style={[styles.pickerItem, selectedDay === day && styles.pickerItemSelected]} onPress={() => setSelectedDay(day)}>
+                                                    <Text style={[styles.pickerItemText, selectedDay === day && styles.pickerItemTextSelected]}>{day}</Text>
                                                 </TouchableOpacity>
                                             ))}
                                         </ScrollView>
                                     </View>
-
-                                    {/* Year Picker */}
                                     <View style={styles.pickerColumn}>
                                         <Text style={styles.pickerLabel}>Year</Text>
                                         <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
                                             {years.map((year) => (
-                                                <TouchableOpacity
-                                                    key={year}
-                                                    style={[
-                                                        styles.pickerItem,
-                                                        selectedYear === year && styles.pickerItemSelected
-                                                    ]}
-                                                    onPress={() => setSelectedYear(year)}
-                                                >
-                                                    <Text style={[
-                                                        styles.pickerItemText,
-                                                        selectedYear === year && styles.pickerItemTextSelected
-                                                    ]}>
-                                                        {year}
-                                                    </Text>
+                                                <TouchableOpacity key={year} style={[styles.pickerItem, selectedYear === year && styles.pickerItemSelected]} onPress={() => setSelectedYear(year)}>
+                                                    <Text style={[styles.pickerItemText, selectedYear === year && styles.pickerItemTextSelected]}>{year}</Text>
                                                 </TouchableOpacity>
                                             ))}
                                         </ScrollView>
                                     </View>
                                 </View>
-                                <TouchableOpacity
-                                    style={styles.datePickerDone}
-                                    onPress={confirmDateSelection}
-                                >
+                                <TouchableOpacity style={styles.datePickerDone} onPress={confirmDateSelection}>
                                     <Text style={styles.datePickerDoneText}>Confirm</Text>
                                 </TouchableOpacity>
                             </View>
                         )}
 
-                        {/* Email (read-only) */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Email</Text>
                             <View style={styles.readOnlyInput}>
@@ -733,46 +694,91 @@ const ProfileScreen = ({ navigation }) => {
                             </View>
                         </View>
 
-                        {/* Save Button */}
-                        <TouchableOpacity
-                            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-                            onPress={handleSaveProfile}
-                            disabled={saving}
-                        >
-                            {saving ? (
-                                <ActivityIndicator color={COLORS.BACKGROUND} />
-                            ) : (
-                                <Text style={styles.saveButtonText}>Save Changes</Text>
-                            )}
+                        <TouchableOpacity style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={handleSaveProfile} disabled={saving}>
+                            {saving ? <ActivityIndicator color={COLORS.BACKGROUND} /> : <Text style={styles.saveButtonText}>Save Changes</Text>}
                         </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
 
-            {/* Custom Logout Modal */}
-            <Modal
-                visible={logoutModalVisible}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setLogoutModalVisible(false)}
-            >
+            {/* Change Password Modal */}
+            <Modal visible={changePasswordModalVisible} transparent={true} animationType="slide" onRequestClose={() => setChangePasswordModalVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.editModalContent}>
+                        <View style={styles.editModalHeader}>
+                            <Text style={styles.modalTitle}>Change Password</Text>
+                            <TouchableOpacity style={styles.closeButton} onPress={() => setChangePasswordModalVisible(false)}>
+                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Current Password</Text>
+                            <View style={styles.passwordInputContainer}>
+                                <TextInput
+                                    style={styles.passwordField}
+                                    value={currentPassword}
+                                    onChangeText={setCurrentPassword}
+                                    placeholder="Enter current password"
+                                    placeholderTextColor={COLORS.TEXT_MUTED}
+                                    secureTextEntry={!showCurrentPassword}
+                                    autoCapitalize="none"
+                                />
+                                <TouchableOpacity style={styles.passwordToggle} onPress={() => setShowCurrentPassword(!showCurrentPassword)}>
+                                    <Ionicons name={showCurrentPassword ? "eye-off" : "eye"} size={20} color={COLORS.TEXT_MUTED} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>New Password</Text>
+                            <View style={styles.passwordInputContainer}>
+                                <TextInput
+                                    style={styles.passwordField}
+                                    value={newPassword}
+                                    onChangeText={setNewPassword}
+                                    placeholder="Min 8 chars, 1 uppercase, 1 number"
+                                    placeholderTextColor={COLORS.TEXT_MUTED}
+                                    secureTextEntry={!showNewPassword}
+                                    autoCapitalize="none"
+                                />
+                                <TouchableOpacity style={styles.passwordToggle} onPress={() => setShowNewPassword(!showNewPassword)}>
+                                    <Ionicons name={showNewPassword ? "eye-off" : "eye"} size={20} color={COLORS.TEXT_MUTED} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Confirm New Password</Text>
+                            <TextInput
+                                style={styles.textInput}
+                                value={confirmNewPassword}
+                                onChangeText={setConfirmNewPassword}
+                                placeholder="Re-enter new password"
+                                placeholderTextColor={COLORS.TEXT_MUTED}
+                                secureTextEntry={!showNewPassword}
+                                autoCapitalize="none"
+                            />
+                        </View>
+
+                        <TouchableOpacity style={[styles.saveButton, changingPassword && styles.saveButtonDisabled]} onPress={handleChangePassword} disabled={changingPassword}>
+                            {changingPassword ? <ActivityIndicator color={COLORS.BACKGROUND} /> : <Text style={styles.saveButtonText}>Update Password</Text>}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Logout Modal */}
+            <Modal visible={logoutModalVisible} transparent={true} animationType="fade" onRequestClose={() => setLogoutModalVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Log Out</Text>
                         <Text style={styles.modalMessage}>Are you sure you want to log out?</Text>
-
                         <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.cancelButton]}
-                                onPress={() => setLogoutModalVisible(false)}
-                            >
+                            <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setLogoutModalVisible(false)}>
                                 <Text style={styles.cancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.confirmButton]}
-                                onPress={confirmLogout}
-                            >
+                            <TouchableOpacity style={[styles.modalButton, styles.confirmButton]} onPress={confirmLogout}>
                                 <Text style={styles.confirmButtonText}>Log Out</Text>
                             </TouchableOpacity>
                         </View>
@@ -781,12 +787,7 @@ const ProfileScreen = ({ navigation }) => {
             </Modal>
 
             {/* Delete Account Modal */}
-            <Modal
-                visible={deleteModalVisible}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setDeleteModalVisible(false)}
-            >
+            <Modal visible={deleteModalVisible} transparent={true} animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.deleteModalContent}>
                         <View style={styles.deleteModalHeader}>
@@ -795,30 +796,17 @@ const ProfileScreen = ({ navigation }) => {
                             </View>
                             <Text style={styles.deleteModalTitle}>Delete Account</Text>
                         </View>
-
                         <Text style={styles.deleteModalMessage}>
                             This action is permanent and cannot be undone. All your data will be permanently deleted including:
                         </Text>
-
                         <View style={styles.deleteWarningList}>
-                            <View style={styles.deleteWarningItem}>
-                                <Ionicons name="close-circle" size={16} color="#EF4444" />
-                                <Text style={styles.deleteWarningText}>Linked bank accounts</Text>
-                            </View>
-                            <View style={styles.deleteWarningItem}>
-                                <Ionicons name="close-circle" size={16} color="#EF4444" />
-                                <Text style={styles.deleteWarningText}>Transaction history</Text>
-                            </View>
-                            <View style={styles.deleteWarningItem}>
-                                <Ionicons name="close-circle" size={16} color="#EF4444" />
-                                <Text style={styles.deleteWarningText}>Debt tracking data</Text>
-                            </View>
-                            <View style={styles.deleteWarningItem}>
-                                <Ionicons name="close-circle" size={16} color="#EF4444" />
-                                <Text style={styles.deleteWarningText}>All personal information</Text>
-                            </View>
+                            {['Linked bank accounts', 'Transaction history', 'Debt tracking data', 'All personal information'].map((item) => (
+                                <View key={item} style={styles.deleteWarningItem}>
+                                    <Ionicons name="close-circle" size={16} color="#EF4444" />
+                                    <Text style={styles.deleteWarningText}>{item}</Text>
+                                </View>
+                            ))}
                         </View>
-
                         <View style={styles.deleteInputGroup}>
                             <Text style={styles.deleteInputLabel}>Enter your password to confirm</Text>
                             <View style={styles.passwordInputContainer}>
@@ -831,38 +819,17 @@ const ProfileScreen = ({ navigation }) => {
                                     secureTextEntry={!showDeletePassword}
                                     autoCapitalize="none"
                                 />
-                                <TouchableOpacity
-                                    style={styles.passwordToggle}
-                                    onPress={() => setShowDeletePassword(!showDeletePassword)}
-                                >
-                                    <Ionicons
-                                        name={showDeletePassword ? "eye-off" : "eye"}
-                                        size={20}
-                                        color={COLORS.TEXT_MUTED}
-                                    />
+                                <TouchableOpacity style={styles.passwordToggle} onPress={() => setShowDeletePassword(!showDeletePassword)}>
+                                    <Ionicons name={showDeletePassword ? "eye-off" : "eye"} size={20} color={COLORS.TEXT_MUTED} />
                                 </TouchableOpacity>
                             </View>
                         </View>
-
                         <View style={styles.deleteModalActions}>
-                            <TouchableOpacity
-                                style={styles.deleteCancelButton}
-                                onPress={() => setDeleteModalVisible(false)}
-                                disabled={deleting}
-                            >
+                            <TouchableOpacity style={styles.deleteCancelButton} onPress={() => setDeleteModalVisible(false)} disabled={deleting}>
                                 <Text style={styles.deleteCancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.deleteConfirmButton, deleting && styles.deleteButtonDisabled]}
-                                onPress={confirmDeleteAccount}
-                                disabled={deleting}
-                            >
-                                {deleting ? (
-                                    <ActivityIndicator color={COLORS.WHITE} size="small" />
-                                ) : (
-                                    <Text style={styles.deleteConfirmButtonText}>Delete Account</Text>
-                                )}
+                            <TouchableOpacity style={[styles.deleteConfirmButton, deleting && styles.deleteButtonDisabled]} onPress={confirmDeleteAccount} disabled={deleting}>
+                                {deleting ? <ActivityIndicator color={COLORS.WHITE} size="small" /> : <Text style={styles.deleteConfirmButtonText}>Delete Account</Text>}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -870,24 +837,14 @@ const ProfileScreen = ({ navigation }) => {
             </Modal>
 
             {/* 2FA Modal */}
-            <Modal
-                visible={twoFAModalVisible}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setTwoFAModalVisible(false)}
-            >
+            <Modal visible={twoFAModalVisible} transparent={true} animationType="slide" onRequestClose={() => setTwoFAModalVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.editModalContent}>
                         <View style={styles.editModalHeader}>
                             <Text style={styles.modalTitle}>
-                                {twoFAStep === 'disable' ? 'Disable 2FA' :
-                                    twoFAStep === 'codes' ? 'Recovery Codes' :
-                                        'Two-Factor Authentication'}
+                                {twoFAStep === 'disable' ? 'Disable 2FA' : twoFAStep === 'codes' ? 'Recovery Codes' : 'Two-Factor Authentication'}
                             </Text>
-                            <TouchableOpacity
-                                style={styles.closeButton}
-                                onPress={() => setTwoFAModalVisible(false)}
-                            >
+                            <TouchableOpacity style={styles.closeButton} onPress={() => setTwoFAModalVisible(false)}>
                                 <Ionicons name="close" size={24} color={COLORS.WHITE} />
                             </TouchableOpacity>
                         </View>
@@ -909,37 +866,16 @@ const ProfileScreen = ({ navigation }) => {
                                         <Image source={{ uri: twoFAQrCode }} style={{ width: 200, height: 200 }} />
                                     </View>
                                 )}
-                                <Text style={[styles.modalMessage, { fontSize: 12 }]}>
-                                    Or enter this code manually:
-                                </Text>
+                                <Text style={[styles.modalMessage, { fontSize: 12 }]}>Or enter this code manually:</Text>
                                 <View style={[styles.readOnlyInput, { marginBottom: 16 }]}>
                                     <Text style={{ color: COLORS.GOLD, fontSize: 14, fontFamily: 'monospace', letterSpacing: 2 }}>{twoFASecret}</Text>
                                 </View>
-
                                 <View style={styles.inputGroup}>
                                     <Text style={styles.inputLabel}>Enter the 6-digit code from your app</Text>
-                                    <TextInput
-                                        style={styles.textInput}
-                                        value={twoFACode}
-                                        onChangeText={setTwoFACode}
-                                        placeholder="000000"
-                                        placeholderTextColor={COLORS.TEXT_MUTED}
-                                        keyboardType="number-pad"
-                                        maxLength={6}
-                                        textAlign="center"
-                                    />
+                                    <TextInput style={styles.textInput} value={twoFACode} onChangeText={setTwoFACode} placeholder="000000" placeholderTextColor={COLORS.TEXT_MUTED} keyboardType="number-pad" maxLength={6} textAlign="center" />
                                 </View>
-
-                                <TouchableOpacity
-                                    style={[styles.saveButton, twoFALoading && styles.saveButtonDisabled]}
-                                    onPress={handleVerify2FA}
-                                    disabled={twoFALoading}
-                                >
-                                    {twoFALoading ? (
-                                        <ActivityIndicator color={COLORS.BACKGROUND} />
-                                    ) : (
-                                        <Text style={styles.saveButtonText}>Verify & Enable</Text>
-                                    )}
+                                <TouchableOpacity style={[styles.saveButton, twoFALoading && styles.saveButtonDisabled]} onPress={handleVerify2FA} disabled={twoFALoading}>
+                                    {twoFALoading ? <ActivityIndicator color={COLORS.BACKGROUND} /> : <Text style={styles.saveButtonText}>Verify & Enable</Text>}
                                 </TouchableOpacity>
                             </ScrollView>
                         )}
@@ -947,22 +883,15 @@ const ProfileScreen = ({ navigation }) => {
                         {twoFAStep === 'codes' && (
                             <ScrollView>
                                 <Text style={styles.modalMessage}>
-                                    Save these recovery codes in a safe place. Each code can only be used once to log in if you lose access to your authenticator app.
+                                    Save these recovery codes in a safe place. Each code can only be used once.
                                 </Text>
                                 <View style={{ backgroundColor: '#2A2A2A', borderRadius: 12, padding: 16, marginVertical: 16 }}>
                                     {recoveryCodes.map((code, index) => (
-                                        <Text key={index} style={{ color: COLORS.GOLD, fontSize: 16, fontFamily: 'monospace', textAlign: 'center', paddingVertical: 4, letterSpacing: 2 }}>
-                                            {code}
-                                        </Text>
+                                        <Text key={index} style={{ color: COLORS.GOLD, fontSize: 16, fontFamily: 'monospace', textAlign: 'center', paddingVertical: 4, letterSpacing: 2 }}>{code}</Text>
                                     ))}
                                 </View>
-                                <Text style={[styles.modalMessage, { fontSize: 12, color: '#EF4444' }]}>
-                                    These codes will not be shown again!
-                                </Text>
-                                <TouchableOpacity
-                                    style={styles.saveButton}
-                                    onPress={() => setTwoFAModalVisible(false)}
-                                >
+                                <Text style={[styles.modalMessage, { fontSize: 12, color: '#EF4444' }]}>These codes will not be shown again!</Text>
+                                <TouchableOpacity style={styles.saveButton} onPress={() => setTwoFAModalVisible(false)}>
                                     <Text style={styles.saveButtonText}>I've Saved These Codes</Text>
                                 </TouchableOpacity>
                             </ScrollView>
@@ -970,31 +899,13 @@ const ProfileScreen = ({ navigation }) => {
 
                         {twoFAStep === 'disable' && (
                             <View>
-                                <Text style={styles.modalMessage}>
-                                    Enter your password to disable two-factor authentication.
-                                </Text>
+                                <Text style={styles.modalMessage}>Enter your password to disable two-factor authentication.</Text>
                                 <View style={styles.inputGroup}>
                                     <Text style={styles.inputLabel}>Password</Text>
-                                    <TextInput
-                                        style={styles.textInput}
-                                        value={twoFAPassword}
-                                        onChangeText={setTwoFAPassword}
-                                        placeholder="Enter your password"
-                                        placeholderTextColor={COLORS.TEXT_MUTED}
-                                        secureTextEntry
-                                        autoCapitalize="none"
-                                    />
+                                    <TextInput style={styles.textInput} value={twoFAPassword} onChangeText={setTwoFAPassword} placeholder="Enter your password" placeholderTextColor={COLORS.TEXT_MUTED} secureTextEntry autoCapitalize="none" />
                                 </View>
-                                <TouchableOpacity
-                                    style={[styles.deleteConfirmButton, { borderRadius: 12, paddingVertical: 16, marginTop: 8 }, twoFALoading && styles.deleteButtonDisabled]}
-                                    onPress={handleDisable2FA}
-                                    disabled={twoFALoading}
-                                >
-                                    {twoFALoading ? (
-                                        <ActivityIndicator color={COLORS.WHITE} />
-                                    ) : (
-                                        <Text style={[styles.deleteConfirmButtonText, { textAlign: 'center' }]}>Disable 2FA</Text>
-                                    )}
+                                <TouchableOpacity style={[styles.deleteConfirmButton, { borderRadius: 12, paddingVertical: 16, marginTop: 8 }, twoFALoading && styles.deleteButtonDisabled]} onPress={handleDisable2FA} disabled={twoFALoading}>
+                                    {twoFALoading ? <ActivityIndicator color={COLORS.WHITE} /> : <Text style={[styles.deleteConfirmButtonText, { textAlign: 'center' }]}>Disable 2FA</Text>}
                                 </TouchableOpacity>
                             </View>
                         )}
@@ -1002,17 +913,11 @@ const ProfileScreen = ({ navigation }) => {
                 </View>
             </Modal>
 
-            {/* Custom Alert Component */}
-            <CustomAlert
-                visible={alertConfig.visible}
-                title={alertConfig.title}
-                message={alertConfig.message}
-                buttons={alertConfig.buttons}
-                onRequestClose={hideAlert}
-            />
+            <CustomAlert visible={alertConfig.visible} title={alertConfig.title} message={alertConfig.message} buttons={alertConfig.buttons} onRequestClose={hideAlert} />
         </View>
     );
 };
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -1026,16 +931,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.MEDIUM,
         marginBottom: 20,
     },
-    backButton: {
-        padding: 5,
-    },
+    backButton: { padding: 5 },
     headerTitle: {
         fontSize: 18,
         fontFamily: FONTS.BOLD,
         color: COLORS.WHITE,
     },
     editButton: {
-        color: '#3B82F6', // Blue
+        color: '#3B82F6',
         fontSize: 16,
         fontFamily: FONTS.BOLD,
     },
@@ -1056,13 +959,18 @@ const styles = StyleSheet.create({
         height: 100,
         borderRadius: 50,
         borderWidth: 3,
-        borderColor: COLORS.CARD_BG,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    avatarPlaceholder: {
+        backgroundColor: '#2A2A2A',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     editIcon: {
         position: 'absolute',
         bottom: 0,
         right: 0,
-        backgroundColor: '#3B82F6',
+        backgroundColor: COLORS.GOLD,
         width: 28,
         height: 28,
         borderRadius: 14,
@@ -1118,14 +1026,12 @@ const styles = StyleSheet.create({
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: '#2A2A2A', // Slightly lighter than card
+        backgroundColor: '#2A2A2A',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 16,
     },
-    menuTextContainer: {
-        flex: 1,
-    },
+    menuTextContainer: { flex: 1 },
     menuLabel: {
         fontSize: 16,
         fontFamily: FONTS.BOLD,
@@ -1140,42 +1046,40 @@ const styles = StyleSheet.create({
         height: 1,
         backgroundColor: COLORS.CARD_BORDER,
         marginVertical: 12,
-        marginLeft: 52, // Align with text start
+        marginLeft: 52,
     },
     badgeContainer: {
-        backgroundColor: 'rgba(96, 165, 250, 0.2)', // Light Blue tint
+        backgroundColor: 'rgba(96, 165, 250, 0.2)',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 12,
     },
     badgeText: {
-        color: '#60A5FA', // Light Blue
+        color: '#60A5FA',
         fontSize: 12,
         fontFamily: FONTS.BOLD,
     },
     logoutButton: {
         borderWidth: 1,
-        borderColor: '#EF4444', // Red border
+        borderColor: '#EF4444',
         borderRadius: 12,
         paddingVertical: 14,
         alignItems: 'center',
         marginBottom: 30,
-        backgroundColor: 'rgba(239, 68, 68, 0.05)', // Tiny tint
+        backgroundColor: 'rgba(239, 68, 68, 0.05)',
     },
     logoutText: {
-        color: '#F87171', // Red text
+        color: '#F87171',
         fontSize: 16,
         fontFamily: FONTS.BOLD,
     },
-    footer: {
-        alignItems: 'center',
-    },
+    footer: { alignItems: 'center' },
     footerText: {
         color: COLORS.TEXT_MUTED,
         fontSize: 12,
         marginBottom: 4,
     },
-    // Modal Styles
+    // Modal styles
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.7)',
@@ -1220,25 +1124,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginHorizontal: 8,
     },
-    cancelButton: {
-        backgroundColor: 'transparent',
-    },
+    cancelButton: { backgroundColor: 'transparent' },
     cancelButtonText: {
         color: COLORS.TEXT_SECONDARY,
         fontFamily: FONTS.BOLD,
         fontSize: 16,
     },
     confirmButton: {
-        backgroundColor: 'rgba(239, 68, 68, 0.05)', // Tiny tint
+        backgroundColor: 'rgba(239, 68, 68, 0.05)',
         borderWidth: 1,
-        borderColor: '#EF4444', // Red border
+        borderColor: '#EF4444',
     },
     confirmButtonText: {
-        color: '#F87171', // Red
+        color: '#F87171',
         fontFamily: FONTS.BOLD,
         fontSize: 16,
     },
-    // Edit Modal Styles
     editModalContent: {
         width: '90%',
         maxHeight: '80%',
@@ -1254,12 +1155,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 24,
     },
-    closeButton: {
-        padding: 4,
-    },
-    inputGroup: {
-        marginBottom: 20,
-    },
+    closeButton: { padding: 4 },
+    inputGroup: { marginBottom: 20 },
     inputLabel: {
         fontSize: 14,
         fontFamily: FONTS.BOLD,
@@ -1285,14 +1182,8 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: COLORS.CARD_BORDER,
     },
-    dateText: {
-        fontSize: 16,
-        color: COLORS.WHITE,
-    },
-    datePlaceholder: {
-        fontSize: 16,
-        color: COLORS.TEXT_MUTED,
-    },
+    dateText: { fontSize: 16, color: COLORS.WHITE },
+    datePlaceholder: { fontSize: 16, color: COLORS.TEXT_MUTED },
     datePickerContainer: {
         backgroundColor: '#2A2A2A',
         borderRadius: 12,
@@ -1306,10 +1197,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 12,
     },
-    pickerColumn: {
-        flex: 1,
-        marginHorizontal: 4,
-    },
+    pickerColumn: { flex: 1, marginHorizontal: 4 },
     pickerLabel: {
         color: COLORS.TEXT_SECONDARY,
         fontSize: 12,
@@ -1317,26 +1205,16 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 8,
     },
-    pickerScroll: {
-        maxHeight: 150,
-    },
+    pickerScroll: { maxHeight: 150 },
     pickerItem: {
         paddingVertical: 8,
         paddingHorizontal: 4,
         borderRadius: 8,
         alignItems: 'center',
     },
-    pickerItemSelected: {
-        backgroundColor: COLORS.GOLD,
-    },
-    pickerItemText: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 14,
-    },
-    pickerItemTextSelected: {
-        color: COLORS.BACKGROUND,
-        fontFamily: FONTS.BOLD,
-    },
+    pickerItemSelected: { backgroundColor: COLORS.GOLD },
+    pickerItemText: { color: COLORS.TEXT_SECONDARY, fontSize: 14 },
+    pickerItemTextSelected: { color: COLORS.BACKGROUND, fontFamily: FONTS.BOLD },
     datePickerDone: {
         alignItems: 'center',
         padding: 14,
@@ -1359,10 +1237,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: COLORS.CARD_BORDER,
     },
-    readOnlyText: {
-        fontSize: 16,
-        color: COLORS.TEXT_MUTED,
-    },
+    readOnlyText: { fontSize: 16, color: COLORS.TEXT_MUTED },
     saveButton: {
         backgroundColor: COLORS.GOLD,
         borderRadius: 12,
@@ -1370,34 +1245,42 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginTop: 10,
     },
-    saveButtonDisabled: {
-        opacity: 0.6,
-    },
+    saveButtonDisabled: { opacity: 0.6 },
     saveButtonText: {
         color: COLORS.BACKGROUND,
         fontSize: 16,
         fontFamily: FONTS.BOLD,
     },
-    // Delete Account Styles
+    // Password input
+    passwordInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#2A2A2A',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+    },
+    passwordField: {
+        flex: 1,
+        padding: 16,
+        fontSize: 16,
+        color: COLORS.WHITE,
+    },
+    passwordToggle: { padding: 16 },
+    // Delete account
     deleteAccountItem: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: 4,
     },
-    deleteIconContainer: {
-        backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    },
+    deleteIconContainer: { backgroundColor: 'rgba(239, 68, 68, 0.15)' },
     deleteLabel: {
         fontSize: 16,
         fontFamily: FONTS.BOLD,
         color: '#EF4444',
         marginBottom: 2,
     },
-    deleteSubtitle: {
-        fontSize: 12,
-        color: COLORS.TEXT_SECONDARY,
-    },
-    // Delete Modal Styles
+    deleteSubtitle: { fontSize: 12, color: COLORS.TEXT_SECONDARY },
     deleteModalContent: {
         width: '90%',
         backgroundColor: COLORS.CARD_BG,
@@ -1411,10 +1294,7 @@ const styles = StyleSheet.create({
         shadowRadius: 20,
         elevation: 10,
     },
-    deleteModalHeader: {
-        alignItems: 'center',
-        marginBottom: 16,
-    },
+    deleteModalHeader: { alignItems: 'center', marginBottom: 16 },
     deleteWarningIcon: {
         width: 64,
         height: 64,
@@ -1452,31 +1332,18 @@ const styles = StyleSheet.create({
         color: COLORS.TEXT_SECONDARY,
         marginLeft: 10,
     },
-    deleteInputGroup: {
-        marginBottom: 20,
-    },
+    deleteInputGroup: { marginBottom: 20 },
     deleteInputLabel: {
         fontSize: 14,
         fontFamily: FONTS.BOLD,
         color: COLORS.TEXT_SECONDARY,
         marginBottom: 8,
     },
-    passwordInputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#2A2A2A',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
     deletePasswordInput: {
         flex: 1,
         padding: 16,
         fontSize: 16,
         color: COLORS.WHITE,
-    },
-    passwordToggle: {
-        padding: 16,
     },
     deleteModalActions: {
         flexDirection: 'row',
@@ -1503,9 +1370,7 @@ const styles = StyleSheet.create({
         marginLeft: 8,
         backgroundColor: '#EF4444',
     },
-    deleteButtonDisabled: {
-        opacity: 0.6,
-    },
+    deleteButtonDisabled: { opacity: 0.6 },
     deleteConfirmButtonText: {
         color: COLORS.WHITE,
         fontFamily: FONTS.BOLD,

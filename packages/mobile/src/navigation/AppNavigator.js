@@ -18,6 +18,8 @@ import ProfileScreen from '../screens/ProfileScreen';
 import AllAccountsScreen from '../screens/AllAccountsScreen';
 import WealthAcademyScreen from '../screens/WealthAcademyScreen';
 import ArticleWebViewScreen from '../screens/ArticleWebViewScreen';
+import LegalDocScreen from '../screens/LegalDocScreen';
+import FeedbackScreen from '../screens/FeedbackScreen';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/theme';
 import cache from '../services/cache';
 
@@ -212,6 +214,20 @@ const AppNavigator = () => {
                     component={ArticleWebViewScreen}
                     options={{
                         presentation: 'modal',
+                    }}
+                />
+                <Stack.Screen
+                    name="LegalDoc"
+                    component={LegalDocScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="Feedback"
+                    component={FeedbackScreen}
+                    options={{
+                        presentation: 'card',
                     }}
                 />
             </Stack.Navigator>

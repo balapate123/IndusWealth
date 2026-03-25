@@ -118,6 +118,7 @@ app.use('/analytics', require('./routes/analytics'));
 app.use('/insights', require('./routes/insights'));
 app.use('/educational', require('./routes/educational'));
 app.use('/2fa', require('./routes/twoFactor'));
+app.use('/feedback', require('./routes/feedback'));
 
 // Health check endpoint
 app.get('/', (req, res) => {

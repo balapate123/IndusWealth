@@ -560,6 +560,13 @@ export const api = {
 
     seedEducationalArticles: () =>
         apiRequest('/educational/seed', { method: 'POST' }),
+
+    // Feedback
+    submitFeedback: (data) => apiRequest('/feedback', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }),
+    getFeedbackHistory: () => apiRequest('/feedback'),
 };
 
 // Check if user is authenticated
