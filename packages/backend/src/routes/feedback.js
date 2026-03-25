@@ -38,10 +38,10 @@ router.post('/', authenticateToken, async (req, res, next) => {
         }
 
         // Get user info for context
-        const userResult = await db.query('SELECT email, name FROM users WHERE id = $1', [req.user.id]);
+        const userResult = await db.pool.query('SELECT email, name FROM users WHERE id = $1', [req.user.id]);
         const user = userResult.rows[0];
 
-        const result = await db.query(
+        const result = await db.pool.query(
             `INSERT INTO feedback (user_id, category, rating, message, user_email, user_name)
              VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING id, category, rating, message, created_at`,
@@ -63,7 +63,7 @@ router.get('/', authenticateToken, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
 
     try {
-        const result = await db.query(
+        const result = await db.pool.query(
             `SELECT id, category, rating, message, created_at
              FROM feedback
              WHERE user_id = $1
@@ -101,14 +101,14 @@ router.get('/admin', async (req, res, next) => {
         }
 
         // Get total count
-        const countResult = await db.query(
+        const countResult = await db.pool.query(
             `SELECT COUNT(*) as total FROM feedback ${whereClause}`,
             params
         );
 
         // Get feedback with pagination
         const feedbackParams = [...params, parseInt(limit), offset];
-        const result = await db.query(
+        const result = await db.pool.query(
             `SELECT id, user_id, user_email, user_name, category, rating, message, created_at
              FROM feedback
              ${whereClause}
@@ -118,7 +118,7 @@ router.get('/admin', async (req, res, next) => {
         );
 
         // Get summary stats
-        const statsResult = await db.query(
+        const statsResult = await db.pool.query(
             `SELECT
                 COUNT(*) as total,
                 ROUND(AVG(rating), 1) as avg_rating,
