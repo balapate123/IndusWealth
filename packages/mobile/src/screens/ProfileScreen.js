@@ -16,7 +16,6 @@ import {
     Linking,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import cache from '../services/cache';
 import api from '../services/api';
@@ -132,57 +131,25 @@ const ProfileScreen = ({ navigation }) => {
         }
     };
 
-    // Profile picture
+    // Profile picture - avatar initials with color selection
+    const AVATAR_COLORS = ['#C9A227', '#3B82F6', '#EF4444', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#06B6D4'];
+    const [avatarColorModalVisible, setAvatarColorModalVisible] = useState(false);
+
     const handleChangeProfilePicture = () => {
-        showAlert('Change Profile Picture', 'Choose an option', [
-            {
-                text: 'Camera',
-                onPress: async () => {
-                    hideAlert();
-                    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-                    if (status !== 'granted') {
-                        setTimeout(() => showAlert('Permission Required', 'Camera permission is needed to take a photo.', [
-                            { text: 'OK', onPress: hideAlert }
-                        ]), 300);
-                        return;
-                    }
-                    const result = await ImagePicker.launchCameraAsync({
-                        allowsEditing: true,
-                        aspect: [1, 1],
-                        quality: 0.7,
-                    });
-                    if (!result.canceled && result.assets?.[0]) {
-                        const uri = result.assets[0].uri;
-                        setProfilePicture(uri);
-                        await cache.setProfilePicture(uri);
-                    }
-                },
-            },
-            {
-                text: 'Gallery',
-                onPress: async () => {
-                    hideAlert();
-                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                    if (status !== 'granted') {
-                        setTimeout(() => showAlert('Permission Required', 'Photo library permission is needed.', [
-                            { text: 'OK', onPress: hideAlert }
-                        ]), 300);
-                        return;
-                    }
-                    const result = await ImagePicker.launchImageLibraryAsync({
-                        allowsEditing: true,
-                        aspect: [1, 1],
-                        quality: 0.7,
-                    });
-                    if (!result.canceled && result.assets?.[0]) {
-                        const uri = result.assets[0].uri;
-                        setProfilePicture(uri);
-                        await cache.setProfilePicture(uri);
-                    }
-                },
-            },
-            { text: 'Cancel', onPress: hideAlert },
-        ]);
+        setAvatarColorModalVisible(true);
+    };
+
+    const selectAvatarColor = async (color) => {
+        setProfilePicture(color);
+        await cache.setProfilePicture(color);
+        setAvatarColorModalVisible(false);
+    };
+
+    const getUserInitials = () => {
+        if (!user.name) return '?';
+        const parts = user.name.trim().split(' ');
+        if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        return parts[0][0].toUpperCase();
     };
 
     // Change password
@@ -462,13 +429,9 @@ const ProfileScreen = ({ navigation }) => {
                 {/* User Profile Card */}
                 <View style={styles.profileSection}>
                     <View style={styles.avatarContainer}>
-                        {profilePicture ? (
-                            <Image source={{ uri: profilePicture }} style={styles.avatar} />
-                        ) : (
-                            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                                <Ionicons name="person" size={44} color={COLORS.TEXT_MUTED} />
-                            </View>
-                        )}
+                        <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: profilePicture || COLORS.GOLD }]}>
+                            <Text style={styles.avatarInitials}>{getUserInitials()}</Text>
+                        </View>
                         <TouchableOpacity style={styles.editIcon} onPress={handleChangeProfilePicture}>
                             <Ionicons name="camera" size={12} color={COLORS.WHITE} />
                         </TouchableOpacity>
@@ -913,6 +876,29 @@ const ProfileScreen = ({ navigation }) => {
                 </View>
             </Modal>
 
+            {/* Avatar Color Picker Modal */}
+            <Modal visible={avatarColorModalVisible} transparent={true} animationType="fade" onRequestClose={() => setAvatarColorModalVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Choose Avatar Color</Text>
+                        <View style={styles.colorGrid}>
+                            {AVATAR_COLORS.map((color) => (
+                                <TouchableOpacity
+                                    key={color}
+                                    style={[styles.colorOption, { backgroundColor: color }, profilePicture === color && styles.colorOptionSelected]}
+                                    onPress={() => selectAvatarColor(color)}
+                                >
+                                    <Text style={styles.colorOptionInitials}>{getUserInitials()}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setAvatarColorModalVisible(false)}>
+                            <Text style={styles.cancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
             <CustomAlert visible={alertConfig.visible} title={alertConfig.title} message={alertConfig.message} buttons={alertConfig.buttons} onRequestClose={hideAlert} />
         </View>
     );
@@ -962,9 +948,36 @@ const styles = StyleSheet.create({
         borderColor: COLORS.CARD_BORDER,
     },
     avatarPlaceholder: {
-        backgroundColor: '#2A2A2A',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    avatarInitials: {
+        fontSize: 36,
+        fontFamily: FONTS.BOLD,
+        color: '#FFFFFF',
+    },
+    colorGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 16,
+        marginBottom: 20,
+    },
+    colorOption: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    colorOptionSelected: {
+        borderWidth: 3,
+        borderColor: COLORS.WHITE,
+    },
+    colorOptionInitials: {
+        fontSize: 20,
+        fontFamily: FONTS.BOLD,
+        color: '#FFFFFF',
     },
     editIcon: {
         position: 'absolute',
