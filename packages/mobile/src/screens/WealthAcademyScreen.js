@@ -174,12 +174,20 @@ const WealthAcademyScreen = ({ navigation }) => {
     );
 
     const renderFooter = () => {
-        if (!loadingMore) return null;
-
         return (
-            <View style={styles.loadingMore}>
-                <ActivityIndicator size="small" color={COLORS.GOLD} />
-            </View>
+            <>
+                {loadingMore && (
+                    <View style={styles.loadingMore}>
+                        <ActivityIndicator size="small" color={COLORS.GOLD} />
+                    </View>
+                )}
+                <View style={styles.disclaimerBanner}>
+                    <Ionicons name="information-circle-outline" size={14} color="#888" />
+                    <Text style={styles.disclaimerText}>
+                        Articles are for educational purposes only and do not constitute financial, investment, legal, or tax advice. Consult a qualified professional before making financial decisions.
+                    </Text>
+                </View>
+            </>
         );
     };
 
@@ -371,6 +379,23 @@ const styles = StyleSheet.create({
     loadingMore: {
         paddingVertical: SPACING.LARGE,
         alignItems: 'center',
+    },
+    disclaimerBanner: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 6,
+        margin: SPACING.LARGE,
+        padding: SPACING.SMALL,
+        backgroundColor: 'rgba(255,255,255,0.04)',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+    },
+    disclaimerText: {
+        flex: 1,
+        fontSize: 11,
+        color: '#888',
+        lineHeight: 16,
     },
     errorContainer: {
         flex: 1,

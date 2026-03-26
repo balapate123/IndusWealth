@@ -22,9 +22,11 @@ class PlaidService {
             const linkTokenConfig = {
                 user: { client_user_id: userId || 'test_user' },
                 client_name: 'IndusWealth',
-                products: ['transactions'],
+                products: ['transactions', 'liabilities'],
                 country_codes: ['CA'],
                 language: 'en',
+                webhook: process.env.PLAID_WEBHOOK_URL ||
+                    `${process.env.BACKEND_URL || 'https://induswealth.onrender.com'}/plaid/webhook`,
             };
 
             // OAuth redirect URI is required for Canadian banks (all use OAuth).
@@ -205,6 +207,13 @@ class PlaidService {
             throw error;
         }
     }
+
+    async getWebhookVerificationKey(keyId) {
+        const response = await client.webhookVerificationKeyGet({ key_id: keyId });
+        return response.data.key;
+    }
 }
 
-module.exports = new PlaidService();
+const plaidServiceInstance = new PlaidService();
+module.exports = plaidServiceInstance;
+module.exports.client = client;

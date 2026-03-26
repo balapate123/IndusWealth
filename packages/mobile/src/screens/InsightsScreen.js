@@ -490,6 +490,14 @@ const InsightsScreen = ({ navigation, route }) => {
                     </View>
                 )}
 
+                {/* Financial Disclaimer */}
+                <View style={styles.disclaimerBanner}>
+                    <Ionicons name="information-circle-outline" size={14} color={COLORS.MUTED || '#888'} />
+                    <Text style={styles.disclaimerText}>
+                        AI insights are for informational purposes only and do not constitute financial, investment, or tax advice. Consult a qualified financial advisor before making financial decisions.
+                    </Text>
+                </View>
+
                 {/* Bottom Spacer for Tab Bar */}
                 <View style={styles.bottomSpacer} />
             </ScrollView>
@@ -806,6 +814,24 @@ const styles = StyleSheet.create({
     },
     bottomSpacer: {
         height: 120,
+    },
+    disclaimerBanner: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 6,
+        marginHorizontal: SPACING.LARGE,
+        marginBottom: SPACING.MEDIUM,
+        padding: SPACING.SMALL,
+        backgroundColor: 'rgba(255,255,255,0.04)',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+    },
+    disclaimerText: {
+        flex: 1,
+        fontSize: 11,
+        color: '#888',
+        lineHeight: 16,
     },
     // Wealth Academy styles
     academySection: {

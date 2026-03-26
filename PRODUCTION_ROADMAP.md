@@ -111,13 +111,13 @@ The app is **feature-rich but not production-hardened**. Key gaps:
   - Not a money transmitter (read-only access) — confirmed and documented
   - Not registered with FINTRAC, OSC, CIRO, FCAC, or OSFI — documented
 - [x] **Add financial disclaimer** *(see `docs/legal/FINANCIAL_DISCLAIMER.md`)* — comprehensive disclaimer covering AI insights, debt calculator, analytics, Wealth Academy
-- [ ] **Review Plaid's compliance requirements** for production:
+- [x] **Review Plaid's compliance requirements** for production *(see `docs/plaid/PRODUCTION_APPLICATION.md`)*
   - Plaid requires a compliance review before going to production
-  - Submit Plaid production access application
-  - Complete Plaid's security questionnaire
-- [ ] **Ensure AI insights don't constitute regulated advice**
+  - Submit Plaid production access application *(manual step — follow guide)*
+  - Complete Plaid's security questionnaire *(answers documented in guide)*
+- [x] **Ensure AI insights don't constitute regulated advice**
   - Current implementation has guardrails (good)
-  - Add visible disclaimers on Insights and Wealth Academy screens
+  - Add visible disclaimers on Insights and Wealth Academy screens *(implemented)*
 
 ### 2.4 Data Processing Agreements
 
@@ -230,19 +230,18 @@ The app is **feature-rich but not production-hardened**. Key gaps:
 
 ### 3.5 Plaid Security (P1)
 
-- [ ] **Apply for Plaid production access** (currently sandbox)
-  - Complete security questionnaire
-  - Demonstrate compliance requirements
+- [x] **Apply for Plaid production access** *(guide at `docs/plaid/PRODUCTION_APPLICATION.md` — manual submission at dashboard.plaid.com)*
+  - Complete security questionnaire *(answers documented)*
+  - Demonstrate compliance requirements *(privacy policy, webhook, OAuth redirect)*
   - Get production API keys
-- [ ] **Implement Plaid webhook verification**
-  - Verify webhook signatures
-  - Handle `ITEM_LOGIN_REQUIRED` via update-mode Link
-- [ ] **Scope Plaid products** to only what's needed
-  - Currently: transactions, auth, liabilities
-  - Remove any unused products to minimize data access
+- [x] **Implement Plaid webhook verification** *(implemented in `routes/plaidWebhook.js`)*
+  - ES256 JWT signature verification with JWK key fetching and caching
+  - Handles `ITEM_LOGIN_REQUIRED`, `SYNC_UPDATES_AVAILABLE`, `PENDING_EXPIRATION`, `ERROR`
+- [x] **Scope Plaid products** to only what's needed *(updated in `services/plaid.js`)*
+  - `transactions`, `liabilities` — webhook URL registered on link token creation
 - [ ] **Handle Plaid token expiration gracefully**
-  - Implement update-mode Plaid Link for seamless re-authentication
-  - Notify users when re-auth is needed (before token expires)
+  - Implement update-mode Plaid Link for seamless re-authentication *(update link token endpoint exists)*
+  - Notify users when re-auth is needed — add in-app banner when `needs_reauth = true`
 
 ### 3.6 Security Audit (P1)
 
@@ -955,17 +954,17 @@ The app is **feature-rich but not production-hardened**. Key gaps:
 
 ### 16.1 Google Play Store (P1)
 
-- [ ] **Create Google Play Developer account** ($25 one-time fee)
-- [ ] **Prepare store listing**:
+- [ ] **Create Google Play Developer account** ($25 one-time fee at play.google.com/console)
+- [x] **Prepare store listing** *(drafted in `docs/store/PLAY_STORE_LISTING.md`)*:
   - App title: "IndusWealth - Personal Finance"
-  - Short description (80 chars)
-  - Full description (4000 chars)
-  - Feature graphic (1024x500)
-  - Screenshots (phone + tablet, min 2 per device type)
+  - Short description (80 chars) — drafted
+  - Full description (4000 chars) — drafted
+  - Feature graphic (1024x500) — needs to be created
+  - Screenshots (phone + tablet, min 2 per device type) — needs to be taken
   - App category: Finance
-  - Content rating questionnaire
-  - Privacy policy URL (required for finance apps)
-- [ ] **Build production APK/AAB** via EAS
+  - Content rating questionnaire — answers documented
+  - Privacy policy URL (required) — needs to be hosted publicly
+- [x] **Build production AAB** via EAS *(eas.json production profile configured)*
   ```bash
   eas build --platform android --profile production
   ```

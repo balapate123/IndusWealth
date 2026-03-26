@@ -10,9 +10,10 @@ const pool = new Pool(
     process.env.DATABASE_URL
         ? {
             connectionString: process.env.DATABASE_URL,
-            ssl: {
-                rejectUnauthorized: false, // Required for Render
-            },
+            ssl: { rejectUnauthorized: false }, // Required for Render
+            max: 10,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 5000,
         }
         : {
             host: process.env.DB_HOST || 'localhost',
@@ -20,6 +21,9 @@ const pool = new Pool(
             database: process.env.DB_NAME || 'induswealth',
             user: process.env.DB_USER || 'induswealth',
             password: process.env.DB_PASSWORD || 'induswealth123',
+            max: 10,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 5000,
         }
 );
 
@@ -216,30 +220,34 @@ const shouldSync = async (userId, syncType = 'last_transaction_sync', maxAgeHour
 // ============ ACCOUNT OPERATIONS ============
 
 const upsertAccounts = async (userId, accounts) => {
+    if (accounts.length === 0) return;
+
+    const values = [];
+    const params = [];
+    let idx = 1;
+
     for (const account of accounts) {
-        await pool.query(
-            `INSERT INTO accounts (user_id, plaid_account_id, name, official_name, type, subtype, mask, current_balance, available_balance, iso_currency_code)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-             ON CONFLICT (user_id, plaid_account_id)
-             DO UPDATE SET 
-                name = EXCLUDED.name,
-                current_balance = EXCLUDED.current_balance,
-                available_balance = EXCLUDED.available_balance,
-                updated_at = NOW()`,
-            [
-                userId,
-                account.account_id,
-                account.name,
-                account.official_name,
-                account.type,
-                account.subtype,
-                account.mask,
-                account.balances?.current,
-                account.balances?.available,
-                account.balances?.iso_currency_code || 'CAD'
-            ]
+        values.push(`($${idx},$${idx+1},$${idx+2},$${idx+3},$${idx+4},$${idx+5},$${idx+6},$${idx+7},$${idx+8},$${idx+9})`);
+        params.push(
+            userId, account.account_id, account.name, account.official_name,
+            account.type, account.subtype, account.mask,
+            account.balances?.current, account.balances?.available,
+            account.balances?.iso_currency_code || 'CAD'
         );
+        idx += 10;
     }
+
+    await pool.query(
+        `INSERT INTO accounts (user_id, plaid_account_id, name, official_name, type, subtype, mask, current_balance, available_balance, iso_currency_code)
+         VALUES ${values.join(',')}
+         ON CONFLICT (user_id, plaid_account_id)
+         DO UPDATE SET
+            name = EXCLUDED.name,
+            current_balance = EXCLUDED.current_balance,
+            available_balance = EXCLUDED.available_balance,
+            updated_at = NOW()`,
+        params
+    );
 };
 
 const getAccounts = async (userId) => {
@@ -310,7 +318,9 @@ const deleteAccountTransactions = async (userId, plaidAccountId) => {
 // ============ TRANSACTION OPERATIONS ============
 
 const upsertTransactions = async (userId, transactions) => {
-    // Get account ID mapping
+    if (transactions.length === 0) return;
+
+    // Single query for account mapping instead of per-transaction lookup
     const accountsResult = await pool.query(
         `SELECT id, plaid_account_id FROM accounts WHERE user_id = $1`,
         [userId]
@@ -318,30 +328,41 @@ const upsertTransactions = async (userId, transactions) => {
     const accountMap = {};
     accountsResult.rows.forEach(a => accountMap[a.plaid_account_id] = a.id);
 
-    for (const tx of transactions) {
-        const accountId = accountMap[tx.account_id] || null;
+    // Batch in chunks of 100 to avoid excessive parameter counts
+    const CHUNK_SIZE = 100;
+    for (let offset = 0; offset < transactions.length; offset += CHUNK_SIZE) {
+        const chunk = transactions.slice(offset, offset + CHUNK_SIZE);
+        const values = [];
+        const params = [];
+        let idx = 1;
 
-        await pool.query(
-            `INSERT INTO transactions (user_id, account_id, plaid_transaction_id, name, merchant_name, amount, date, category, pending, iso_currency_code)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-             ON CONFLICT (user_id, plaid_transaction_id)
-             DO UPDATE SET
-                name = EXCLUDED.name,
-                amount = EXCLUDED.amount,
-                pending = EXCLUDED.pending
-                -- Note: notes and updated_at are intentionally excluded to preserve user data`,
-            [
+        for (const tx of chunk) {
+            values.push(`($${idx},$${idx+1},$${idx+2},$${idx+3},$${idx+4},$${idx+5},$${idx+6},$${idx+7},$${idx+8},$${idx+9})`);
+            params.push(
                 userId,
-                accountId,
+                accountMap[tx.account_id] || null,
                 tx.transaction_id,
                 tx.name,
-                tx.merchant_name,
+                tx.merchant_name || null,
                 tx.amount,
                 tx.date,
                 tx.category || [],
                 tx.pending || false,
                 tx.iso_currency_code || 'CAD'
-            ]
+            );
+            idx += 10;
+        }
+
+        await pool.query(
+            `INSERT INTO transactions (user_id, account_id, plaid_transaction_id, name, merchant_name, amount, date, category, pending, iso_currency_code)
+             VALUES ${values.join(',')}
+             ON CONFLICT (user_id, plaid_transaction_id)
+             DO UPDATE SET
+                name = EXCLUDED.name,
+                amount = EXCLUDED.amount,
+                pending = EXCLUDED.pending
+                -- notes and updated_at intentionally excluded to preserve user data`,
+            params
         );
     }
 };
@@ -653,14 +674,12 @@ const deleteTotpSecret = async (userId) => {
 };
 
 const storeRecoveryCodes = async (userId, codeHashes) => {
-    // Clear old codes first
     await pool.query(`DELETE FROM recovery_codes WHERE user_id = $1`, [userId]);
-    for (const hash of codeHashes) {
-        await pool.query(
-            `INSERT INTO recovery_codes (user_id, code_hash) VALUES ($1, $2)`,
-            [userId, hash]
-        );
-    }
+    const values = codeHashes.map((_, i) => `($1, $${i + 2})`).join(',');
+    await pool.query(
+        `INSERT INTO recovery_codes (user_id, code_hash) VALUES ${values}`,
+        [userId, ...codeHashes]
+    );
 };
 
 const getRecoveryCodes = async (userId) => {

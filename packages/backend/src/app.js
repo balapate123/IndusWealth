@@ -51,8 +51,11 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Body parser with size limit to prevent large payload attacks
-app.use(express.json({ limit: '10kb' }));
+// Body parser — captures raw body for Plaid webhook signature verification
+app.use(express.json({
+    limit: '10kb',
+    verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
 
 // Request ID middleware - must be early in chain
 app.use(requestIdMiddleware);
@@ -102,6 +105,9 @@ const authLimiter = rateLimit({
     legacyHeaders: false,
 });
 
+// Health check — before rate limiting so UptimeRobot/Render don't consume the limit
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
 // Apply rate limiting
 app.use(apiLimiter);
 app.use('/users/login', authLimiter);
@@ -109,6 +115,7 @@ app.use('/users/signup', authLimiter);
 
 // API Routes
 app.use('/transactions', transactionsRoutes);
+app.use('/plaid/webhook', require('./routes/plaidWebhook')); // must be before /plaid
 app.use('/plaid', require('./routes/plaid'));
 app.use('/debt', require('./routes/debt'));
 app.use('/accounts', require('./routes/accounts'));
