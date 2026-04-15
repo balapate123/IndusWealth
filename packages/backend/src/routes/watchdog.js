@@ -2,77 +2,101 @@ const express = require('express');
 const router = express.Router();
 const watchdogService = require('../services/watchdog');
 const { authenticateToken } = require('../middleware/auth');
+const { validateWatchdogAction } = require('../middleware/validators');
 const { createLogger } = require('../services/logger');
-const { DATA_SOURCES, successResponse } = require('../utils/responseHelper');
+const { DATA_SOURCES, successResponse, errorResponse } = require('../utils/responseHelper');
 
 const logger = createLogger('WATCHDOG');
 
 // GET /watchdog
 // Returns recurring expense analysis for WatchdogScreen
-// Requires authentication
 router.get('/', authenticateToken, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
-    logger.info('Fetching recurring expense analysis', ctx);
+    const forceRefresh = req.query.force_refresh === 'true';
+
+    logger.info('Fetching recurring expense analysis', { ...ctx, forceRefresh });
 
     try {
-        // TODO: In production, analyze user's transaction history to detect recurring patterns
-        // For now, return empty array until real pattern detection is implemented
-        const recurringExpenses = [];
-
-        logger.debug('Recurring expense detection pending implementation', ctx);
-
-        // Calculate potential savings (items that can be stopped or negotiated)
-        const potentialSavings = recurringExpenses
-            .filter(e => e.action === 'stop' || e.action === 'negotiate')
-            .reduce((sum, e) => sum + e.amount, 0);
-
-        const flagsFound = recurringExpenses.filter(e => e.action !== 'active').length;
+        const result = await watchdogService.analyzeForUser(req.user.id, forceRefresh);
 
         logger.info('Returning watchdog analysis', {
             ...ctx,
-            expenseCount: recurringExpenses.length,
-            potentialSavings,
-            flagsFound
+            expenseCount: result.expenses.length,
+            cached: result.meta?.cached,
         });
 
+        // Format response to match mobile UI contract
+        // The mobile UI reads data.expenses, data.analysis, data.categories from the response
+        // successResponse spreads data into the response, so expenses/analysis/categories are top-level
         successResponse(res, {
-            expenses: recurringExpenses,
-            analysis: {
-                potential_savings: potentialSavings,
-                flags_found: flagsFound,
-                total_monthly: recurringExpenses.reduce((sum, e) => sum + e.amount, 0),
-            },
-            categories: ['All', 'Streaming', 'Utilities', 'Health', 'Other'],
-            needs_transaction_history: true
+            expenses: result.expenses,
+            analysis: result.analysis,
+            alerts: result.alerts,
+            categories: result.categories,
+            needs_transaction_history: result.needs_transaction_history,
         }, {
-            source: DATA_SOURCES.COMPUTED,
-            timestamp: new Date().toISOString()
+            source: result.meta?.cached ? DATA_SOURCES.DATABASE : DATA_SOURCES.COMPUTED,
+            cached: result.meta?.cached || false,
+            lastAnalyzedAt: result.meta?.lastAnalyzedAt,
+            transactionsAnalyzed: result.meta?.transactionsAnalyzed,
+            timestamp: new Date().toISOString(),
         });
     } catch (error) {
-        logger.error('Failed to analyze recurring expenses', { ...ctx, error });
+        logger.error('Failed to analyze recurring expenses', { ...ctx, error: error.message });
         next(error);
     }
 });
 
 // POST /watchdog/action
-// Handle actions like negotiate, stop, etc.
-// Requires authentication
-router.post('/action', authenticateToken, async (req, res, next) => {
+// Handle user actions (negotiate, stop, keep, snooze, undo)
+router.post('/action', authenticateToken, validateWatchdogAction, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
-    const { expenseId, action } = req.body;
+    const { expenseId, action, notes, snoozeUntil } = req.body;
+
     logger.info('Processing watchdog action', { ...ctx, expenseId, action });
 
     try {
-        // In production, this would update the expense status in the database
-        logger.info('Watchdog action registered', { ...ctx, expenseId, action });
+        const result = await watchdogService.recordAction(
+            req.user.id,
+            parseInt(expenseId, 10),
+            action,
+            notes || null,
+            snoozeUntil || null
+        );
+
+        if (!result) {
+            return errorResponse(res, 404, 'NOT_FOUND', 'Expense not found', req.requestId);
+        }
+
+        logger.info('Watchdog action processed', { ...ctx, expenseId, action, newStatus: result.newStatus });
 
         res.json({
             success: true,
-            message: `Action '${action}' registered for expense ${expenseId}`,
-            requestId: req.requestId
+            data: result,
+            requestId: req.requestId,
         });
     } catch (error) {
-        logger.error('Failed to process watchdog action', { ...ctx, error });
+        logger.error('Failed to process watchdog action', { ...ctx, error: error.message });
+        next(error);
+    }
+});
+
+// GET /watchdog/summary
+// Quick stats for dashboard widget
+router.get('/summary', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+
+    logger.info('Fetching watchdog summary', ctx);
+
+    try {
+        const summary = await watchdogService.getSummary(req.user.id);
+
+        successResponse(res, { ...summary }, {
+            source: DATA_SOURCES.DATABASE,
+            timestamp: new Date().toISOString(),
+        });
+    } catch (error) {
+        logger.error('Failed to fetch watchdog summary', { ...ctx, error: error.message });
         next(error);
     }
 });

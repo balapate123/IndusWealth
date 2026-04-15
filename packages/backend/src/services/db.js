@@ -132,6 +132,14 @@ const initDb = async () => {
             await pool.query(emailVerificationSql);
         }
 
+        // Run watchdog tables migration
+        const watchdogSqlPath = path.join(__dirname, '../../db/add_watchdog_tables.sql');
+        if (fs.existsSync(watchdogSqlPath)) {
+            const watchdogSql = fs.readFileSync(watchdogSqlPath, 'utf8');
+            console.log('🔄 Running watchdog tables migration...');
+            await pool.query(watchdogSql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);

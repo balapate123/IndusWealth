@@ -1,0 +1,388 @@
+{
+  "Netflix": {
+    "displayName": "Netflix",
+    "logoColor": "#E50914",
+    "category": "Streaming",
+    "cancellation": {
+      "url": "https://www.netflix.com/cancelplan",
+      "steps": [
+        "Log in to netflix.com",
+        "Go to Account > Membership & Billing",
+        "Click 'Cancel Membership'",
+        "Confirm cancellation"
+      ],
+      "estimatedMinutes": 2,
+      "tips": [
+        "Your access continues until the end of your billing period",
+        "You can restart anytime within 10 months and keep your profile"
+      ],
+      "canPause": true,
+      "pauseNote": "Netflix allows you to pause for 1-3 months instead of cancelling"
+    },
+    "negotiation": null,
+    "alternatives": [
+      { "name": "Crave", "price": 7.99, "note": "Canadian content + HBO" },
+      { "name": "Amazon Prime Video", "price": 9.99, "note": "Included with Prime membership" }
+    ],
+    "annualOption": null,
+    "averageCanadianPrice": 16.49
+  },
+  "Rogers": {
+    "displayName": "Rogers",
+    "logoColor": "#DA291C",
+    "category": "Telecom",
+    "cancellation": {
+      "url": "https://www.rogers.com/support/account/how-to-cancel",
+      "steps": [
+        "Call Rogers at 1-888-764-3771",
+        "Say 'Cancel' to the automated system",
+        "You will be transferred to the retention department",
+        "State you want to cancel; they will offer retention deals",
+        "If satisfied with the deal, accept. Otherwise, confirm cancellation."
+      ],
+      "estimatedMinutes": 30,
+      "tips": [
+        "Call during business hours (Mon-Fri 9am-5pm ET) for shorter wait times",
+        "Have a competing offer ready (Bell, Telus) to leverage in negotiation",
+        "The first offer is never the best - politely decline and wait for a better one",
+        "Ask for a 'win-back' or 'loyalty' discount"
+      ],
+      "canPause": false,
+      "pauseNote": null
+    },
+    "negotiation": {
+      "script": "Hi, I'm calling because I've been reviewing my bills and my current plan at $X/month is higher than what I'm seeing from competitors. [Bell/Telus] is offering [specific plan] for $Y/month. I've been a loyal customer for [Z years] and I'd like to see if there's anything you can do to match or beat that price before I switch.",
+      "expectedDiscount": "15-30%",
+      "bestTimeToCall": "End of month or end of quarter",
+      "retentionNumber": "1-888-764-3771",
+      "tips": [
+        "Always ask for the retention or loyalty department",
+        "Mention specific competitor offers with prices",
+        "If they can't match, ask about a credit on your next bill",
+        "Be polite but firm - they have significant discount authority"
+      ]
+    },
+    "alternatives": [
+      { "name": "Bell", "price": null, "note": "Compare plans at bell.ca/mobility" },
+      { "name": "Telus", "price": null, "note": "Compare plans at telus.com" },
+      { "name": "Fido", "price": null, "note": "Rogers flanker brand, often cheaper" },
+      { "name": "Koodo", "price": null, "note": "Telus flanker brand" }
+    ],
+    "annualOption": null,
+    "averageCanadianPrice": null
+  },
+  "Bell": {
+    "displayName": "Bell",
+    "logoColor": "#003E7E",
+    "category": "Telecom",
+    "cancellation": {
+      "url": "https://www.bell.ca/support",
+      "steps": [
+        "Call Bell at 1-800-668-6878",
+        "Navigate to cancellation through the automated system",
+        "Speak with the retention department",
+        "Confirm cancellation or accept a retention offer"
+      ],
+      "estimatedMinutes": 25,
+      "tips": [
+        "Similar to Rogers - always ask for retention department",
+        "Mention Rogers or Telus competitive offers",
+        "Check if you have a contract term remaining (early termination fees may apply)"
+      ],
+      "canPause": false,
+      "pauseNote": null
+    },
+    "negotiation": {
+      "script": "Hi, I'm looking to reduce my monthly bill. I'm currently paying $X/month and I've seen that [Rogers/Telus] is offering comparable plans for less. I'd like to stay with Bell, but I need to see a better rate. What can you offer me?",
+      "expectedDiscount": "15-25%",
+      "bestTimeToCall": "End of month",
+      "retentionNumber": "1-800-668-6878",
+      "tips": [
+        "Bell often has unadvertised plans for retention customers",
+        "Ask about bundle discounts if you have multiple Bell services"
+      ]
+    },
+    "alternatives": [
+      { "name": "Rogers", "price": null, "note": "Compare at rogers.com" },
+      { "name": "Virgin Plus", "price": null, "note": "Bell flanker brand, often cheaper" }
+    ],
+    "annualOption": null,
+    "averageCanadianPrice": null
+  },
+  "Telus": {
+    "displayName": "Telus",
+    "logoColor": "#6C2C91",
+    "category": "Telecom",
+    "cancellation": {
+      "url": "https://www.telus.com/en/support/account/cancel",
+      "steps": [
+        "Call Telus at 1-866-558-2273",
+        "Request to speak with the loyalty/retention team",
+        "Discuss cancellation or negotiate a better rate"
+      ],
+      "estimatedMinutes": 20,
+      "tips": [
+        "Telus tends to be the most willing of the Big 3 to offer deals",
+        "Check for Koodo (their flanker brand) pricing first"
+      ],
+      "canPause": false,
+      "pauseNote": null
+    },
+    "negotiation": {
+      "script": "Hi, I'd like to discuss my current plan pricing. I'm paying $X/month and I've found better rates at [Rogers/Bell/Koodo]. Before I switch, I wanted to see if Telus can offer something competitive.",
+      "expectedDiscount": "15-30%",
+      "bestTimeToCall": "End of quarter",
+      "retentionNumber": "1-866-558-2273",
+      "tips": [
+        "Telus EPP (Employee Purchase Plan) pricing is sometimes offered to retention customers"
+      ]
+    },
+    "alternatives": [
+      { "name": "Koodo", "price": null, "note": "Telus flanker brand" },
+      { "name": "Rogers", "price": null, "note": "Compare at rogers.com" }
+    ],
+    "annualOption": null,
+    "averageCanadianPrice": null
+  },
+  "Disney+": {
+    "displayName": "Disney+",
+    "logoColor": "#113CCF",
+    "category": "Streaming",
+    "cancellation": {
+      "url": "https://www.disneyplus.com/account",
+      "steps": [
+        "Go to disneyplus.com/account",
+        "Click on your subscription",
+        "Select 'Cancel Subscription'",
+        "Confirm cancellation"
+      ],
+      "estimatedMinutes": 2,
+      "tips": [
+        "Access continues until end of billing period",
+        "Disney+ sometimes offers a discounted rate when you try to cancel"
+      ],
+      "canPause": false,
+      "pauseNote": null
+    },
+    "negotiation": null,
+    "alternatives": [
+      { "name": "Netflix", "price": 16.49, "note": "Broader content library" },
+      { "name": "Crave", "price": 7.99, "note": "Canadian + HBO content" }
+    ],
+    "annualOption": { "monthlyEquivalent": 11.08, "annualPrice": 132.99, "savings": "16%" },
+    "averageCanadianPrice": 11.99
+  },
+  "Spotify": {
+    "displayName": "Spotify",
+    "logoColor": "#1DB954",
+    "category": "Music",
+    "cancellation": {
+      "url": "https://www.spotify.com/account/subscription/",
+      "steps": [
+        "Go to spotify.com/account",
+        "Scroll to 'Your plan'",
+        "Click 'Change plan'",
+        "Select 'Cancel Premium'"
+      ],
+      "estimatedMinutes": 2,
+      "tips": [
+        "You keep Premium until the end of your billing period",
+        "Your playlists and saved music are preserved on the free tier",
+        "Spotify often offers 3 months at a discount to win you back"
+      ],
+      "canPause": true,
+      "pauseNote": "Spotify allows you to pause for up to 3 months"
+    },
+    "negotiation": null,
+    "alternatives": [
+      { "name": "YouTube Music", "price": 10.99, "note": "Includes YouTube Premium" },
+      { "name": "Apple Music", "price": 10.99, "note": "Better if you're in the Apple ecosystem" }
+    ],
+    "annualOption": null,
+    "averageCanadianPrice": 10.99
+  },
+  "Amazon Prime": {
+    "displayName": "Amazon Prime",
+    "logoColor": "#FF9900",
+    "category": "Streaming",
+    "cancellation": {
+      "url": "https://www.amazon.ca/gp/primecentral",
+      "steps": [
+        "Go to amazon.ca/gp/primecentral",
+        "Click 'End Membership'",
+        "Follow the prompts to confirm cancellation"
+      ],
+      "estimatedMinutes": 3,
+      "tips": [
+        "Amazon will show you how much you saved on shipping - don't let that dissuade you if you don't shop frequently",
+        "If you cancel mid-cycle, you may get a partial refund"
+      ],
+      "canPause": true,
+      "pauseNote": "You can pause Prime for up to 3 months"
+    },
+    "negotiation": null,
+    "alternatives": [],
+    "annualOption": { "monthlyEquivalent": 8.25, "annualPrice": 99.00, "savings": "17%" },
+    "averageCanadianPrice": 9.99
+  },
+  "GoodLife Fitness": {
+    "displayName": "GoodLife Fitness",
+    "logoColor": "#ED1C24",
+    "category": "Health",
+    "cancellation": {
+      "url": "https://www.goodlifefitness.com/membership/cancel",
+      "steps": [
+        "Visit your home club in person OR call 1-800-387-2524",
+        "Request a cancellation form",
+        "Fill out the form and submit it",
+        "You may need to provide 30 days notice"
+      ],
+      "estimatedMinutes": 15,
+      "tips": [
+        "GoodLife requires 30 days written notice for cancellation",
+        "If you signed a term commitment, early termination fees apply",
+        "Ask about a 'freeze' option if you plan to return - typically $5/month",
+        "Keep written confirmation of your cancellation request"
+      ],
+      "canPause": true,
+      "pauseNote": "GoodLife offers membership freeze for ~$5/month"
+    },
+    "negotiation": {
+      "script": "Hi, I'm considering cancelling my membership because I'm not using it enough to justify the cost. Before I do, are there any reduced-rate options or freeze plans available?",
+      "expectedDiscount": "10-20%",
+      "bestTimeToCall": "January (New Year rush means they want to keep existing members)",
+      "retentionNumber": "1-800-387-2524",
+      "tips": [
+        "GoodLife sometimes offers a reduced 'basic' membership",
+        "Corporate rates may be available through your employer"
+      ]
+    },
+    "alternatives": [
+      { "name": "Planet Fitness", "price": 15.00, "note": "Budget gym option" },
+      { "name": "Anytime Fitness", "price": 49.99, "note": "24/7 access" },
+      { "name": "YMCA", "price": 30.00, "note": "Community-based, income-adjusted pricing available" }
+    ],
+    "annualOption": { "monthlyEquivalent": 35.00, "annualPrice": 420.00, "savings": "12%" },
+    "averageCanadianPrice": 50.00
+  },
+  "Adobe": {
+    "displayName": "Adobe Creative Cloud",
+    "logoColor": "#FF0000",
+    "category": "Software",
+    "cancellation": {
+      "url": "https://account.adobe.com/plans",
+      "steps": [
+        "Go to account.adobe.com/plans",
+        "Click 'Manage plan' on your subscription",
+        "Select 'Cancel plan'",
+        "Adobe will show early termination fees if on annual plan",
+        "Confirm cancellation"
+      ],
+      "estimatedMinutes": 5,
+      "tips": [
+        "If on annual plan paid monthly, cancellation incurs 50% of remaining months fee",
+        "Adobe often offers 2-3 months free or a significant discount when you try to cancel",
+        "Wait for the retention offer before confirming"
+      ],
+      "canPause": false,
+      "pauseNote": null
+    },
+    "negotiation": {
+      "script": "I'd like to cancel my Creative Cloud subscription. [Wait for retention offer - Adobe almost always offers one]",
+      "expectedDiscount": "40-60% for 3-6 months",
+      "bestTimeToCall": null,
+      "retentionNumber": null,
+      "tips": [
+        "Start the cancellation flow online - Adobe's retention offers are automated and generous",
+        "Common offers: 2 months free, 40% off for 3 months, or Photography plan at reduced rate"
+      ]
+    },
+    "alternatives": [
+      { "name": "Affinity Suite", "price": 99.99, "note": "One-time purchase, no subscription" },
+      { "name": "Canva Pro", "price": 16.99, "note": "Good for basic design needs" }
+    ],
+    "annualOption": null,
+    "averageCanadianPrice": 75.99
+  },
+  "Microsoft 365": {
+    "displayName": "Microsoft 365",
+    "logoColor": "#0078D4",
+    "category": "Software",
+    "cancellation": {
+      "url": "https://account.microsoft.com/services",
+      "steps": [
+        "Go to account.microsoft.com/services",
+        "Find your Microsoft 365 subscription",
+        "Click 'Manage' > 'Cancel'",
+        "Follow the confirmation prompts"
+      ],
+      "estimatedMinutes": 3,
+      "tips": [
+        "Your Office apps will revert to read-only mode after expiration",
+        "OneDrive storage drops to 5GB - download your files first"
+      ],
+      "canPause": false,
+      "pauseNote": null
+    },
+    "negotiation": null,
+    "alternatives": [
+      { "name": "Google Workspace", "price": 8.40, "note": "Web-based alternative" },
+      { "name": "LibreOffice", "price": 0, "note": "Free and open source" }
+    ],
+    "annualOption": { "monthlyEquivalent": 8.25, "annualPrice": 99.00, "savings": "16%" },
+    "averageCanadianPrice": 9.99
+  },
+  "Crave": {
+    "displayName": "Crave",
+    "logoColor": "#0028F0",
+    "category": "Streaming",
+    "cancellation": {
+      "url": "https://www.crave.ca/account",
+      "steps": [
+        "Go to crave.ca/account",
+        "Click 'Manage Subscription'",
+        "Select 'Cancel Subscription'",
+        "Confirm"
+      ],
+      "estimatedMinutes": 2,
+      "tips": [
+        "If subscribed through Bell, you need to cancel through your Bell account",
+        "Access continues until end of billing period"
+      ],
+      "canPause": false,
+      "pauseNote": null
+    },
+    "negotiation": null,
+    "alternatives": [
+      { "name": "Netflix", "price": 16.49, "note": "Larger content library" },
+      { "name": "Disney+", "price": 11.99, "note": "Disney/Marvel/Star Wars" }
+    ],
+    "annualOption": null,
+    "averageCanadianPrice": 7.99
+  },
+  "Enbridge": {
+    "displayName": "Enbridge Gas",
+    "logoColor": "#FDB813",
+    "category": "Utilities",
+    "cancellation": {
+      "url": "https://www.enbridgegas.com/residential/my-account",
+      "steps": [
+        "Call Enbridge at 1-877-362-7434",
+        "Provide your account number and service address",
+        "Request disconnection",
+        "Schedule a date (required for home sale/move)"
+      ],
+      "estimatedMinutes": 10,
+      "tips": [
+        "You can only cancel if you're moving - gas service is required for heated homes",
+        "Check if you're on an equal billing plan - switching may save during low-usage months"
+      ],
+      "canPause": false,
+      "pauseNote": null
+    },
+    "negotiation": null,
+    "alternatives": [],
+    "annualOption": null,
+    "averageCanadianPrice": null
+  }
+}

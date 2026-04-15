@@ -123,6 +123,44 @@ const validateResetPassword = [
     handleValidationErrors,
 ];
 
+/**
+ * Validation chains for watchdog action endpoint.
+ */
+const validateWatchdogAction = [
+    body('expenseId')
+        .notEmpty().withMessage('expenseId is required')
+        .isInt({ min: 1 }).withMessage('expenseId must be a positive integer'),
+    body('action')
+        .notEmpty().withMessage('action is required')
+        .isIn(['negotiate', 'stop', 'keep', 'snooze', 'undo']).withMessage('action must be one of: negotiate, stop, keep, snooze, undo'),
+    body('notes')
+        .optional()
+        .isString().withMessage('notes must be a string')
+        .isLength({ max: 500 }).withMessage('notes must be 500 characters or less'),
+    body('snoozeUntil')
+        .optional()
+        .isISO8601().withMessage('snoozeUntil must be a valid date')
+        .custom((value, { req }) => {
+            if (req.body.action === 'snooze' && !value) {
+                throw new Error('snoozeUntil is required for snooze action');
+            }
+            if (value) {
+                const snoozeDate = new Date(value);
+                const now = new Date();
+                if (snoozeDate <= now) {
+                    throw new Error('snoozeUntil must be a future date');
+                }
+                const maxDate = new Date(now);
+                maxDate.setDate(maxDate.getDate() + 90);
+                if (snoozeDate > maxDate) {
+                    throw new Error('snoozeUntil must be within 90 days');
+                }
+            }
+            return true;
+        }),
+    handleValidationErrors,
+];
+
 module.exports = {
     handleValidationErrors,
     validateLogin,
@@ -133,4 +171,5 @@ module.exports = {
     validateVerifyEmail,
     validateForgotPassword,
     validateResetPassword,
+    validateWatchdogAction,
 };
