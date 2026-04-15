@@ -23,7 +23,8 @@ async function getUserFinancialSummary(userId, analysisPeriodDays = 90) {
             debtSummary,
             creditHealth,
             savingsMetrics,
-            cashFlow
+            cashFlow,
+            userPreferences
         ] = await Promise.all([
             _getUserProfile(userId),
             _getAccountsData(userId),
@@ -33,8 +34,11 @@ async function getUserFinancialSummary(userId, analysisPeriodDays = 90) {
             _getDebtSummary(userId),
             _getCreditHealth(userId),
             _getSavingsMetrics(userId, analysisPeriodDays),
-            _getCashFlow(userId, analysisPeriodDays)
+            _getCashFlow(userId, analysisPeriodDays),
+            _getUserPreferences(userId)
         ]);
+
+        const seasonalContext = _getSeasonalContext();
 
         return {
             user_profile: {
@@ -52,7 +56,9 @@ async function getUserFinancialSummary(userId, analysisPeriodDays = 90) {
             credit_health: creditHealth,
             savings_metrics: savingsMetrics,
             cash_flow: cashFlow,
-            financial_readiness: _calculateFinancialReadiness(savingsMetrics, debtSummary, incomeSummary)
+            financial_readiness: _calculateFinancialReadiness(savingsMetrics, debtSummary, incomeSummary),
+            user_preferences: userPreferences,
+            seasonal_context: seasonalContext
         };
     } catch (error) {
         console.error('Error aggregating user financial data:', error);
@@ -495,6 +501,80 @@ function _calculateFinancialReadiness(savingsMetrics, debtSummary, incomeSummary
         stable_income,
         positive_cash_flow,
         ready_to_invest
+    };
+}
+
+/**
+ * Get user preferences for insight personalization
+ */
+async function _getUserPreferences(userId) {
+    const result = await pool.query(
+        `SELECT investment_risk_tolerance, first_time_homebuyer,
+                interested_in_investing, interested_in_crypto,
+                preferred_savings_account_type, age_range,
+                investment_experience, annual_income_range
+         FROM user_preferences
+         WHERE user_id = $1`,
+        [userId]
+    );
+
+    if (result.rows.length === 0) {
+        return {
+            investment_risk_tolerance: 'moderate',
+            first_time_homebuyer: null,
+            interested_in_investing: true,
+            interested_in_crypto: false,
+            preferred_savings_account_type: 'tfsa',
+            age_range: null,
+            investment_experience: 'none',
+            annual_income_range: null
+        };
+    }
+
+    return result.rows[0];
+}
+
+/**
+ * Get seasonal context for timely insights
+ */
+function _getSeasonalContext() {
+    const now = new Date();
+    const currentMonth = now.toLocaleString('en-CA', { month: 'long' });
+    const currentQuarter = `Q${Math.floor(now.getMonth() / 3) + 1}`;
+
+    // RRSP deadline: March 1 of next year (for current tax year)
+    const rrspYear = now.getMonth() >= 2 ? now.getFullYear() + 1 : now.getFullYear();
+    const rrspDeadline = new Date(rrspYear, 2, 1); // March 1
+    const daysUntilRrsp = Math.ceil((rrspDeadline - now) / (1000 * 60 * 60 * 24));
+
+    // Tax deadline: April 30
+    const taxYear = now.getMonth() >= 4 ? now.getFullYear() + 1 : now.getFullYear();
+    const taxDeadline = new Date(taxYear, 3, 30); // April 30
+    const daysUntilTax = Math.ceil((taxDeadline - now) / (1000 * 60 * 60 * 24));
+
+    // TFSA reset: January 1
+    const tfsaReset = new Date(now.getFullYear() + 1, 0, 1);
+    const daysUntilTfsaReset = Math.ceil((tfsaReset - now) / (1000 * 60 * 60 * 24));
+
+    // Seasonal flags
+    const month = now.getMonth(); // 0-indexed
+    const isTaxSeason = month >= 0 && month <= 3; // Jan-Apr
+    const isRrspSeason = month >= 0 && month <= 1; // Jan-Feb
+    const isBackToSchool = month >= 7 && month <= 8; // Aug-Sep
+    const isHolidayPrep = month >= 9 && month <= 10; // Oct-Nov
+    const isNewYear = month === 0; // Jan
+
+    return {
+        current_month: currentMonth,
+        current_quarter: currentQuarter,
+        days_until_rrsp_deadline: daysUntilRrsp,
+        days_until_tax_deadline: daysUntilTax,
+        days_until_tfsa_reset: daysUntilTfsaReset,
+        is_tax_season: isTaxSeason,
+        is_rrsp_season: isRrspSeason,
+        is_back_to_school: isBackToSchool,
+        is_holiday_prep: isHolidayPrep,
+        is_new_year: isNewYear
     };
 }
 

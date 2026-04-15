@@ -1,0 +1,846 @@
+{
+    "last_updated": "2026-04-01",
+    "data_disclaimer": "Historical returns are approximate and for educational purposes only. Past performance does not guarantee future results. Data updated quarterly.",
+    "etfs": [
+        {
+            "ticker": "XEQT",
+            "name": "iShares Core Equity ETF Portfolio",
+            "provider": "BlackRock (iShares)",
+            "category": "all_equity",
+            "subcategory": "global_equity",
+            "risk_level": "high",
+            "mer_percent": 0.20,
+            "distribution_yield_percent": 1.8,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 9000,
+            "geographic_allocation": {
+                "canada": 25,
+                "us": 45,
+                "international_developed": 22,
+                "emerging_markets": 8
+            },
+            "historical_returns": {
+                "ytd_percent": 4.2,
+                "one_year_percent": 12.5,
+                "three_year_annualized_percent": 8.1,
+                "five_year_annualized_percent": 9.3,
+                "since_inception_annualized_percent": 10.2
+            },
+            "suitable_for": ["long_term_growth", "retirement", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "All-in-one 100% equity ETF with global diversification. Single-fund solution for long-term growth investors.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "VEQT",
+            "name": "Vanguard All-Equity ETF Portfolio",
+            "provider": "Vanguard",
+            "category": "all_equity",
+            "subcategory": "global_equity",
+            "risk_level": "high",
+            "mer_percent": 0.24,
+            "distribution_yield_percent": 1.6,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 13000,
+            "geographic_allocation": {
+                "canada": 30,
+                "us": 42,
+                "international_developed": 20,
+                "emerging_markets": 8
+            },
+            "historical_returns": {
+                "ytd_percent": 4.0,
+                "one_year_percent": 12.1,
+                "three_year_annualized_percent": 7.8,
+                "five_year_annualized_percent": 9.0,
+                "since_inception_annualized_percent": 9.8
+            },
+            "suitable_for": ["long_term_growth", "retirement", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "All-in-one 100% equity ETF from Vanguard with slightly higher Canadian allocation than XEQT.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "XGRO",
+            "name": "iShares Core Growth ETF Portfolio",
+            "provider": "BlackRock (iShares)",
+            "category": "balanced",
+            "subcategory": "growth_balanced",
+            "risk_level": "moderate",
+            "mer_percent": 0.20,
+            "distribution_yield_percent": 2.0,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 9000,
+            "geographic_allocation": {
+                "canada": 20,
+                "us": 36,
+                "international_developed": 17,
+                "emerging_markets": 7
+            },
+            "historical_returns": {
+                "ytd_percent": 3.5,
+                "one_year_percent": 10.8,
+                "three_year_annualized_percent": 6.9,
+                "five_year_annualized_percent": 8.1,
+                "since_inception_annualized_percent": 8.7
+            },
+            "suitable_for": ["long_term_growth", "retirement", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate"],
+            "description": "80/20 stock-bond split for growth-oriented investors who want some downside protection.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "VGRO",
+            "name": "Vanguard Growth ETF Portfolio",
+            "provider": "Vanguard",
+            "category": "balanced",
+            "subcategory": "growth_balanced",
+            "risk_level": "moderate",
+            "mer_percent": 0.24,
+            "distribution_yield_percent": 1.9,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 13000,
+            "geographic_allocation": {
+                "canada": 24,
+                "us": 34,
+                "international_developed": 16,
+                "emerging_markets": 6
+            },
+            "historical_returns": {
+                "ytd_percent": 3.3,
+                "one_year_percent": 10.5,
+                "three_year_annualized_percent": 6.6,
+                "five_year_annualized_percent": 7.8,
+                "since_inception_annualized_percent": 8.4
+            },
+            "suitable_for": ["long_term_growth", "retirement", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate"],
+            "description": "Vanguard's 80/20 growth allocation ETF. Higher Canadian weighting than XGRO.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "XBAL",
+            "name": "iShares Core Balanced ETF Portfolio",
+            "provider": "BlackRock (iShares)",
+            "category": "balanced",
+            "subcategory": "balanced",
+            "risk_level": "moderate",
+            "mer_percent": 0.20,
+            "distribution_yield_percent": 2.2,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 9000,
+            "geographic_allocation": {
+                "canada": 22,
+                "us": 28,
+                "international_developed": 13,
+                "emerging_markets": 5
+            },
+            "historical_returns": {
+                "ytd_percent": 2.8,
+                "one_year_percent": 8.5,
+                "three_year_annualized_percent": 5.4,
+                "five_year_annualized_percent": 6.5,
+                "since_inception_annualized_percent": 7.2
+            },
+            "suitable_for": ["moderate_growth", "retirement", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["conservative", "moderate"],
+            "description": "60/40 stock-bond balanced ETF. Good for moderate risk tolerance or nearing retirement.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "VBAL",
+            "name": "Vanguard Balanced ETF Portfolio",
+            "provider": "Vanguard",
+            "category": "balanced",
+            "subcategory": "balanced",
+            "risk_level": "moderate",
+            "mer_percent": 0.24,
+            "distribution_yield_percent": 2.1,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 13000,
+            "geographic_allocation": {
+                "canada": 26,
+                "us": 26,
+                "international_developed": 12,
+                "emerging_markets": 4
+            },
+            "historical_returns": {
+                "ytd_percent": 2.6,
+                "one_year_percent": 8.2,
+                "three_year_annualized_percent": 5.1,
+                "five_year_annualized_percent": 6.2,
+                "since_inception_annualized_percent": 6.9
+            },
+            "suitable_for": ["moderate_growth", "retirement", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["conservative", "moderate"],
+            "description": "Vanguard's 60/40 balanced ETF. Slightly higher Canadian allocation.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "XIU",
+            "name": "iShares S&P/TSX 60 Index ETF",
+            "provider": "BlackRock (iShares)",
+            "category": "canadian_equity",
+            "subcategory": "large_cap",
+            "risk_level": "moderate",
+            "mer_percent": 0.18,
+            "distribution_yield_percent": 2.9,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 60,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 3.1,
+                "one_year_percent": 9.8,
+                "three_year_annualized_percent": 7.2,
+                "five_year_annualized_percent": 8.5,
+                "since_inception_annualized_percent": 7.8
+            },
+            "suitable_for": ["canadian_exposure", "dividends", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "Tracks Canada's 60 largest companies. One of the oldest and most traded Canadian ETFs.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "XIC",
+            "name": "iShares Core S&P/TSX Capped Composite Index ETF",
+            "provider": "BlackRock (iShares)",
+            "category": "canadian_equity",
+            "subcategory": "broad_market",
+            "risk_level": "moderate",
+            "mer_percent": 0.06,
+            "distribution_yield_percent": 2.7,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 230,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 2.9,
+                "one_year_percent": 9.5,
+                "three_year_annualized_percent": 7.0,
+                "five_year_annualized_percent": 8.2,
+                "since_inception_annualized_percent": 7.5
+            },
+            "suitable_for": ["canadian_exposure", "broad_market", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "Broad Canadian market exposure with 230+ holdings. Ultra-low MER at 0.06%.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "VCN",
+            "name": "Vanguard FTSE Canada All Cap Index ETF",
+            "provider": "Vanguard",
+            "category": "canadian_equity",
+            "subcategory": "all_cap",
+            "risk_level": "moderate",
+            "mer_percent": 0.05,
+            "distribution_yield_percent": 2.6,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 180,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 2.8,
+                "one_year_percent": 9.3,
+                "three_year_annualized_percent": 6.8,
+                "five_year_annualized_percent": 8.0,
+                "since_inception_annualized_percent": 7.3
+            },
+            "suitable_for": ["canadian_exposure", "all_cap", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "Vanguard's all-cap Canadian equity ETF. Lowest MER in category at 0.05%.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "VFV",
+            "name": "Vanguard S&P 500 Index ETF (CAD)",
+            "provider": "Vanguard",
+            "category": "us_equity",
+            "subcategory": "large_cap",
+            "risk_level": "moderate",
+            "mer_percent": 0.09,
+            "distribution_yield_percent": 1.3,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 500,
+            "geographic_allocation": {
+                "canada": 0,
+                "us": 100,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 5.1,
+                "one_year_percent": 14.2,
+                "three_year_annualized_percent": 9.8,
+                "five_year_annualized_percent": 11.5,
+                "since_inception_annualized_percent": 13.0
+            },
+            "suitable_for": ["us_exposure", "growth", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "CAD-denominated S&P 500 tracker. Low-cost US large-cap exposure for Canadian investors.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "XUU",
+            "name": "iShares Core S&P US Total Market Index ETF",
+            "provider": "BlackRock (iShares)",
+            "category": "us_equity",
+            "subcategory": "total_market",
+            "risk_level": "moderate",
+            "mer_percent": 0.07,
+            "distribution_yield_percent": 1.2,
+            "distribution_frequency": "semi-annually",
+            "holdings_count": 3700,
+            "geographic_allocation": {
+                "canada": 0,
+                "us": 100,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 4.8,
+                "one_year_percent": 13.8,
+                "three_year_annualized_percent": 9.5,
+                "five_year_annualized_percent": 11.2,
+                "since_inception_annualized_percent": 12.5
+            },
+            "suitable_for": ["us_exposure", "broad_market", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "Broad US total market exposure including mid and small caps. 3700+ holdings.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "ZSP",
+            "name": "BMO S&P 500 Index ETF",
+            "provider": "BMO",
+            "category": "us_equity",
+            "subcategory": "large_cap",
+            "risk_level": "moderate",
+            "mer_percent": 0.09,
+            "distribution_yield_percent": 1.3,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 500,
+            "geographic_allocation": {
+                "canada": 0,
+                "us": 100,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 5.0,
+                "one_year_percent": 14.0,
+                "three_year_annualized_percent": 9.6,
+                "five_year_annualized_percent": 11.3,
+                "since_inception_annualized_percent": 12.8
+            },
+            "suitable_for": ["us_exposure", "growth", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "BMO's S&P 500 tracker. Popular alternative to VFV with similar MER.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "XEF",
+            "name": "iShares Core MSCI EAFE IMI Index ETF",
+            "provider": "BlackRock (iShares)",
+            "category": "international",
+            "subcategory": "developed_markets",
+            "risk_level": "moderate",
+            "mer_percent": 0.22,
+            "distribution_yield_percent": 2.5,
+            "distribution_frequency": "semi-annually",
+            "holdings_count": 1500,
+            "geographic_allocation": {
+                "canada": 0,
+                "us": 0,
+                "international_developed": 100,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 3.2,
+                "one_year_percent": 8.9,
+                "three_year_annualized_percent": 5.5,
+                "five_year_annualized_percent": 6.8,
+                "since_inception_annualized_percent": 7.2
+            },
+            "suitable_for": ["international_diversification", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "International developed markets (Europe, Australasia, Far East) excluding North America.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "VIU",
+            "name": "Vanguard FTSE Developed All Cap ex North America Index ETF",
+            "provider": "Vanguard",
+            "category": "international",
+            "subcategory": "developed_ex_na",
+            "risk_level": "moderate",
+            "mer_percent": 0.22,
+            "distribution_yield_percent": 2.8,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 3800,
+            "geographic_allocation": {
+                "canada": 0,
+                "us": 0,
+                "international_developed": 100,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 3.0,
+                "one_year_percent": 8.5,
+                "three_year_annualized_percent": 5.2,
+                "five_year_annualized_percent": 6.5,
+                "since_inception_annualized_percent": 6.9
+            },
+            "suitable_for": ["international_diversification", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "Developed markets ex-North America with 3800+ holdings for maximum diversification.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "ZAG",
+            "name": "BMO Aggregate Bond Index ETF",
+            "provider": "BMO",
+            "category": "fixed_income",
+            "subcategory": "aggregate_bond",
+            "risk_level": "low",
+            "mer_percent": 0.09,
+            "distribution_yield_percent": 3.5,
+            "distribution_frequency": "monthly",
+            "holdings_count": 1400,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 1.2,
+                "one_year_percent": 3.2,
+                "three_year_annualized_percent": 0.5,
+                "five_year_annualized_percent": 1.8,
+                "since_inception_annualized_percent": 2.5
+            },
+            "suitable_for": ["capital_preservation", "income", "portfolio_balance", "rrsp"],
+            "risk_tolerance_match": ["conservative"],
+            "description": "Broad Canadian bond market ETF. Core fixed-income holding for portfolio stability.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "VAB",
+            "name": "Vanguard Canadian Aggregate Bond Index ETF",
+            "provider": "Vanguard",
+            "category": "fixed_income",
+            "subcategory": "aggregate_bond",
+            "risk_level": "low",
+            "mer_percent": 0.09,
+            "distribution_yield_percent": 3.4,
+            "distribution_frequency": "monthly",
+            "holdings_count": 1100,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 1.1,
+                "one_year_percent": 3.0,
+                "three_year_annualized_percent": 0.3,
+                "five_year_annualized_percent": 1.6,
+                "since_inception_annualized_percent": 2.3
+            },
+            "suitable_for": ["capital_preservation", "income", "portfolio_balance", "rrsp"],
+            "risk_tolerance_match": ["conservative"],
+            "description": "Vanguard's Canadian bond ETF. Similar to ZAG with slightly different index methodology.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "XBB",
+            "name": "iShares Core Canadian Universe Bond Index ETF",
+            "provider": "BlackRock (iShares)",
+            "category": "fixed_income",
+            "subcategory": "universe_bond",
+            "risk_level": "low",
+            "mer_percent": 0.10,
+            "distribution_yield_percent": 3.3,
+            "distribution_frequency": "monthly",
+            "holdings_count": 1200,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 1.0,
+                "one_year_percent": 2.9,
+                "three_year_annualized_percent": 0.2,
+                "five_year_annualized_percent": 1.5,
+                "since_inception_annualized_percent": 2.2
+            },
+            "suitable_for": ["capital_preservation", "income", "portfolio_balance", "rrsp"],
+            "risk_tolerance_match": ["conservative"],
+            "description": "iShares broad Canadian bond ETF. One of the longest-running Canadian bond ETFs.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "VDY",
+            "name": "Vanguard FTSE Canadian High Dividend Yield Index ETF",
+            "provider": "Vanguard",
+            "category": "dividend",
+            "subcategory": "high_dividend",
+            "risk_level": "moderate",
+            "mer_percent": 0.22,
+            "distribution_yield_percent": 4.2,
+            "distribution_frequency": "monthly",
+            "holdings_count": 50,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 2.5,
+                "one_year_percent": 8.8,
+                "three_year_annualized_percent": 7.5,
+                "five_year_annualized_percent": 8.9,
+                "since_inception_annualized_percent": 8.2
+            },
+            "suitable_for": ["income", "dividends", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["conservative", "moderate"],
+            "description": "High dividend yield from Canadian large-caps. Heavy bank and energy weighting.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "XDV",
+            "name": "iShares Canadian Select Dividend Index ETF",
+            "provider": "BlackRock (iShares)",
+            "category": "dividend",
+            "subcategory": "select_dividend",
+            "risk_level": "moderate",
+            "mer_percent": 0.55,
+            "distribution_yield_percent": 4.0,
+            "distribution_frequency": "monthly",
+            "holdings_count": 30,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 2.2,
+                "one_year_percent": 8.0,
+                "three_year_annualized_percent": 6.8,
+                "five_year_annualized_percent": 7.5,
+                "since_inception_annualized_percent": 7.0
+            },
+            "suitable_for": ["income", "dividends", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["conservative", "moderate"],
+            "description": "Canadian dividend aristocrats selection. Higher MER but strong dividend track record.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "CDZ",
+            "name": "iShares S&P/TSX Canadian Dividend Aristocrats Index ETF",
+            "provider": "BlackRock (iShares)",
+            "category": "dividend",
+            "subcategory": "dividend_aristocrats",
+            "risk_level": "moderate",
+            "mer_percent": 0.66,
+            "distribution_yield_percent": 3.8,
+            "distribution_frequency": "monthly",
+            "holdings_count": 90,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 2.0,
+                "one_year_percent": 7.5,
+                "three_year_annualized_percent": 6.2,
+                "five_year_annualized_percent": 7.0,
+                "since_inception_annualized_percent": 6.5
+            },
+            "suitable_for": ["income", "dividend_growth", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["conservative", "moderate"],
+            "description": "Canadian companies with 5+ years of consecutive dividend growth.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "CASH",
+            "name": "CI High Interest Savings ETF",
+            "provider": "CI Global Asset Management",
+            "category": "hisa_etf",
+            "subcategory": "high_interest_savings",
+            "risk_level": "low",
+            "mer_percent": 0.16,
+            "distribution_yield_percent": 4.8,
+            "distribution_frequency": "monthly",
+            "holdings_count": 1,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 1.6,
+                "one_year_percent": 4.8,
+                "three_year_annualized_percent": 3.8,
+                "five_year_annualized_percent": 2.9,
+                "since_inception_annualized_percent": 2.5
+            },
+            "suitable_for": ["emergency_fund", "short_term_savings", "tfsa"],
+            "risk_tolerance_match": ["conservative"],
+            "description": "High-interest savings account in ETF form. Deposits held at major Canadian banks. Near-zero principal risk.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "PSA",
+            "name": "Purpose High Interest Savings ETF",
+            "provider": "Purpose Investments",
+            "category": "hisa_etf",
+            "subcategory": "high_interest_savings",
+            "risk_level": "low",
+            "mer_percent": 0.17,
+            "distribution_yield_percent": 4.6,
+            "distribution_frequency": "monthly",
+            "holdings_count": 1,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 1.5,
+                "one_year_percent": 4.6,
+                "three_year_annualized_percent": 3.6,
+                "five_year_annualized_percent": 2.7,
+                "since_inception_annualized_percent": 2.3
+            },
+            "suitable_for": ["emergency_fund", "short_term_savings", "tfsa"],
+            "risk_tolerance_match": ["conservative"],
+            "description": "HISA ETF from Purpose Investments. Good alternative to traditional savings accounts.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "HSAV",
+            "name": "Global X High Interest Savings ETF",
+            "provider": "Global X (formerly Horizons)",
+            "category": "hisa_etf",
+            "subcategory": "high_interest_savings",
+            "risk_level": "low",
+            "mer_percent": 0.18,
+            "distribution_yield_percent": 4.5,
+            "distribution_frequency": "monthly",
+            "holdings_count": 1,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 1.5,
+                "one_year_percent": 4.5,
+                "three_year_annualized_percent": 3.5,
+                "five_year_annualized_percent": 2.6,
+                "since_inception_annualized_percent": 2.2
+            },
+            "suitable_for": ["emergency_fund", "short_term_savings", "tfsa"],
+            "risk_tolerance_match": ["conservative"],
+            "description": "Global X HISA ETF. Tax-efficient structure for non-registered accounts.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "ZRE",
+            "name": "BMO Equal Weight REITs Index ETF",
+            "provider": "BMO",
+            "category": "sector",
+            "subcategory": "real_estate",
+            "risk_level": "moderate",
+            "mer_percent": 0.61,
+            "distribution_yield_percent": 4.5,
+            "distribution_frequency": "monthly",
+            "holdings_count": 24,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 1.8,
+                "one_year_percent": 6.5,
+                "three_year_annualized_percent": 2.1,
+                "five_year_annualized_percent": 4.2,
+                "since_inception_annualized_percent": 5.8
+            },
+            "suitable_for": ["income", "real_estate_exposure", "tfsa"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "Equal-weight Canadian REITs for real estate exposure without owning property.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "XIT",
+            "name": "iShares S&P/TSX Capped Information Technology Index ETF",
+            "provider": "BlackRock (iShares)",
+            "category": "sector",
+            "subcategory": "technology",
+            "risk_level": "high",
+            "mer_percent": 0.61,
+            "distribution_yield_percent": 0.3,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 20,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 5.5,
+                "one_year_percent": 15.2,
+                "three_year_annualized_percent": 10.5,
+                "five_year_annualized_percent": 14.8,
+                "since_inception_annualized_percent": 11.5
+            },
+            "suitable_for": ["sector_bet", "growth"],
+            "risk_tolerance_match": ["aggressive"],
+            "description": "Canadian tech sector ETF dominated by Shopify, Constellation Software, and OpenText.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "HCAL",
+            "name": "Hamilton Enhanced Canadian Bank ETF",
+            "provider": "Hamilton ETFs",
+            "category": "sector",
+            "subcategory": "financials",
+            "risk_level": "high",
+            "mer_percent": 0.65,
+            "distribution_yield_percent": 5.8,
+            "distribution_frequency": "monthly",
+            "holdings_count": 6,
+            "geographic_allocation": {
+                "canada": 100,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 0
+            },
+            "historical_returns": {
+                "ytd_percent": 3.0,
+                "one_year_percent": 11.5,
+                "three_year_annualized_percent": 8.2,
+                "five_year_annualized_percent": 9.5,
+                "since_inception_annualized_percent": 10.0
+            },
+            "suitable_for": ["income", "bank_exposure"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "Leveraged Canadian bank ETF using covered call strategy. High yield but concentrated risk.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "XEC",
+            "name": "iShares Core MSCI Emerging Markets IMI Index ETF",
+            "provider": "BlackRock (iShares)",
+            "category": "international",
+            "subcategory": "emerging_markets",
+            "risk_level": "high",
+            "mer_percent": 0.27,
+            "distribution_yield_percent": 2.1,
+            "distribution_frequency": "semi-annually",
+            "holdings_count": 2700,
+            "geographic_allocation": {
+                "canada": 0,
+                "us": 0,
+                "international_developed": 0,
+                "emerging_markets": 100
+            },
+            "historical_returns": {
+                "ytd_percent": 2.0,
+                "one_year_percent": 6.2,
+                "three_year_annualized_percent": 1.8,
+                "five_year_annualized_percent": 3.5,
+                "since_inception_annualized_percent": 4.8
+            },
+            "suitable_for": ["international_diversification", "emerging_market_exposure", "tfsa"],
+            "risk_tolerance_match": ["aggressive"],
+            "description": "Emerging markets (China, India, Brazil, Taiwan) for global diversification. Higher risk/reward.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        },
+        {
+            "ticker": "GEQT",
+            "name": "iShares ESG Aware All Equity ETF Portfolio",
+            "provider": "BlackRock (iShares)",
+            "category": "all_equity",
+            "subcategory": "esg",
+            "risk_level": "high",
+            "mer_percent": 0.24,
+            "distribution_yield_percent": 1.5,
+            "distribution_frequency": "quarterly",
+            "holdings_count": 5000,
+            "geographic_allocation": {
+                "canada": 25,
+                "us": 45,
+                "international_developed": 22,
+                "emerging_markets": 8
+            },
+            "historical_returns": {
+                "ytd_percent": 3.8,
+                "one_year_percent": 11.5,
+                "three_year_annualized_percent": 7.2,
+                "five_year_annualized_percent": 8.5,
+                "since_inception_annualized_percent": 9.0
+            },
+            "suitable_for": ["esg_investing", "long_term_growth", "tfsa", "rrsp"],
+            "risk_tolerance_match": ["moderate", "aggressive"],
+            "description": "ESG-screened all-equity ETF. Similar to XEQT but excludes controversial companies.",
+            "buy_at": ["Wealthsimple", "Questrade", "TD Direct Investing"]
+        }
+    ],
+    "categories": {
+        "all_equity": "100% stocks, highest growth potential, highest volatility",
+        "balanced": "Mix of stocks and bonds, moderate growth, moderate volatility",
+        "fixed_income": "Bonds and fixed income, lower growth, lower volatility",
+        "dividend": "Focus on dividend-paying stocks, income generation",
+        "canadian_equity": "Canadian stock market focused",
+        "us_equity": "US stock market focused",
+        "international": "International/global market focused",
+        "sector": "Specific sector (tech, real estate, etc.)",
+        "hisa_etf": "High-interest savings account ETFs, near-zero risk"
+    },
+    "risk_profiles": {
+        "conservative": {
+            "description": "Capital preservation, low volatility tolerance",
+            "recommended_allocation": { "equity": 30, "fixed_income": 70 },
+            "suitable_categories": ["fixed_income", "balanced", "hisa_etf", "dividend"]
+        },
+        "moderate": {
+            "description": "Balanced growth and stability",
+            "recommended_allocation": { "equity": 60, "fixed_income": 40 },
+            "suitable_categories": ["balanced", "all_equity", "dividend", "canadian_equity"]
+        },
+        "aggressive": {
+            "description": "Maximum growth, high volatility tolerance",
+            "recommended_allocation": { "equity": 90, "fixed_income": 10 },
+            "suitable_categories": ["all_equity", "us_equity", "international", "sector"]
+        }
+    }
+}

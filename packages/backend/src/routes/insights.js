@@ -10,6 +10,7 @@ const { getUserFinancialSummary } = require('../services/insight_data');
 const { generateInsights } = require('../services/ai_insights');
 const { saveAIGeneratedArticles } = require('../services/educational_content');
 const { authenticateToken } = require('../middleware/auth');
+const { calculateHealthScore, saveHealthScore } = require('../services/health_score');
 
 /**
  * GET /api/insights
@@ -24,7 +25,8 @@ router.get('/', authenticateToken, async (req, res) => {
         // Check cache first (unless force refresh)
         if (!forceRefresh) {
             const cacheResult = await pool.query(
-                `SELECT insights, summary, generated_at, cache_expires_at, ai_model_used
+                `SELECT insights, summary, generated_at, cache_expires_at, ai_model_used,
+                        health_score, health_score_breakdown, health_score_trend
                  FROM user_insights
                  WHERE user_id = $1 AND cache_expires_at > NOW()
                  ORDER BY generated_at DESC
@@ -34,10 +36,30 @@ router.get('/', authenticateToken, async (req, res) => {
 
             if (cacheResult.rows.length > 0) {
                 const cached = cacheResult.rows[0];
+                // Reconstruct health score from cached columns
+                let healthScore = null;
+                if (cached.health_score !== null) {
+                    const score = cached.health_score;
+                    let grade, color;
+                    if (score >= 90) { grade = 'A'; color = '#4CAF50'; }
+                    else if (score >= 75) { grade = 'B'; color = '#8BC34A'; }
+                    else if (score >= 60) { grade = 'C'; color = '#FFC107'; }
+                    else if (score >= 40) { grade = 'D'; color = '#FF9800'; }
+                    else { grade = 'F'; color = '#F44336'; }
+                    healthScore = {
+                        score,
+                        grade,
+                        color,
+                        breakdown: cached.health_score_breakdown,
+                        trend: cached.health_score_trend,
+                        previous_score: null
+                    };
+                }
                 return res.json({
                     success: true,
                     data: {
                         insights: cached.insights,
+                        health_score: healthScore,
                         summary: cached.summary,
                         generated_at: cached.generated_at,
                         cache_expires_at: cached.cache_expires_at,
@@ -69,15 +91,25 @@ router.get('/', authenticateToken, async (req, res) => {
             }
         }
 
-        // Step 4: Save insights to cache
+        // Step 4: Calculate health score
+        let healthScore = null;
+        try {
+            healthScore = await calculateHealthScore(userData, userId);
+            await saveHealthScore(userId, healthScore);
+        } catch (hsError) {
+            console.error('Error calculating health score:', hsError);
+        }
+
+        // Step 5: Save insights to cache (with health score)
         const cacheExpiresAt = new Date();
         cacheExpiresAt.setHours(cacheExpiresAt.getHours() + cacheHours);
 
         await pool.query(
             `INSERT INTO user_insights
              (user_id, insights, summary, generated_at, cache_expires_at, generation_trigger,
-              token_count_input, token_count_output, ai_model_used, generation_time_ms)
-             VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9)`,
+              token_count_input, token_count_output, ai_model_used, generation_time_ms,
+              health_score, health_score_breakdown, health_score_trend)
+             VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
             [
                 userId,
                 JSON.stringify(result.insights),
@@ -87,7 +119,10 @@ router.get('/', authenticateToken, async (req, res) => {
                 result.metadata.token_count_input,
                 result.metadata.token_count_output,
                 result.metadata.ai_model_used,
-                result.metadata.generation_time_ms
+                result.metadata.generation_time_ms,
+                healthScore?.score || null,
+                healthScore ? JSON.stringify(healthScore.breakdown) : null,
+                healthScore?.trend || null
             ]
         );
 
@@ -95,6 +130,7 @@ router.get('/', authenticateToken, async (req, res) => {
             success: true,
             data: {
                 insights: result.insights,
+                health_score: healthScore,
                 summary: result.summary,
                 generated_at: new Date().toISOString(),
                 cache_expires_at: cacheExpiresAt.toISOString(),
@@ -351,6 +387,66 @@ router.put('/preferences', authenticateToken, async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to update preferences'
+        });
+    }
+});
+
+/**
+ * GET /api/insights/health-score
+ * Get just the financial health score (faster than full insights)
+ */
+router.get('/health-score', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Try to get cached score first
+        const cacheResult = await pool.query(
+            `SELECT health_score, health_score_breakdown, health_score_trend, generated_at
+             FROM user_insights
+             WHERE user_id = $1 AND health_score IS NOT NULL
+             ORDER BY generated_at DESC
+             LIMIT 1`,
+            [userId]
+        );
+
+        if (cacheResult.rows.length > 0) {
+            const cached = cacheResult.rows[0];
+            const score = cached.health_score;
+            let grade, color;
+            if (score >= 90) { grade = 'A'; color = '#4CAF50'; }
+            else if (score >= 75) { grade = 'B'; color = '#8BC34A'; }
+            else if (score >= 60) { grade = 'C'; color = '#FFC107'; }
+            else if (score >= 40) { grade = 'D'; color = '#FF9800'; }
+            else { grade = 'F'; color = '#F44336'; }
+
+            return res.json({
+                success: true,
+                data: {
+                    score,
+                    grade,
+                    color,
+                    breakdown: cached.health_score_breakdown,
+                    trend: cached.health_score_trend,
+                    previous_score: null,
+                    generated_at: cached.generated_at
+                }
+            });
+        }
+
+        // No cached score - calculate fresh
+        const userData = await getUserFinancialSummary(userId, 90);
+        const healthScore = await calculateHealthScore(userData, userId);
+        await saveHealthScore(userId, healthScore);
+
+        res.json({
+            success: true,
+            data: healthScore
+        });
+    } catch (error) {
+        console.error('Error fetching health score:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to calculate health score'
         });
     }
 });

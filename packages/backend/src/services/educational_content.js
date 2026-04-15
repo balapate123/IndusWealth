@@ -19,15 +19,26 @@ const TRUSTED_SOURCES = [
     { domain: 'forbes.com', name: 'Forbes' }
 ];
 
-// Category colors for UI
+// Category colors for UI (expanded for new categories)
 const CATEGORY_COLORS = {
     budgeting: '#3B82F6',
     investing: '#10B981',
+    investing_basics: '#10B981',
     debt: '#F59E0B',
+    debt_management: '#F59E0B',
     taxes: '#8B5CF6',
+    tax_planning: '#8B5CF6',
     savings: '#06B6D4',
-    general: '#C9A227'
+    general: '#C9A227',
+    canadian_finance_101: '#3B82F6',
+    etf_education: '#22C55E',
+    wealth_building: '#6366F1'
 };
+
+// Path to curated articles JSON
+const CURATED_ARTICLES_PATH = process.env.CURATED_ARTICLES_PATH
+    ? require('path').resolve(process.env.CURATED_ARTICLES_PATH)
+    : require('path').join(__dirname, '..', 'data', 'curated_articles.json');
 
 /**
  * Get list of trusted sources for AI prompt
@@ -334,6 +345,135 @@ async function checkBookmarks(userId, articleIds) {
 }
 
 /**
+ * Sync curated articles from JSON file to database
+ * Sets source_type='curated' and 90-day expiry (instead of 7-day for AI articles)
+ * @returns {Object} { synced, new_count, updated }
+ */
+async function syncCuratedArticles() {
+    try {
+        const fs = require('fs');
+        const raw = fs.readFileSync(CURATED_ARTICLES_PATH, 'utf8');
+        const data = JSON.parse(raw);
+        const articles = data.articles;
+
+        let newCount = 0;
+        let updatedCount = 0;
+
+        for (const article of articles) {
+            // Determine source name from URL if not provided
+            let sourceName = article.source || 'Unknown';
+            for (const source of TRUSTED_SOURCES) {
+                if (article.url.includes(source.domain)) {
+                    sourceName = source.name;
+                    break;
+                }
+            }
+
+            const result = await pool.query(
+                `INSERT INTO educational_articles
+                    (external_url, title, description, image_url, source_name, category,
+                     read_time_minutes, source_type, tags, difficulty, url_status,
+                     last_verified_at, expires_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'curated', $8, $9, 'active', $10,
+                         NOW() + INTERVAL '90 days')
+                 ON CONFLICT (external_url)
+                 DO UPDATE SET
+                    title = EXCLUDED.title,
+                    description = EXCLUDED.description,
+                    image_url = EXCLUDED.image_url,
+                    source_name = EXCLUDED.source_name,
+                    category = EXCLUDED.category,
+                    read_time_minutes = EXCLUDED.read_time_minutes,
+                    source_type = 'curated',
+                    tags = EXCLUDED.tags,
+                    difficulty = EXCLUDED.difficulty,
+                    url_status = 'active',
+                    last_verified_at = EXCLUDED.last_verified_at,
+                    fetched_at = NOW(),
+                    expires_at = NOW() + INTERVAL '90 days'
+                 RETURNING id, (xmax = 0) AS is_new`,
+                [
+                    article.url,
+                    article.title,
+                    article.description,
+                    article.image_url || null,
+                    sourceName,
+                    article.category,
+                    article.read_time_minutes || 5,
+                    article.tags || [],
+                    article.difficulty || 'beginner',
+                    article.last_verified ? new Date(article.last_verified) : new Date()
+                ]
+            );
+
+            const row = result.rows[0];
+            if (row.is_new) newCount++;
+            else updatedCount++;
+
+            // Link to insight types if provided
+            if (article.related_insight_types && article.related_insight_types.length > 0) {
+                for (const insightType of article.related_insight_types) {
+                    await pool.query(
+                        `INSERT INTO insight_articles (insight_type, article_id, relevance_score)
+                         VALUES ($1, $2, 1.0)
+                         ON CONFLICT (insight_type, article_id)
+                         DO UPDATE SET relevance_score = GREATEST(insight_articles.relevance_score, 1.0)`,
+                        [insightType, row.id]
+                    );
+                }
+            }
+        }
+
+        const synced = newCount + updatedCount;
+        console.log(`Curated articles sync complete: ${synced} synced (${newCount} new, ${updatedCount} updated)`);
+        return { synced, new_count: newCount, updated: updatedCount };
+    } catch (err) {
+        console.error('Error syncing curated articles:', err);
+        throw err;
+    }
+}
+
+/**
+ * Get recommended articles for a user based on their current insight types
+ * @param {number} userId
+ * @param {string[]} insightTypes - Array of insight types from current insights
+ * @param {number} limit
+ * @returns {Object[]} Recommended articles sorted by relevance
+ */
+async function getRecommendedArticles(insightTypes = [], limit = 10) {
+    if (!insightTypes || insightTypes.length === 0) {
+        // Fall back to curated articles sorted by recency
+        const result = await pool.query(
+            `SELECT id, external_url, title, description, image_url,
+                    source_name, category, read_time_minutes, source_type, difficulty
+             FROM educational_articles
+             WHERE expires_at > NOW() AND url_status = 'active'
+             ORDER BY source_type = 'curated' DESC, fetched_at DESC
+             LIMIT $1`,
+            [limit]
+        );
+        return result.rows.map(a => ({ ...a, categoryColor: getCategoryColor(a.category) }));
+    }
+
+    const result = await pool.query(
+        `SELECT DISTINCT ea.id, ea.external_url, ea.title, ea.description, ea.image_url,
+                ea.source_name, ea.category, ea.read_time_minutes, ea.source_type,
+                ea.difficulty, MAX(ia.relevance_score) as relevance
+         FROM insight_articles ia
+         JOIN educational_articles ea ON ia.article_id = ea.id
+         WHERE ia.insight_type = ANY($1)
+           AND ea.expires_at > NOW()
+           AND ea.url_status = 'active'
+         GROUP BY ea.id
+         ORDER BY ea.source_type = 'curated' DESC, relevance DESC
+         LIMIT $2`,
+        [insightTypes, limit]
+    );
+
+    return result.rows.map(a => ({ ...a, categoryColor: getCategoryColor(a.category) }));
+}
+
+/**
  * Seed initial educational articles (for development/testing)
  */
 async function seedInitialArticles() {
@@ -427,6 +567,8 @@ module.exports = {
     getCategories,
     cacheArticleFromUrl,
     saveAIGeneratedArticles,
+    syncCuratedArticles,
+    getRecommendedArticles,
     addBookmark,
     removeBookmark,
     getBookmarks,

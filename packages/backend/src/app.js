@@ -141,6 +141,11 @@ app.use('/users', require('./routes/users'));
 app.use('/analytics', require('./routes/analytics'));
 app.use('/insights', require('./routes/insights'));
 app.use('/educational', require('./routes/educational'));
+app.use('/etfs', require('./routes/etfs'));
+
+// Sync curated articles on startup (non-blocking)
+const { syncCuratedArticles } = require('./services/educational_content');
+syncCuratedArticles().catch(err => console.error('Curated article sync failed on startup:', err));
 app.use('/2fa', require('./routes/twoFactor'));
 app.use('/feedback', require('./routes/feedback'));
 
