@@ -20,6 +20,7 @@ import WealthAcademyScreen from '../screens/WealthAcademyScreen';
 import ArticleWebViewScreen from '../screens/ArticleWebViewScreen';
 import LegalDocScreen from '../screens/LegalDocScreen';
 import FeedbackScreen from '../screens/FeedbackScreen';
+import ETFListScreen from '../screens/ETFListScreen';
 import EmailVerificationScreen from '../screens/EmailVerificationScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
@@ -232,6 +233,13 @@ const AppNavigator = () => {
                 <Stack.Screen
                     name="Feedback"
                     component={FeedbackScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="ETFList"
+                    component={ETFListScreen}
                     options={{
                         presentation: 'card',
                     }}
