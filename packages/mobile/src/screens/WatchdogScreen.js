@@ -316,8 +316,20 @@ const WatchdogScreen = () => {
 
                     {filteredExpenses.length === 0 && !error && (
                         <View style={styles.emptyState}>
-                            <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.GREEN} />
-                            <Text style={styles.emptyText}>No flagged expenses in this category</Text>
+                            {expenses.length === 0 ? (
+                                <>
+                                    <Ionicons name="shield-outline" size={48} color={COLORS.GOLD} />
+                                    <Text style={styles.emptyTitle}>Connect Your Bank to Activate Watchdog</Text>
+                                    <Text style={styles.emptyText}>
+                                        We need at least 2 months of transaction history to detect recurring expenses.
+                                    </Text>
+                                </>
+                            ) : (
+                                <>
+                                    <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.GREEN} />
+                                    <Text style={styles.emptyText}>No flagged expenses in this category</Text>
+                                </>
+                            )}
                         </View>
                     )}
                 </View>
@@ -605,6 +617,13 @@ const styles = StyleSheet.create({
     emptyState: {
         alignItems: 'center',
         padding: SPACING.XL,
+    },
+    emptyTitle: {
+        color: COLORS.WHITE,
+        fontSize: 16,
+        fontFamily: FONTS.BOLD,
+        marginTop: SPACING.MEDIUM,
+        textAlign: 'center',
     },
     emptyText: {
         color: COLORS.TEXT_MUTED,
