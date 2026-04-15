@@ -17,6 +17,7 @@ import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import { api } from '../services/api';
 import cache from '../services/cache';
 import CustomAlert from '../components/CustomAlert';
+import { identify, track, EVENTS } from '../services/analytics';
 
 // Local password strength scoring (matches backend logic)
 const getPasswordScore = (pw) => {
@@ -89,6 +90,10 @@ const SignupScreen = ({ navigation }) => {
             const response = await api.auth.signup(name, email, password);
 
             if (response.success) {
+                // Track signup event
+                identify(response.user.id.toString(), { email: response.user.email, name: response.user.name });
+                track(EVENTS.SIGNUP);
+
                 // Auto login after signup
                 // Save user session
                 await cache.setCachedUser(response.user);
@@ -96,18 +101,11 @@ const SignupScreen = ({ navigation }) => {
                 // Set global user ID
                 global.CURRENT_USER_ID = response.user.id;
 
-                // Show success and navigate to bank connection
-                showAlert(
-                    'Welcome!',
-                    'Your account has been created successfully. Let\'s connect your bank.',
-                    [{
-                        text: 'Connect Bank',
-                        onPress: () => {
-                            setAlertVisible(false);
-                            navigation.navigate('ConnectBank', { isOnboarding: true });
-                        }
-                    }]
-                );
+                // Navigate to email verification
+                navigation.navigate('EmailVerification', {
+                    email: email,
+                    name: name,
+                });
             } else {
                 showAlert('Signup Failed', response.message || 'Could not create account');
             }

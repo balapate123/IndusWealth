@@ -3,6 +3,7 @@ import { Platform, View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
 import { useFonts, SpaceGrotesk_400Regular, SpaceGrotesk_500Medium, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
+import { initAnalytics } from './src/services/analytics';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -12,6 +13,9 @@ export default function App() {
   });
 
   useEffect(() => {
+    // Initialize analytics
+    initAnalytics();
+
     // Set Android navigation bar to dark color (not available on web)
     if (Platform.OS === 'android') {
       const NavigationBar = require('expo-navigation-bar');

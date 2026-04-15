@@ -4,6 +4,7 @@
 // Replace with your actual IP when testing on a physical device
 
 import cache from './cache';
+import { reset as resetAnalytics } from './analytics';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://induswealth.onrender.com';
 
@@ -376,6 +377,7 @@ export const api = {
             } catch (error) {
                 // Ignore logout errors
             }
+            resetAnalytics();
             await cache.logout();
         },
 
@@ -406,6 +408,25 @@ export const api = {
         checkPasswordStrength: (password) => apiRequest('/users/password-strength', {
             method: 'POST',
             body: JSON.stringify({ password }),
+        }),
+
+        verifyEmail: (code) => apiRequest('/users/verify-email', {
+            method: 'POST',
+            body: JSON.stringify({ code }),
+        }),
+
+        resendVerification: () => apiRequest('/users/resend-verification', {
+            method: 'POST',
+        }),
+
+        forgotPassword: (email) => apiRequest('/users/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        }),
+
+        resetPassword: (code, newPassword) => apiRequest('/users/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({ code, newPassword }),
         }),
     },
 

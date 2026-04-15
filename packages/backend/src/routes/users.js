@@ -10,8 +10,14 @@ const { successResponse } = require('../utils/responseHelper');
 const { validatePassword, getPasswordStrength } = require('../utils/passwordValidator');
 const { checkAccountLock, recordFailedAttempt, recordSuccessfulLogin } = require('../utils/loginProtection');
 const { encrypt, decrypt } = require('../services/encryption');
+const emailService = require('../services/email');
 
 const logger = createLogger('USERS');
+
+// Generate a 6-digit numeric code for email verification / password reset
+const generateSixDigitCode = () => {
+    return crypto.randomInt(100000, 999999).toString();
+};
 
 // POST /users/signup
 // Create a new user and return JWT token
@@ -55,6 +61,16 @@ router.post('/signup', async (req, res, next) => {
         // Create user
         const user = await db.createUser(email, passwordHash, name || 'User');
 
+        // Generate email verification code
+        const verificationCode = generateSixDigitCode();
+        const codeHash = crypto.createHash('sha256').update(verificationCode).digest('hex');
+        const codeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        await db.setEmailVerificationToken(user.id, codeHash, codeExpiry);
+
+        // Send verification email (non-blocking — don't fail signup if email fails)
+        emailService.sendVerificationEmail(email, name || 'User', verificationCode)
+            .catch(err => logger.error('Failed to send verification email', { ...ctx, error: err }));
+
         // Generate tokens
         const accessToken = generateAccessToken(user);
         const { token: refreshToken, hash: refreshHash, familyId } = generateRefreshToken();
@@ -67,7 +83,7 @@ router.post('/signup', async (req, res, next) => {
 
         res.status(201).json({
             success: true,
-            message: 'Account created successfully',
+            message: 'Account created successfully. Please verify your email.',
             token: accessToken, // backward compat
             accessToken,
             refreshToken,
@@ -76,6 +92,7 @@ router.post('/signup', async (req, res, next) => {
                 email: user.email,
                 name: user.name,
                 hasPlaidLinked: false,
+                emailVerified: false,
             },
             requestId: req.requestId
         });
@@ -218,6 +235,7 @@ router.get('/me', authenticateToken, async (req, res, next) => {
                 name: user.name,
                 dateOfBirth: user.date_of_birth,
                 hasPlaidLinked: !!user.plaid_access_token,
+                emailVerified: !!user.email_verified,
                 createdAt: user.created_at,
             }
         }, { timestamp: new Date().toISOString() });
@@ -477,6 +495,165 @@ router.post('/password-strength', (req, res) => {
     const { password } = req.body;
     const strength = getPasswordStrength(password || '');
     res.json({ success: true, ...strength });
+});
+
+// POST /users/verify-email
+// Verify email address with a 6-digit code
+router.post('/verify-email', async (req, res, next) => {
+    const ctx = { requestId: req.requestId };
+    logger.info('Email verification attempt', ctx);
+
+    try {
+        const { code } = req.body;
+        if (!code) {
+            throw new ValidationError('Verification code is required', { field: 'code' });
+        }
+
+        const codeHash = crypto.createHash('sha256').update(code.toString().trim()).digest('hex');
+        const result = await db.verifyEmail(codeHash);
+
+        if (!result) {
+            throw new AuthError('Invalid or expired verification code', 'INVALID_TOKEN');
+        }
+
+        // Send welcome email (non-blocking)
+        emailService.sendWelcomeEmail(result.email, result.name)
+            .catch(err => logger.error('Failed to send welcome email', { ...ctx, error: err }));
+
+        logger.info('Email verified successfully', { ...ctx, userId: result.id });
+
+        successResponse(res, { message: 'Email verified successfully' });
+    } catch (error) {
+        logger.error('Email verification failed', { ...ctx, error });
+        next(error);
+    }
+});
+
+// POST /users/resend-verification
+// Resend email verification code (requires auth)
+router.post('/resend-verification', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    logger.info('Resend verification email requested', ctx);
+
+    try {
+        const user = await db.getUserById(req.user.id);
+
+        if (!user) {
+            throw new NotFoundError('User');
+        }
+
+        if (user.email_verified) {
+            throw new ValidationError('Email is already verified');
+        }
+
+        // Generate new code
+        const verificationCode = generateSixDigitCode();
+        const codeHash = crypto.createHash('sha256').update(verificationCode).digest('hex');
+        const codeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        await db.setEmailVerificationToken(user.id, codeHash, codeExpiry);
+
+        // Send verification email
+        await emailService.sendVerificationEmail(user.email, user.name, verificationCode);
+
+        logger.info('Verification email resent', ctx);
+
+        successResponse(res, { message: 'Verification email sent' });
+    } catch (error) {
+        logger.error('Failed to resend verification email', { ...ctx, error });
+        next(error);
+    }
+});
+
+// POST /users/forgot-password
+// Request a password reset code (public, rate-limited)
+router.post('/forgot-password', async (req, res, next) => {
+    const ctx = { requestId: req.requestId };
+    const email = req.body.email?.toLowerCase()?.trim();
+    logger.info('Password reset requested', { ...ctx, email });
+
+    try {
+        if (!email) {
+            throw new ValidationError('Email is required', { field: 'email' });
+        }
+
+        const user = await db.getUserByEmail(email);
+
+        // Always return success to prevent email enumeration
+        if (user) {
+            const resetCode = generateSixDigitCode();
+            const codeHash = crypto.createHash('sha256').update(resetCode).digest('hex');
+            const codeExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+            await db.setPasswordResetToken(user.id, codeHash, codeExpiry);
+
+            // Send reset email (non-blocking)
+            emailService.sendPasswordResetEmail(email, user.name, resetCode)
+                .catch(err => logger.error('Failed to send reset email', { ...ctx, error: err }));
+        }
+
+        logger.info('Password reset response sent (anti-enumeration)', ctx);
+
+        successResponse(res, {
+            message: 'If an account exists with this email, a reset code has been sent.'
+        });
+    } catch (error) {
+        logger.error('Password reset request failed', { ...ctx, error });
+        next(error);
+    }
+});
+
+// POST /users/reset-password
+// Reset password with a valid reset code
+router.post('/reset-password', async (req, res, next) => {
+    const ctx = { requestId: req.requestId };
+    logger.info('Password reset attempt', ctx);
+
+    try {
+        const { code, newPassword } = req.body;
+
+        if (!code || !newPassword) {
+            throw new ValidationError('Reset code and new password are required', {
+                fields: ['code', 'newPassword']
+            });
+        }
+
+        // Validate password strength
+        const passwordCheck = validatePassword(newPassword);
+        if (!passwordCheck.valid) {
+            throw new ValidationError(passwordCheck.errors[0], {
+                field: 'newPassword',
+                errors: passwordCheck.errors
+            });
+        }
+
+        const codeHash = crypto.createHash('sha256').update(code.toString().trim()).digest('hex');
+        const user = await db.getPasswordResetUser(codeHash);
+
+        if (!user) {
+            throw new AuthError('Invalid or expired reset code', 'INVALID_TOKEN');
+        }
+
+        // Hash new password
+        const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+        // Update password
+        await db.pool.query(
+            'UPDATE users SET password_hash = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2',
+            [newPasswordHash, user.id]
+        );
+
+        // Clear reset token
+        await db.clearPasswordResetToken(user.id);
+
+        // Revoke all existing sessions
+        await revokeAllUserTokens(user.id);
+
+        logger.info('Password reset successfully', { ...ctx, userId: user.id });
+
+        successResponse(res, { message: 'Password reset successfully. Please log in with your new password.' });
+    } catch (error) {
+        logger.error('Password reset failed', { ...ctx, error });
+        next(error);
+    }
 });
 
 module.exports = router;

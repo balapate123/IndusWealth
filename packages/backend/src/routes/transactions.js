@@ -23,6 +23,25 @@ router.get('/', authenticateToken, async (req, res, next) => {
         const forceRefresh = req.query.refresh === 'true';
         const accountId = req.query.account_id;
 
+        // Enforce 10-minute cooldown on manual Plaid refresh to limit Transactions Refresh API cost ($0.12/call)
+        if (forceRefresh) {
+            const lastRefresh = await db.getLastSyncTime(userId, 'last_plaid_refresh');
+            if (lastRefresh) {
+                const secondsSinceRefresh = (Date.now() - new Date(lastRefresh).getTime()) / 1000;
+                const COOLDOWN_SECONDS = 10 * 60; // 10 minutes
+                if (secondsSinceRefresh < COOLDOWN_SECONDS) {
+                    const secondsRemaining = Math.ceil(COOLDOWN_SECONDS - secondsSinceRefresh);
+                    logger.info('Force refresh blocked by cooldown', { ...ctx, secondsRemaining });
+                    return res.status(429).json({
+                        success: false,
+                        code: 'REFRESH_COOLDOWN',
+                        message: `Please wait before refreshing again.`,
+                        retryAfterSeconds: secondsRemaining
+                    });
+                }
+            }
+        }
+
         // Check if we need to sync from Plaid (conservative: 24 hours)
         const needsSync = forceRefresh || await db.shouldSync(userId, 'last_transaction_sync', 24);
 
@@ -55,6 +74,11 @@ router.get('/', authenticateToken, async (req, res, next) => {
 
                     // Update sync time
                     await db.updateSyncTime(userId, 'last_transaction_sync');
+
+                    // Stamp the last manual refresh time for cooldown enforcement
+                    if (forceRefresh) {
+                        await db.updateSyncTime(userId, 'last_plaid_refresh');
+                    }
 
                     logger.info('Synced transactions from Plaid', {
                         ...ctx,

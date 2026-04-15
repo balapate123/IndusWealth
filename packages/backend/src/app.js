@@ -41,10 +41,12 @@ app.use(helmet({
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
-// CORS — allow all origins since the API serves both mobile (no CORS) and web clients.
-// All endpoints are protected by JWT authentication, so origin restriction is not needed.
+// CORS — restrict origins in production via CORS_ORIGINS env var.
+// Falls back to allow-all in development for mobile + web testing.
 const corsOptions = {
-    origin: true,
+    origin: process.env.CORS_ORIGINS
+        ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
+        : true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
@@ -67,7 +69,8 @@ app.use((req, res, next) => {
         method: req.method,
         url: req.originalUrl,
         ip: req.ip,
-        userAgent: req.headers['user-agent']
+        userAgent: req.headers['user-agent'],
+        auth: req.headers.authorization ? 'Bearer ***' : undefined,
     });
 
     // Log response on finish
@@ -105,13 +108,27 @@ const authLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-// Health check — before rate limiting so UptimeRobot/Render don't consume the limit
+// Health check — before rate limiting and HTTPS redirect so Render health checks work
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// HTTPS redirect in production (after health check, so Render's internal checker isn't redirected)
+if (process.env.NODE_ENV === 'production') {
+    app.use((req, res, next) => {
+        if (req.headers['x-forwarded-proto'] !== 'https') {
+            return res.redirect(301, `https://${req.headers.host}${req.url}`);
+        }
+        next();
+    });
+}
 
 // Apply rate limiting
 app.use(apiLimiter);
 app.use('/users/login', authLimiter);
 app.use('/users/signup', authLimiter);
+app.use('/users/forgot-password', authLimiter);
+app.use('/users/reset-password', authLimiter);
+app.use('/users/verify-email', authLimiter);
+app.use('/users/resend-verification', authLimiter);
 
 // API Routes
 app.use('/transactions', transactionsRoutes);
@@ -135,6 +152,16 @@ app.get('/', (req, res) => {
         timestamp: new Date().toISOString(),
         requestId: req.requestId
     });
+});
+
+// Security.txt (RFC 9116) — security contact disclosure
+app.get('/.well-known/security.txt', (req, res) => {
+    res.type('text/plain').send(
+        `Contact: mailto:security@induswealth.com\n` +
+        `Preferred-Languages: en\n` +
+        `Canonical: https://induswealth.com/.well-known/security.txt\n` +
+        `Expires: 2027-04-15T00:00:00.000Z\n`
+    );
 });
 
 // 404 handler - must be after all routes

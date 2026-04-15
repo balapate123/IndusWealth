@@ -116,6 +116,22 @@ const initDb = async () => {
             await pool.query(feedbackSql);
         }
 
+        // Run plaid refresh cooldown migration (adds last_plaid_refresh column for rate limiting)
+        const plaidRefreshCooldownSqlPath = path.join(__dirname, '../../db/add_plaid_refresh_cooldown.sql');
+        if (fs.existsSync(plaidRefreshCooldownSqlPath)) {
+            const plaidRefreshCooldownSql = fs.readFileSync(plaidRefreshCooldownSqlPath, 'utf8');
+            console.log('🔄 Running plaid refresh cooldown migration...');
+            await pool.query(plaidRefreshCooldownSql);
+        }
+
+        // Run email verification migration
+        const emailVerificationSqlPath = path.join(__dirname, '../../db/add_email_verification.sql');
+        if (fs.existsSync(emailVerificationSqlPath)) {
+            const emailVerificationSql = fs.readFileSync(emailVerificationSqlPath, 'utf8');
+            console.log('🔄 Running email verification migration...');
+            await pool.query(emailVerificationSql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);
@@ -144,7 +160,7 @@ const createUser = async (email, passwordHash, name) => {
 const getUserByEmail = async (email) => {
     const result = await pool.query(
         `SELECT id, email, password_hash, name, date_of_birth, plaid_access_token, plaid_item_id,
-                failed_login_attempts, locked_until, password_changed_at, created_at
+                failed_login_attempts, locked_until, password_changed_at, email_verified, created_at
          FROM users WHERE email = $1`,
         [email]
     );
@@ -157,7 +173,7 @@ const getUserByEmail = async (email) => {
 
 const getUserById = async (userId) => {
     const result = await pool.query(
-        `SELECT id, email, name, date_of_birth, plaid_access_token, plaid_item_id, created_at
+        `SELECT id, email, name, date_of_birth, plaid_access_token, plaid_item_id, email_verified, created_at
          FROM users WHERE id = $1`,
         [userId]
     );
@@ -180,7 +196,7 @@ const updateUserPlaidToken = async (userId, accessToken, itemId) => {
 // ============ SYNC LOG OPERATIONS ============
 
 // Whitelist of valid sync type columns to prevent SQL injection
-const VALID_SYNC_TYPES = ['last_transaction_sync', 'last_account_sync', 'last_balance_sync'];
+const VALID_SYNC_TYPES = ['last_transaction_sync', 'last_account_sync', 'last_balance_sync', 'last_plaid_refresh'];
 
 const validateSyncType = (syncType) => {
     if (!VALID_SYNC_TYPES.includes(syncType)) {
@@ -700,6 +716,53 @@ const useRecoveryCode = async (userId, codeHash) => {
     return result.rows.length > 0;
 };
 
+// ============ EMAIL VERIFICATION OPERATIONS ============
+
+const setEmailVerificationToken = async (userId, tokenHash, expiresAt) => {
+    await pool.query(
+        `UPDATE users SET email_verification_token = $1, email_verification_expires = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [tokenHash, expiresAt, userId]
+    );
+};
+
+const verifyEmail = async (tokenHash) => {
+    const result = await pool.query(
+        `UPDATE users SET email_verified = true, email_verification_token = NULL, email_verification_expires = NULL, updated_at = NOW()
+         WHERE email_verification_token = $1 AND email_verification_expires > NOW()
+         RETURNING id, email, name`,
+        [tokenHash]
+    );
+    return result.rows[0] || null;
+};
+
+// ============ PASSWORD RESET OPERATIONS ============
+
+const setPasswordResetToken = async (userId, tokenHash, expiresAt) => {
+    await pool.query(
+        `UPDATE users SET password_reset_token = $1, password_reset_expires = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [tokenHash, expiresAt, userId]
+    );
+};
+
+const getPasswordResetUser = async (tokenHash) => {
+    const result = await pool.query(
+        `SELECT id, email, name FROM users
+         WHERE password_reset_token = $1 AND password_reset_expires > NOW()`,
+        [tokenHash]
+    );
+    return result.rows[0] || null;
+};
+
+const clearPasswordResetToken = async (userId) => {
+    await pool.query(
+        `UPDATE users SET password_reset_token = NULL, password_reset_expires = NULL, updated_at = NOW()
+         WHERE id = $1`,
+        [userId]
+    );
+};
+
 module.exports = {
     pool,
     // User operations
@@ -753,6 +816,13 @@ module.exports = {
     storeRecoveryCodes,
     getRecoveryCodes,
     useRecoveryCode,
+    // Email verification operations
+    setEmailVerificationToken,
+    verifyEmail,
+    // Password reset operations
+    setPasswordResetToken,
+    getPasswordResetUser,
+    clearPasswordResetToken,
     initDb,
 };
 

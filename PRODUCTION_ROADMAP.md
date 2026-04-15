@@ -8,6 +8,37 @@
 
 ---
 
+## 🔜 Up Next (Tomorrow)
+
+### OTA Updates via `expo-updates` (EAS Update)
+
+Currently, every JS change — even a one-line bug fix — requires a full Play Store build + review cycle (1–3 days). Adding `expo-updates` enables instant over-the-air delivery of JS/asset changes without a store submission.
+
+**Steps:**
+1. `npx expo install expo-updates`
+2. Add to `app.json` under `"expo"`:
+   ```json
+   "updates": {
+     "url": "https://u.expo.dev/357b50ad-ba30-47ac-9665-6ab6a8422ff3"
+   },
+   "runtimeVersion": {
+     "policy": "appVersion"
+   }
+   ```
+3. Add `"channel": "production"` to the `production` profile in `eas.json`
+4. Rebuild the production binary once (to bake in the update URL)
+5. Future JS-only deploys: `eas update --branch production --message "fix: ..."`
+
+**What it enables:**
+
+| Change type | Before | After |
+|---|---|---|
+| JS bug fix | 1–3 day store review | Instant OTA |
+| Asset update | 1–3 day store review | Instant OTA |
+| New native module / permission | Store review (always) | Store review (always) |
+
+---
+
 ## Table of Contents
 
 1. [Executive Summary](#1-executive-summary)

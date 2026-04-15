@@ -20,6 +20,9 @@ import WealthAcademyScreen from '../screens/WealthAcademyScreen';
 import ArticleWebViewScreen from '../screens/ArticleWebViewScreen';
 import LegalDocScreen from '../screens/LegalDocScreen';
 import FeedbackScreen from '../screens/FeedbackScreen';
+import EmailVerificationScreen from '../screens/EmailVerificationScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/theme';
 import cache from '../services/cache';
 
@@ -113,6 +116,9 @@ const AuthStack = () => {
         >
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
+            <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
             <Stack.Screen name="ConnectBank" component={ConnectBankScreen} />
         </Stack.Navigator>
     );

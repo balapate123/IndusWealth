@@ -18,6 +18,7 @@ import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import { api } from '../services/api';
 import cache from '../services/cache';
 import CustomAlert from '../components/CustomAlert';
+import { identify, track, EVENTS } from '../services/analytics';
 
 const { width } = Dimensions.get('window');
 
@@ -80,6 +81,10 @@ const LoginScreen = ({ navigation }) => {
 
             if (response.success) {
                 console.log('Login success:', response.user.email);
+
+                // Track login event
+                identify(response.user.id.toString(), { email: response.user.email, name: response.user.name });
+                track(EVENTS.LOGIN);
 
                 // Save user session
                 await cache.setCachedUser(response.user);
@@ -186,7 +191,7 @@ const LoginScreen = ({ navigation }) => {
                             </TouchableOpacity>
                         </View>
 
-                        <TouchableOpacity style={styles.forgotButton}>
+                        <TouchableOpacity style={styles.forgotButton} onPress={() => navigation.navigate('ForgotPassword')}>
                             <Text style={styles.forgotText}>Forgot Password?</Text>
                         </TouchableOpacity>
 

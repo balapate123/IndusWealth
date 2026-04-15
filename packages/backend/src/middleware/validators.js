@@ -89,6 +89,40 @@ const validateTransactionNotes = [
     handleValidationErrors,
 ];
 
+/**
+ * Validation chains for email verification.
+ */
+const validateVerifyEmail = [
+    body('code')
+        .notEmpty().withMessage('Verification code is required')
+        .isLength({ min: 6, max: 6 }).withMessage('Code must be 6 digits'),
+    handleValidationErrors,
+];
+
+/**
+ * Validation chains for forgot password.
+ */
+const validateForgotPassword = [
+    body('email')
+        .trim()
+        .notEmpty().withMessage('Email is required')
+        .isEmail().withMessage('Invalid email format')
+        .normalizeEmail(),
+    handleValidationErrors,
+];
+
+/**
+ * Validation chains for password reset.
+ */
+const validateResetPassword = [
+    body('code')
+        .notEmpty().withMessage('Reset code is required'),
+    body('newPassword')
+        .notEmpty().withMessage('New password is required')
+        .isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+    handleValidationErrors,
+];
+
 module.exports = {
     handleValidationErrors,
     validateLogin,
@@ -96,4 +130,7 @@ module.exports = {
     validateProfileUpdate,
     validatePasswordChange,
     validateTransactionNotes,
+    validateVerifyEmail,
+    validateForgotPassword,
+    validateResetPassword,
 };
