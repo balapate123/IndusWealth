@@ -18,6 +18,35 @@ export const COLORS = {
     TEXT_SECONDARY: '#E5C048',    // Gold light for secondary text
     TEXT_MUTED: '#C9A227',        // Gold for muted text
 
+    // Health Score colors
+    HEALTH_EXCELLENT: '#4CAF50',
+    HEALTH_GOOD: '#8BC34A',
+    HEALTH_FAIR: '#FFC107',
+    HEALTH_POOR: '#FF9800',
+    HEALTH_CRITICAL: '#F44336',
+
+    // Investment Corner
+    ETF_POSITIVE: '#4CAF50',
+    ETF_NEGATIVE: '#FF6B6B',
+
+    // Category accent colors (for insight types)
+    CAT_TAX: '#8B5CF6',
+    CAT_ETF: '#10B981',
+    CAT_DEBT: '#F59E0B',
+    CAT_SAVINGS: '#06B6D4',
+    CAT_SPENDING: '#FF6B6B',
+    CAT_CASHFLOW: '#3B82F6',
+    CAT_INVEST: '#22C55E',
+    CAT_MILESTONE: '#E5C048',
+    CAT_COMPARATIVE: '#EC4899',
+    CAT_OPPORTUNITY: '#F97316',
+    CAT_SEASONAL: '#14B8A6',
+    CAT_WEALTH: '#6366F1',
+
+    // Surface colors for cards
+    SURFACE_ELEVATED: '#111111',
+    SURFACE_OVERLAY: 'rgba(255, 255, 255, 0.05)',
+
     // Legacy (kept for backward compatibility)
     NAVY: '#000000',
     GRAY_LIGHT: '#F0F0F0',

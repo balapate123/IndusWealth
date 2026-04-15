@@ -565,6 +565,29 @@ export const api = {
     getArticlesForInsight: (insightType, limit = 3) =>
         apiRequest(`/educational/for-insight/${insightType}?limit=${limit}`),
 
+    // Health Score
+    getHealthScore: () => apiRequest('/insights/health-score'),
+
+    // ETF endpoints
+    getETFs: (params = {}) => {
+        const searchParams = new URLSearchParams();
+        if (params.risk_level) searchParams.append('risk_level', params.risk_level);
+        if (params.category) searchParams.append('category', params.category);
+        if (params.search) searchParams.append('search', params.search);
+        const qs = searchParams.toString();
+        return apiRequest(`/etfs${qs ? '?' + qs : ''}`);
+    },
+
+    getRecommendedETFs: () => apiRequest('/etfs/recommended'),
+
+    getETFByTicker: (ticker) => apiRequest(`/etfs/${ticker}`),
+
+    trackETFInteraction: (etfTicker, interactionType, source) =>
+        apiRequest('/etfs/interaction', {
+            method: 'POST',
+            body: JSON.stringify({ etf_ticker: etfTicker, interaction_type: interactionType, source }),
+        }),
+
     getArticleBookmarks: (page = 1, limit = 20) =>
         apiRequest(`/educational/bookmarks?page=${page}&limit=${limit}`),
 
