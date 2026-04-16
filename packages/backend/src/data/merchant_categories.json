@@ -1,0 +1,11 @@
+{
+  "Streaming": ["Netflix", "Disney+", "Crave", "Amazon Prime", "Apple TV+", "Paramount+", "Hayu"],
+  "Music": ["Spotify", "Apple Music", "YouTube Music", "Tidal", "Amazon Music"],
+  "Telecom": ["Rogers", "Bell", "Telus", "Fido", "Koodo", "Virgin Plus", "Freedom Mobile", "Fizz"],
+  "Utilities": ["Enbridge", "Toronto Hydro", "Hydro One", "Alectra", "London Hydro"],
+  "Software": ["Adobe", "Microsoft 365", "Google Subscription", "Google Play", "Dropbox", "Notion", "Canva", "ChatGPT", "iCloud", "Apple Subscription"],
+  "Health": ["GoodLife Fitness", "Anytime Fitness", "LA Fitness", "Planet Fitness", "Headspace", "Calm"],
+  "Insurance": ["Manulife", "Sun Life", "Great-West Life", "Desjardins", "Intact", "TD Insurance"],
+  "News": ["Globe and Mail", "Toronto Star", "National Post", "New York Times", "Washington Post"],
+  "Other": []
+}

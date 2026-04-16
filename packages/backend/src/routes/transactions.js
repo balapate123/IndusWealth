@@ -75,6 +75,9 @@ router.get('/', authenticateToken, async (req, res, next) => {
                     // Update sync time
                     await db.updateSyncTime(userId, 'last_transaction_sync');
 
+                    // Invalidate watchdog cache so next GET /watchdog re-analyzes
+                    await watchdogService.invalidateCache(userId);
+
                     // Stamp the last manual refresh time for cooldown enforcement
                     if (forceRefresh) {
                         await db.updateSyncTime(userId, 'last_plaid_refresh');

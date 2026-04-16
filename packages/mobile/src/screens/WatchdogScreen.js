@@ -13,11 +13,19 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import api from '../services/api';
+import CancellationBottomSheet from '../components/CancellationBottomSheet';
+import NegotiationBottomSheet from '../components/NegotiationBottomSheet';
+import AlertBanner from '../components/AlertBanner';
 
 const CATEGORIES = [
     { id: 'all', name: 'All', icon: null },
     { id: 'streaming', name: 'Streaming', icon: 'tv' },
+    { id: 'music', name: 'Music', icon: 'musical-notes' },
+    { id: 'telecom', name: 'Telecom', icon: 'call' },
     { id: 'utilities', name: 'Utilities', icon: 'flash' },
+    { id: 'health', name: 'Health', icon: 'fitness' },
+    { id: 'software', name: 'Software', icon: 'laptop' },
+    { id: 'insurance', name: 'Insurance', icon: 'shield-checkmark' },
     { id: 'other', name: 'Other', icon: 'construct' },
 ];
 
@@ -29,6 +37,12 @@ const WatchdogScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
+    const [alerts, setAlerts] = useState([]);
+    const [totalMonthly, setTotalMonthly] = useState(0);
+    const [totalAnnual, setTotalAnnual] = useState(0);
+    const [showAnnual, setShowAnnual] = useState(false);
+    const [cancelSheet, setCancelSheet] = useState({ visible: false, expense: null, guide: null });
+    const [negotiateSheet, setNegotiateSheet] = useState({ visible: false, expense: null, guide: null });
 
     const fetchData = useCallback(async () => {
         try {
@@ -39,6 +53,9 @@ const WatchdogScreen = () => {
                 setExpenses(data.expenses || []);
                 setPotentialSavings(data.analysis?.potential_savings || 0);
                 setFlagsFound(data.analysis?.flags_found || 0);
+                setTotalMonthly(data.analysis?.total_monthly || 0);
+                setTotalAnnual(data.analysis?.total_annual || 0);
+                setAlerts(data.alerts || []);
             }
         } catch (err) {
             console.error('Error fetching watchdog data:', err);
@@ -60,7 +77,18 @@ const WatchdogScreen = () => {
 
     const handleAction = async (expenseId, action) => {
         try {
-            await api.handleExpenseAction(expenseId, action);
+            const result = await api.handleExpenseAction(expenseId, action);
+
+            // If the action returned a guide, show the appropriate bottom sheet
+            if (result?.success && result?.data?.guide) {
+                const expense = expenses.find(e => e.id === expenseId);
+                if (action === 'stop') {
+                    setCancelSheet({ visible: true, expense, guide: result.data.guide });
+                } else if (action === 'negotiate') {
+                    setNegotiateSheet({ visible: true, expense, guide: result.data.guide });
+                }
+            }
+
             // Refresh data after action
             fetchData();
         } catch (err) {
@@ -102,7 +130,23 @@ const WatchdogScreen = () => {
                         </View>
                     );
                 default:
-                    return null;
+                    return (
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                            <TouchableOpacity
+                                style={styles.stopButton}
+                                onPress={() => handleAction(item.id, 'stop')}
+                            >
+                                <Ionicons name="close-circle" size={14} color="#EF4444" />
+                                <Text style={styles.stopText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.negotiateButton}
+                                onPress={() => handleAction(item.id, 'negotiate')}
+                            >
+                                <Text style={styles.negotiateText}>Negotiate</Text>
+                            </TouchableOpacity>
+                        </View>
+                    );
             }
         };
 
@@ -128,16 +172,21 @@ const WatchdogScreen = () => {
 
         return (
             <View key={item.id} style={styles.expenseItem}>
-                {renderLogo()}
-                <View style={styles.expenseContent}>
-                    <View style={styles.expenseRow}>
-                        <Text style={styles.expenseName} numberOfLines={1}>{item.name}</Text>
-                        <Text style={styles.expenseAmount}>${item.amount.toFixed(2)}</Text>
+                <View style={styles.expenseTopRow}>
+                    {renderLogo()}
+                    <View style={styles.expenseContent}>
+                        <View style={styles.expenseRow}>
+                            <Text style={styles.expenseName} numberOfLines={1}>{item.name}</Text>
+                            <Text style={styles.expenseAmount}>${item.amount.toFixed(2)}</Text>
+                        </View>
+                        <Text style={styles.expenseDetails}>
+                            {item.dueDate ? `Due ${item.dueDate}` : item.frequency} • {item.category}
+                            {item.confidence === 'high' ? ' ●' : item.confidence === 'medium' ? ' ○' : ''}
+                        </Text>
                     </View>
-                    <View style={styles.expenseRow}>
-                        <Text style={styles.expenseDetails}>Due {item.dueDate} • {item.category}</Text>
-                        {getActionButton()}
-                    </View>
+                </View>
+                <View style={styles.expenseActions}>
+                    {getActionButton()}
                 </View>
             </View>
         );
@@ -192,15 +241,44 @@ const WatchdogScreen = () => {
                             </View>
                         </View>
 
-                        <Text style={styles.savingsLabel}>POTENTIAL MONTHLY SAVINGS</Text>
-                        <Text style={styles.savingsAmount}>${potentialSavings.toFixed(2)}</Text>
+                        {/* Annual/Monthly Toggle */}
+                        <View style={styles.toggleRow}>
+                            <TouchableOpacity
+                                style={[styles.toggleButton, !showAnnual && styles.toggleButtonActive]}
+                                onPress={() => setShowAnnual(false)}
+                            >
+                                <Text style={[styles.toggleText, !showAnnual && styles.toggleTextActive]}>Monthly</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.toggleButton, showAnnual && styles.toggleButtonActive]}
+                                onPress={() => setShowAnnual(true)}
+                            >
+                                <Text style={[styles.toggleText, showAnnual && styles.toggleTextActive]}>Annual</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.savingsLabel}>
+                            {showAnnual ? 'TOTAL ANNUAL SUBSCRIPTIONS' : 'POTENTIAL MONTHLY SAVINGS'}
+                        </Text>
+                        <Text style={styles.savingsAmount}>
+                            ${showAnnual ? totalAnnual.toFixed(2) : potentialSavings.toFixed(2)}
+                        </Text>
 
                         <View style={styles.infoRow}>
                             <Ionicons name="information-circle-outline" size={14} color={COLORS.TEXT_SECONDARY} />
-                            <Text style={styles.infoText}>Based on your recurring expense analysis</Text>
+                            <Text style={styles.infoText}>
+                                {showAnnual
+                                    ? `$${totalMonthly.toFixed(2)}/month across all subscriptions`
+                                    : 'Based on your recurring expense analysis'}
+                            </Text>
                         </View>
                     </View>
                 </View>
+
+                {/* Smart Alerts */}
+                {alerts.length > 0 && (
+                    <AlertBanner alerts={alerts} />
+                )}
 
                 {/* Category Filters */}
                 <ScrollView
@@ -247,7 +325,7 @@ const WatchdogScreen = () => {
                 <View style={styles.expensesSection}>
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Recurring Expenses</Text>
-                        <TouchableOpacity>
+                        <TouchableOpacity onPress={() => setSelectedCategory('all')}>
                             <Text style={styles.viewAllText}>View all</Text>
                         </TouchableOpacity>
                     </View>
@@ -256,12 +334,46 @@ const WatchdogScreen = () => {
 
                     {filteredExpenses.length === 0 && !error && (
                         <View style={styles.emptyState}>
-                            <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.GREEN} />
-                            <Text style={styles.emptyText}>No flagged expenses in this category</Text>
+                            {expenses.length === 0 ? (
+                                <>
+                                    <Ionicons name="shield-outline" size={48} color={COLORS.GOLD} />
+                                    <Text style={styles.emptyTitle}>Connect Your Bank to Activate Watchdog</Text>
+                                    <Text style={styles.emptyText}>
+                                        We need at least 2 months of transaction history to detect recurring expenses.
+                                    </Text>
+                                </>
+                            ) : (
+                                <>
+                                    <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.GREEN} />
+                                    <Text style={styles.emptyText}>No flagged expenses in this category</Text>
+                                </>
+                            )}
                         </View>
                     )}
                 </View>
             </ScrollView>
+
+            {/* Bottom Sheets */}
+            <CancellationBottomSheet
+                visible={cancelSheet.visible}
+                expense={cancelSheet.expense}
+                guide={cancelSheet.guide}
+                onClose={() => setCancelSheet({ visible: false, expense: null, guide: null })}
+                onConfirm={() => {
+                    setCancelSheet({ visible: false, expense: null, guide: null });
+                    fetchData();
+                }}
+            />
+            <NegotiationBottomSheet
+                visible={negotiateSheet.visible}
+                expense={negotiateSheet.expense}
+                guide={negotiateSheet.guide}
+                onClose={() => setNegotiateSheet({ visible: false, expense: null, guide: null })}
+                onNegotiated={() => {
+                    setNegotiateSheet({ visible: false, expense: null, guide: null });
+                    fetchData();
+                }}
+            />
         </View>
     );
 };
@@ -437,12 +549,22 @@ const styles = StyleSheet.create({
 
     // Expense Item
     expenseItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
         backgroundColor: COLORS.CARD_BG,
         padding: SPACING.MEDIUM,
         borderRadius: BORDER_RADIUS.LARGE,
         marginBottom: SPACING.SMALL,
+    },
+    expenseTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    expenseActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginTop: SPACING.SMALL,
+        paddingTop: SPACING.SMALL,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.06)',
     },
     expenseLogo: {
         width: 48,
@@ -524,10 +646,43 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: SPACING.XL,
     },
+    emptyTitle: {
+        color: COLORS.WHITE,
+        fontSize: 16,
+        fontFamily: FONTS.BOLD,
+        marginTop: SPACING.MEDIUM,
+        textAlign: 'center',
+    },
     emptyText: {
         color: COLORS.TEXT_MUTED,
         marginTop: SPACING.MEDIUM,
         textAlign: 'center',
+    },
+
+    // Toggle
+    toggleRow: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: BORDER_RADIUS.MEDIUM,
+        padding: 2,
+        marginBottom: SPACING.MEDIUM,
+        alignSelf: 'flex-start',
+    },
+    toggleButton: {
+        paddingVertical: SPACING.SMALL,
+        paddingHorizontal: SPACING.MEDIUM,
+        borderRadius: BORDER_RADIUS.MEDIUM,
+    },
+    toggleButtonActive: {
+        backgroundColor: COLORS.GOLD,
+    },
+    toggleText: {
+        color: COLORS.TEXT_SECONDARY,
+        fontSize: 12,
+        fontFamily: FONTS.BOLD,
+    },
+    toggleTextActive: {
+        color: '#000',
     },
 });
 

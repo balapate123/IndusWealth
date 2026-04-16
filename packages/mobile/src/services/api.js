@@ -464,13 +464,16 @@ export const api = {
         }),
 
     // Watchdog - Recurring Expenses
-    getWatchdogAnalysis: () => apiRequest('/watchdog'),
+    getWatchdogAnalysis: (forceRefresh = false) =>
+        apiRequest(`/watchdog${forceRefresh ? '?force_refresh=true' : ''}`),
 
-    handleExpenseAction: (expenseId, action) =>
+    handleExpenseAction: (expenseId, action, notes = null, snoozeUntil = null) =>
         apiRequest('/watchdog/action', {
             method: 'POST',
-            body: JSON.stringify({ expenseId, action }),
+            body: JSON.stringify({ expenseId, action, ...(notes && { notes }), ...(snoozeUntil && { snoozeUntil }) }),
         }),
+
+    getWatchdogSummary: () => apiRequest('/watchdog/summary'),
 
     // Debt
     getDebtOverview: () => apiRequest('/debt'),
