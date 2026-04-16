@@ -34,7 +34,7 @@ const TabBarIcon = ({ focused, name, label }) => {
         'Home': 'home-outline',
         'Insights': 'bulb-outline',
         'Wealth': 'bar-chart-outline',
-        'Watchdog': 'location-outline',
+        'Guard': 'shield-checkmark-outline',
         'Profile': 'person-outline',
     };
 
@@ -86,10 +86,10 @@ const TabNavigator = () => {
                 }}
             />
             <Tab.Screen
-                name="Watchdog"
+                name="Guard"
                 component={WatchdogScreen}
                 options={{
-                    tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="Watchdog" />,
+                    tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="Guard" />,
                 }}
             />
             <Tab.Screen

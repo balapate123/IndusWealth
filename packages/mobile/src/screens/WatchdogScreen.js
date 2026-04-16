@@ -130,7 +130,23 @@ const WatchdogScreen = () => {
                         </View>
                     );
                 default:
-                    return null;
+                    return (
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                            <TouchableOpacity
+                                style={styles.stopButton}
+                                onPress={() => handleAction(item.id, 'stop')}
+                            >
+                                <Ionicons name="close-circle" size={14} color="#EF4444" />
+                                <Text style={styles.stopText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.negotiateButton}
+                                onPress={() => handleAction(item.id, 'negotiate')}
+                            >
+                                <Text style={styles.negotiateText}>Negotiate</Text>
+                            </TouchableOpacity>
+                        </View>
+                    );
             }
         };
 
@@ -156,19 +172,21 @@ const WatchdogScreen = () => {
 
         return (
             <View key={item.id} style={styles.expenseItem}>
-                {renderLogo()}
-                <View style={styles.expenseContent}>
-                    <View style={styles.expenseRow}>
-                        <Text style={styles.expenseName} numberOfLines={1}>{item.name}</Text>
-                        <Text style={styles.expenseAmount}>${item.amount.toFixed(2)}</Text>
-                    </View>
-                    <View style={styles.expenseRow}>
+                <View style={styles.expenseTopRow}>
+                    {renderLogo()}
+                    <View style={styles.expenseContent}>
+                        <View style={styles.expenseRow}>
+                            <Text style={styles.expenseName} numberOfLines={1}>{item.name}</Text>
+                            <Text style={styles.expenseAmount}>${item.amount.toFixed(2)}</Text>
+                        </View>
                         <Text style={styles.expenseDetails}>
                             {item.dueDate ? `Due ${item.dueDate}` : item.frequency} • {item.category}
-                            {item.confidence === 'high' ? ' \u25CF' : item.confidence === 'medium' ? ' \u25CB' : ''}
+                            {item.confidence === 'high' ? ' ●' : item.confidence === 'medium' ? ' ○' : ''}
                         </Text>
-                        {getActionButton()}
                     </View>
+                </View>
+                <View style={styles.expenseActions}>
+                    {getActionButton()}
                 </View>
             </View>
         );
@@ -307,7 +325,7 @@ const WatchdogScreen = () => {
                 <View style={styles.expensesSection}>
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Recurring Expenses</Text>
-                        <TouchableOpacity>
+                        <TouchableOpacity onPress={() => setSelectedCategory('all')}>
                             <Text style={styles.viewAllText}>View all</Text>
                         </TouchableOpacity>
                     </View>
@@ -531,12 +549,22 @@ const styles = StyleSheet.create({
 
     // Expense Item
     expenseItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
         backgroundColor: COLORS.CARD_BG,
         padding: SPACING.MEDIUM,
         borderRadius: BORDER_RADIUS.LARGE,
         marginBottom: SPACING.SMALL,
+    },
+    expenseTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    expenseActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginTop: SPACING.SMALL,
+        paddingTop: SPACING.SMALL,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.06)',
     },
     expenseLogo: {
         width: 48,

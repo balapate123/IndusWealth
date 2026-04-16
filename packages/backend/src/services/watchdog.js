@@ -419,7 +419,7 @@ class WatchdogService {
             }
         }
 
-        return 'active';
+        return null;
     }
 
     /**
@@ -741,7 +741,7 @@ class WatchdogService {
             category: row.category,
             confidence: row.confidence,
             status: row.status,
-            action: row.action || 'active',
+            action: row.action || null,
             firstSeen: row.first_seen,
             lastSeen: row.last_seen,
             nextExpected: row.next_expected,
