@@ -68,6 +68,9 @@ router.post('/signup', async (req, res, next) => {
         await db.setEmailVerificationToken(user.id, codeHash, codeExpiry);
 
         // Send verification email (non-blocking — don't fail signup if email fails)
+        if (!process.env.RESEND_API_KEY) {
+            logger.info(`🔑 DEV MODE — Verification code for ${email}: ${verificationCode}`, ctx);
+        }
         emailService.sendVerificationEmail(email, name || 'User', verificationCode)
             .catch(err => logger.error('Failed to send verification email', { ...ctx, error: err }));
 
@@ -553,6 +556,9 @@ router.post('/resend-verification', authenticateToken, async (req, res, next) =>
         await db.setEmailVerificationToken(user.id, codeHash, codeExpiry);
 
         // Send verification email
+        if (!process.env.RESEND_API_KEY) {
+            logger.info(`🔑 DEV MODE — Verification code for ${user.email}: ${verificationCode}`, ctx);
+        }
         await emailService.sendVerificationEmail(user.email, user.name, verificationCode);
 
         logger.info('Verification email resent', ctx);

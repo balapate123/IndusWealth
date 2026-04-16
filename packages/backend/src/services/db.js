@@ -132,6 +132,14 @@ const initDb = async () => {
             await pool.query(emailVerificationSql);
         }
 
+        // Run insights upgrade migration
+        const insightsUpgradeSqlPath = path.join(__dirname, '../../db/add_insights_upgrade.sql');
+        if (fs.existsSync(insightsUpgradeSqlPath)) {
+            const insightsUpgradeSql = fs.readFileSync(insightsUpgradeSqlPath, 'utf8');
+            console.log('🔄 Running insights upgrade migration...');
+            await pool.query(insightsUpgradeSql);
+        }
+
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);
