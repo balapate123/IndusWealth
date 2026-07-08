@@ -52,15 +52,31 @@ All server-side caches are automatically purged when their TTL expires. All cach
 
 ---
 
-## 4. No Third-Party Tracking
+## 4. Product Usage Analytics (Mixpanel)
 
-IndusWealth does **not** integrate any third-party analytics, advertising, or tracking services. Specifically, we do **not** use:
+IndusWealth uses **Mixpanel** to collect product usage analytics. This helps us understand which features are used and how to improve the app.
+
+**What is collected:**
+
+| Data | Details |
+|------|---------|
+| App events | e.g., signed up, logged in, screen viewed, bank connected, insight viewed |
+| Pseudonymous user ID | Your internal numeric account ID (not your name or email) |
+| Basic device/app metadata | Collected automatically by the Mixpanel SDK (e.g., app version, OS version, device model) |
+
+**What is NOT sent to Mixpanel:**
+
+- Your name or email address
+- Bank account names, numbers, or balances
+- Transaction contents, amounts, or merchant details
+- AI insight contents
+- Any other financial data
+
+**Advertising and other tracking — we do NOT use:**
 
 - Google Analytics
 - Facebook/Meta Pixel
-- Mixpanel, Amplitude, or similar analytics SDKs
-- Advertising identifiers (IDFA/GAID)
-- Crash reporting services (planned: Sentry, which is privacy-focused)
+- Advertising identifiers (IDFA/GAID) for ad targeting
 - Attribution or deep-linking SDKs
 - Social media tracking pixels
 - A/B testing platforms
@@ -76,6 +92,7 @@ The IndusWealth app makes network requests only to:
 | IndusWealth API (Render.com) | All app functionality (auth, data sync, insights) | On every app interaction requiring server data |
 | Plaid (via backend) | Bank account linking and data sync | When linking a bank or refreshing financial data |
 | Google Gemini (via backend) | AI insight generation | When generating or refreshing insights |
+| Mixpanel | Product usage analytics (see Section 4) | When app events occur (e.g., login, screen view) |
 | Third-party article URLs | Opening educational articles in WebView | When user taps an article in Wealth Academy |
 
 All API requests between the app and our backend use **HTTPS (TLS encryption)**. The app does not make any background network requests when not in active use.
@@ -84,12 +101,13 @@ All API requests between the app and our backend use **HTTPS (TLS encryption)**.
 
 ## 6. No Cross-Device Tracking
 
-IndusWealth does not track users across devices. Your account is tied to your email/password credentials, not to device identifiers. We do not collect or use:
+IndusWealth does not track users across devices or across other apps. Your account is tied to your email/password credentials, not to device identifiers. We do not collect or use:
 
 - Device fingerprints
-- Hardware identifiers
 - Advertising identifiers
 - Cross-device graphs
+
+The Mixpanel SDK assigns an install-scoped identifier used solely to associate analytics events from this app; it is not used for advertising or shared with ad networks.
 
 ---
 

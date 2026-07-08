@@ -17,7 +17,7 @@ const PRIVACY_POLICY_SECTIONS = [
     },
     {
         title: '2. Information We Collect',
-        content: 'Information You Provide Directly:\n• Email address — Account authentication\n• Password — Stored as a bcrypt hash (never in plaintext)\n• Name — Personalization\n• Date of birth — Age-based financial insights\n• Transaction notes — Personal record-keeping\n• Custom debt entries — Debt payoff calculations\n\nInformation from Plaid (Bank Data):\n• Account information — names, types, balances\n• Transaction data — names, amounts, dates, categories\n• Liability data — credit card and loan balances\n\nWe do NOT receive your bank login credentials, full account numbers, SIN, credit score, or PINs.'
+        content: 'Information You Provide Directly:\n• Email address — Account authentication\n• Password — Stored as a bcrypt hash (never in plaintext)\n• Name — Personalization\n• Date of birth — Age-based financial insights\n• Transaction notes — Personal record-keeping\n• Custom debt entries — Debt payoff calculations\n\nInformation from Plaid (Bank Data):\n• Account information — names, types, balances\n• Transaction data — names, amounts, dates, categories\n• Liability data — credit card and loan balances\n\nUsage Analytics (Mixpanel):\n• App events (login, screen views, feature usage) tied to a pseudonymous user ID\n• No name, email, or financial data is ever sent to Mixpanel\n\nWe do NOT receive your bank login credentials, full account numbers, SIN, credit score, or PINs.'
     },
     {
         title: '3. How We Use Your Information',
@@ -25,7 +25,7 @@ const PRIVACY_POLICY_SECTIONS = [
     },
     {
         title: '4. How We Share Your Information',
-        content: 'Third-Party Service Providers:\n• Plaid Inc. — Bank account aggregation (United States)\n• Google Gemini AI — Insight generation (United States)\n• Render.com — Application hosting (United States)\n\nWe do NOT:\n• Sell your personal information\n• Share your data with advertisers\n• Provide your data to data brokers\n• Use your financial data for credit decisions'
+        content: 'Third-Party Service Providers:\n• Plaid Inc. — Bank account aggregation (United States)\n• Google Gemini AI — Insight generation (United States)\n• Render.com — Application hosting (United States)\n• Mixpanel Inc. — Product usage analytics, pseudonymous events only (United States)\n\nWe do NOT:\n• Sell your personal information\n• Share your data with advertisers\n• Provide your data to data brokers\n• Use your financial data for credit decisions'
     },
     {
         title: '5. Data Retention & Deletion',
@@ -33,7 +33,7 @@ const PRIVACY_POLICY_SECTIONS = [
     },
     {
         title: '6. Data Security',
-        content: '• Encryption in transit — All data encrypted using TLS/HTTPS\n• Password hashing — bcrypt with cost factor 12\n• JWT authentication — Secure token-based API access\n• Database security — Parameterized queries to prevent SQL injection\n• Rate limiting — IP-based brute force prevention\n• Input validation — Server-side validation of all input'
+        content: '• Encryption in transit — All data encrypted using TLS/HTTPS\n• Encryption at rest — Plaid tokens and 2FA secrets encrypted with AES-256-GCM\n• Password hashing — bcrypt with cost factor 12\n• JWT authentication — Short-lived access tokens with rotating refresh tokens\n• Two-factor authentication — Optional TOTP 2FA with recovery codes\n• Account lockout — Temporary lockout after repeated failed logins\n• Database security — Parameterized queries to prevent SQL injection\n• Rate limiting — IP-based brute force prevention\n• Input validation — Server-side validation of all input'
     },
     {
         title: '7. Your Privacy Rights',

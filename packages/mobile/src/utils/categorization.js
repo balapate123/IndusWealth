@@ -146,6 +146,42 @@ export const CATEGORY_PATTERNS = {
     }
 };
 
+// Plaid top-level categories that don't exist in CATEGORY_PATTERNS
+const PLAID_CATEGORY_META = {
+    'Food and Drink': { icon: 'fast-food', library: 'Ionicons', color: '#FF6B6B' },
+    'Travel': { icon: 'airplane', library: 'Ionicons', color: '#FF9500' },
+    'Shops': { icon: 'bag', library: 'Ionicons', color: '#FF2D92' },
+    'Transfer': { icon: 'swap-horizontal-outline', library: 'Ionicons', color: '#007AFF' },
+    'Payment': { icon: 'card', library: 'Ionicons', color: '#64D2FF' },
+    'Recreation': { icon: 'game-controller', library: 'Ionicons', color: '#AF52DE' },
+    'Service': { icon: 'pricetag', library: 'Ionicons', color: '#FF3B30' },
+    'Community': { icon: 'people', library: 'Ionicons', color: '#96CEB4' },
+    'Healthcare': { icon: 'medical', library: 'Ionicons', color: '#00C7BE' },
+    'Interest': { icon: 'trending-up', library: 'Ionicons', color: '#32ADE6' },
+    'Tax': { icon: 'document-text', library: 'Ionicons', color: '#FF3B30' },
+};
+
+const DEFAULT_CATEGORY_META = { icon: 'wallet', library: 'Ionicons', color: '#8E8E93' };
+
+/**
+ * Get display metadata (icon, library, color) for any category name.
+ * Covers every custom category in CATEGORY_PATTERNS plus known Plaid
+ * top-level categories, so AI/backend-assigned categories render with
+ * their proper icon and color instead of the gray wallet fallback.
+ * @param {string} categoryName
+ * @returns {Object} - { icon, library, color }
+ */
+export const getCategoryMeta = (categoryName) => {
+    if (!categoryName) return DEFAULT_CATEGORY_META;
+
+    const pattern = CATEGORY_PATTERNS[categoryName];
+    if (pattern) {
+        return { icon: pattern.icon, library: pattern.library, color: pattern.color };
+    }
+
+    return PLAID_CATEGORY_META[categoryName] || DEFAULT_CATEGORY_META;
+};
+
 /**
  * Categorize a transaction based on Plaid category or pattern matching
  * @param {Object} transaction - Transaction object
@@ -170,52 +206,21 @@ export const categorizeTransaction = (transaction) => {
         }
     }
 
-    // Priority 2: Use Plaid category if available
+    // Priority 2: Use Plaid/backend-assigned category if available
     if (transaction.category && transaction.category.length > 0 && transaction.category[0]) {
-        const plaidCategory = transaction.category[0];
-        // Map Plaid categories AND our custom categories to icons/colors
-        const plaidMapping = {
-            // Plaid categories
-            'Food and Drink': { icon: 'fast-food', library: 'Ionicons', color: '#FF6B6B' },
-            'Travel': { icon: 'airplane', library: 'Ionicons', color: '#FF9500' },
-            'Shops': { icon: 'bag', library: 'Ionicons', color: '#FF2D92' },
-            'Transfer': { icon: 'swap-horizontal-outline', library: 'Ionicons', color: '#007AFF' },
-            'Payment': { icon: 'card', library: 'Ionicons', color: '#64D2FF' },
-            'Recreation': { icon: 'game-controller', library: 'Ionicons', color: '#AF52DE' },
-            'Service': { icon: 'pricetag', library: 'Ionicons', color: '#FF3B30' },
-            'Bank Fees': { icon: 'pricetag', library: 'Ionicons', color: '#F44336' },
-            // Our custom categories (for when backend sends these)
-            'Groceries': { icon: 'cart-outline', library: 'Ionicons', color: '#34C759' },
-            'Transfers': { icon: 'swap-horizontal-outline', library: 'Ionicons', color: '#007AFF' },
-            'Restaurants': { icon: 'restaurant', library: 'Ionicons', color: '#FF6B6B' },
-            'Transportation': { icon: 'bus', library: 'Ionicons', color: '#5C6BC0' },
-            'Gas & Fuel': { icon: 'car', library: 'Ionicons', color: '#FF9500' },
-            'Shopping': { icon: 'bag', library: 'Ionicons', color: '#FF2D92' },
-            'Subscriptions': { icon: 'play-circle', library: 'Ionicons', color: '#5856D6' },
-            'Entertainment': { icon: 'film', library: 'Ionicons', color: '#AF52DE' },
-            'Health & Pharmacy': { icon: 'medical', library: 'Ionicons', color: '#00C7BE' },
-            'Investments': { icon: 'trending-up', library: 'Ionicons', color: '#32ADE6' },
-            'Alcohol & Bars': { icon: 'beer', library: 'Ionicons', color: '#BF5AF2' },
-            'ATM': { icon: 'cash-outline', library: 'Ionicons', color: '#34C759' },
-            'Income': { icon: 'cash', library: 'Ionicons', color: '#4CAF50' },
-            'Fees & Charges': { icon: 'receipt-outline', library: 'Ionicons', color: '#FF3B30' },
-            'Payments': { icon: 'card', library: 'Ionicons', color: '#64D2FF' },
-        };
-
-        // If it's a known Plaid category, return it with mapping or default
+        const assignedCategory = transaction.category[0];
+        const meta = getCategoryMeta(assignedCategory);
         return {
-            category: plaidCategory,
-            icon: plaidMapping[plaidCategory]?.icon || 'wallet',
-            library: plaidMapping[plaidCategory]?.library || 'Ionicons',
-            color: plaidMapping[plaidCategory]?.color || '#8E8E93'
+            category: assignedCategory,
+            icon: meta.icon,
+            library: meta.library,
+            color: meta.color
         };
     }
 
     // Priority 3: Default to 'Other'
     return {
         category: 'Other',
-        icon: 'wallet',
-        library: 'Ionicons',
-        color: '#8E8E93'
+        ...DEFAULT_CATEGORY_META
     };
 };

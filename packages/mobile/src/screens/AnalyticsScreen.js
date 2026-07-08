@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import api from '../services/api';
 import cache from '../services/cache';
-import { categorizeTransaction } from '../utils/categorization';
+import { categorizeTransaction, getCategoryMeta } from '../utils/categorization';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -54,6 +54,7 @@ const AnalyticsScreen = ({ navigation }) => {
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [categoryModalVisible, setCategoryModalVisible] = useState(false);
     const [categoryTransactions, setCategoryTransactions] = useState([]);
+    const [showAllCategories, setShowAllCategories] = useState(false);
     const [loadingTransactions, setLoadingTransactions] = useState(false);
     const [accounts, setAccounts] = useState([]);
 
@@ -144,9 +145,14 @@ const AnalyticsScreen = ({ navigation }) => {
         setLoadingTransactions(true);
 
         try {
-            // Use cached transactions instead of API call for consistency
-            const cachedTransactions = await cache.getCachedTransactions();
-            const response = { success: !!cachedTransactions, data: cachedTransactions || [] };
+            // Use cached transactions when available; fall back to the API so
+            // the drill-down still works before the cache is warmed up
+            let transactions = await cache.getCachedTransactions();
+            if (!transactions || transactions.length === 0) {
+                const apiResponse = await api.getTransactions('?limit=500');
+                transactions = apiResponse?.data || [];
+            }
+            const response = { success: transactions.length > 0, data: transactions };
 
             if (response?.success && response?.data) {
                 const targetCategory = normalizeCategory(category.category);
@@ -190,20 +196,35 @@ const AnalyticsScreen = ({ navigation }) => {
         }
     };
 
-    // Memoize category data to prevent unnecessary re-renders
+    // Memoize category data to prevent unnecessary re-renders.
+    // Includes ALL categories — display components decide how many to show.
     const categoryData = useMemo(() => {
         const breakdown = analytics?.charts?.categoryBreakdown || [];
         const total = breakdown.reduce((sum, cat) => sum + cat.amount, 0);
 
-        return breakdown.slice(0, 10).map((cat, index) => ({
-            ...cat,
-            percentage: total > 0 ? (cat.amount / total * 100) : 0,
-            // Always use frontend colors to ensure visibility
-            color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-        }));
+        const usedColors = new Set();
+        return breakdown.map((cat, index) => {
+            // Prefer the category's own color so it matches transaction rows;
+            // fall back to the palette when missing or already taken by a
+            // larger category (keeps adjacent bar segments distinguishable)
+            let color = cat.color;
+            if (!color || usedColors.has(color)) {
+                color = CATEGORY_COLORS.find(c => !usedColors.has(c))
+                    || CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+            }
+            usedColors.add(color);
+
+            return {
+                ...cat,
+                percentage: total > 0 ? (cat.amount / total * 100) : 0,
+                icon: cat.icon || getCategoryMeta(cat.category).icon,
+                color,
+            };
+        });
     }, [analytics?.charts?.categoryBreakdown]);
 
     // Horizontal Stacked Bar Chart - more reliable than SVG
+    const MAX_BAR_SEGMENTS = 8;
     const CategoryBarChart = ({ data }) => {
         const [activeCategory, setActiveCategory] = useState(null);
 
@@ -218,11 +239,26 @@ const AnalyticsScreen = ({ navigation }) => {
 
         const total = data.reduce((sum, cat) => sum + cat.amount, 0);
 
+        // Group the long tail into one segment so small categories stay tappable
+        let segments = data;
+        if (data.length > MAX_BAR_SEGMENTS) {
+            const rest = data.slice(MAX_BAR_SEGMENTS - 1);
+            segments = [
+                ...data.slice(0, MAX_BAR_SEGMENTS - 1),
+                {
+                    category: `${rest.length} more categories`,
+                    amount: rest.reduce((sum, cat) => sum + cat.amount, 0),
+                    percentage: rest.reduce((sum, cat) => sum + cat.percentage, 0),
+                    color: '#8E8E93',
+                },
+            ];
+        }
+
         return (
             <View style={styles.barChartContainer}>
                 {/* Stacked horizontal bar */}
                 <View style={styles.stackedBar}>
-                    {data.map((cat, index) => (
+                    {segments.map((cat, index) => (
                         <TouchableOpacity
                             key={cat.category}
                             style={[
@@ -233,8 +269,8 @@ const AnalyticsScreen = ({ navigation }) => {
                                     opacity: activeCategory && activeCategory !== cat.category ? 0.4 : 1,
                                     borderTopLeftRadius: index === 0 ? 8 : 0,
                                     borderBottomLeftRadius: index === 0 ? 8 : 0,
-                                    borderTopRightRadius: index === data.length - 1 ? 8 : 0,
-                                    borderBottomRightRadius: index === data.length - 1 ? 8 : 0,
+                                    borderTopRightRadius: index === segments.length - 1 ? 8 : 0,
+                                    borderBottomRightRadius: index === segments.length - 1 ? 8 : 0,
                                 }
                             ]}
                             onPress={() => setActiveCategory(activeCategory === cat.category ? null : cat.category)}
@@ -247,10 +283,10 @@ const AnalyticsScreen = ({ navigation }) => {
                 {activeCategory ? (
                     <View style={[
                         styles.categoryTooltip,
-                        { backgroundColor: data.find(c => c.category === activeCategory)?.color || COLORS.GOLD }
+                        { backgroundColor: segments.find(c => c.category === activeCategory)?.color || COLORS.GOLD }
                     ]}>
                         <Text style={styles.categoryTooltipText}>
-                            {activeCategory}: {formatCompactCurrency(data.find(c => c.category === activeCategory)?.amount || 0)}
+                            {activeCategory}: {formatCompactCurrency(segments.find(c => c.category === activeCategory)?.amount || 0)}
                         </Text>
                     </View>
                 ) : (
@@ -268,8 +304,12 @@ const AnalyticsScreen = ({ navigation }) => {
     };
 
     // Category Breakdown Card with Donut Chart and List
+    const COLLAPSED_CATEGORY_COUNT = 8;
     const CategoryBreakdownCard = () => {
-        const total = categoryData.reduce((sum, cat) => sum + cat.amount, 0);
+        const visibleCategories = showAllCategories
+            ? categoryData
+            : categoryData.slice(0, COLLAPSED_CATEGORY_COUNT);
+        const hiddenCount = categoryData.length - COLLAPSED_CATEGORY_COUNT;
 
         return (
             <View style={styles.sectionCard}>
@@ -280,17 +320,29 @@ const AnalyticsScreen = ({ navigation }) => {
 
                 {/* Category List */}
                 <View style={styles.categoryList}>
-                    {categoryData.map((cat, index) => (
+                    {visibleCategories.map((cat) => (
                         <TouchableOpacity
                             key={cat.category}
                             style={styles.categoryRow}
                             onPress={() => handleCategoryPress(cat)}
                             activeOpacity={0.7}
                         >
-                            <View style={[styles.categoryDot, { backgroundColor: cat.color }]} />
+                            <View style={[styles.categoryIconTile, { backgroundColor: `${cat.color}20` }]}>
+                                <Ionicons name={cat.icon || 'wallet'} size={16} color={cat.color} />
+                            </View>
                             <View style={styles.categoryInfo}>
                                 <Text style={styles.categoryName}>{cat.category}</Text>
-                                <Text style={styles.categoryCount}>{cat.count} transactions</Text>
+                                <View style={styles.categoryMetaRow}>
+                                    <Text style={styles.categoryCount}>{cat.count} transactions</Text>
+                                    {cat.changePercent != null && cat.changePercent !== 0 && (
+                                        <Text style={[
+                                            styles.categoryChange,
+                                            { color: cat.changePercent > 0 ? COLORS.RED : '#30D158' }
+                                        ]}>
+                                            {cat.changePercent > 0 ? '▲' : '▼'} {Math.abs(cat.changePercent)}%
+                                        </Text>
+                                    )}
+                                </View>
                             </View>
                             <View style={styles.categoryAmountContainer}>
                                 <Text style={styles.categoryAmount}>{formatCurrency(cat.amount)}</Text>
@@ -300,6 +352,24 @@ const AnalyticsScreen = ({ navigation }) => {
                         </TouchableOpacity>
                     ))}
                 </View>
+
+                {/* Show all / show less toggle */}
+                {hiddenCount > 0 && (
+                    <TouchableOpacity
+                        style={styles.showAllButton}
+                        onPress={() => setShowAllCategories(!showAllCategories)}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={styles.showAllButtonText}>
+                            {showAllCategories ? 'Show less' : `Show all ${categoryData.length} categories`}
+                        </Text>
+                        <Ionicons
+                            name={showAllCategories ? 'chevron-up' : 'chevron-down'}
+                            size={16}
+                            color={COLORS.GOLD}
+                        />
+                    </TouchableOpacity>
+                )}
             </View>
         );
     };
@@ -341,6 +411,39 @@ const AnalyticsScreen = ({ navigation }) => {
                         <Text style={styles.modalSummaryLabel}>
                             {loadingTransactions ? 'Loading...' : `${categoryTransactions.length} transactions in this period`}
                         </Text>
+                    </View>
+
+                    {/* Per-category stats */}
+                    <View style={styles.modalStatsRow}>
+                        <View style={styles.modalStatItem}>
+                            <Text style={styles.modalStatValue}>
+                                {formatCurrency(selectedCategory?.count > 0
+                                    ? (selectedCategory.amount / selectedCategory.count)
+                                    : 0)}
+                            </Text>
+                            <Text style={styles.modalStatLabel}>Avg / transaction</Text>
+                        </View>
+                        <View style={styles.modalStatDivider} />
+                        <View style={styles.modalStatItem}>
+                            <Text style={styles.modalStatValue}>
+                                {(selectedCategory?.percentage || 0).toFixed(1)}%
+                            </Text>
+                            <Text style={styles.modalStatLabel}>Of total spending</Text>
+                        </View>
+                        <View style={styles.modalStatDivider} />
+                        <View style={styles.modalStatItem}>
+                            <Text style={[
+                                styles.modalStatValue,
+                                selectedCategory?.changePercent != null && {
+                                    color: selectedCategory.changePercent > 0 ? COLORS.RED : '#30D158'
+                                }
+                            ]}>
+                                {selectedCategory?.changePercent != null
+                                    ? `${selectedCategory.changePercent > 0 ? '+' : ''}${selectedCategory.changePercent}%`
+                                    : '—'}
+                            </Text>
+                            <Text style={styles.modalStatLabel}>Vs previous period</Text>
+                        </View>
                     </View>
 
                     {/* Transaction List */}
@@ -1285,8 +1388,39 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         marginRight: SPACING.SMALL,
     },
+    categoryIconTile: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: SPACING.SMALL,
+    },
     categoryInfo: {
         flex: 1,
+    },
+    categoryMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 2,
+    },
+    categoryChange: {
+        fontSize: 11,
+        fontWeight: '600',
+        marginLeft: SPACING.SMALL,
+    },
+    showAllButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: SPACING.SMALL + 2,
+        marginTop: SPACING.SMALL,
+    },
+    showAllButtonText: {
+        color: COLORS.GOLD,
+        fontSize: 13,
+        fontWeight: '600',
+        marginRight: 4,
     },
     categoryName: {
         color: COLORS.WHITE,
@@ -1367,6 +1501,33 @@ const styles = StyleSheet.create({
         color: COLORS.TEXT_SECONDARY,
         fontSize: 13,
         marginTop: 4,
+    },
+    modalStatsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: SPACING.SMALL + 4,
+        paddingHorizontal: SPACING.SMALL,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.CARD_BORDER,
+    },
+    modalStatItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    modalStatDivider: {
+        width: 1,
+        height: 28,
+        backgroundColor: COLORS.CARD_BORDER,
+    },
+    modalStatValue: {
+        color: COLORS.WHITE,
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    modalStatLabel: {
+        color: COLORS.TEXT_MUTED,
+        fontSize: 10,
+        marginTop: 2,
     },
     modalLoading: {
         padding: SPACING.XL,

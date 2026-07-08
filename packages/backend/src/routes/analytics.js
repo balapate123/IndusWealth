@@ -306,6 +306,13 @@ router.get('/', authenticateToken, async (req, res, next) => {
         // Get category breakdown using our categorization
         const categoryBreakdown = await getCategoryBreakdown(categorizedTransactions);
 
+        // Previous-period breakdown for per-category comparison
+        const prevCategoryBreakdown = await getCategoryBreakdown(prevCategorizedTransactions);
+        const prevCategoryMap = {};
+        prevCategoryBreakdown.forEach(cat => {
+            prevCategoryMap[cat.name] = cat.total;
+        });
+
         // Calculate totals
         const totalSpending = categoryBreakdown.reduce((sum, cat) => sum + cat.total, 0);
 
@@ -431,13 +438,20 @@ router.get('/', authenticateToken, async (req, res, next) => {
                 } : null,
             },
             charts: {
-                categoryBreakdown: categoryBreakdown.map(cat => ({
-                    category: cat.name,
-                    amount: cat.total,
-                    count: cat.count,
-                    icon: cat.icon,
-                    color: cat.color,
-                })),
+                categoryBreakdown: categoryBreakdown.map(cat => {
+                    const previousAmount = prevCategoryMap[cat.name] || 0;
+                    return {
+                        category: cat.name,
+                        amount: cat.total,
+                        count: cat.count,
+                        icon: cat.icon,
+                        color: cat.color,
+                        previousAmount: Math.round(previousAmount * 100) / 100,
+                        changePercent: previousAmount > 0
+                            ? Math.round(((cat.total - previousAmount) / previousAmount) * 100)
+                            : null,
+                    };
+                }),
                 dailySpending,
                 incomeVsExpenses: {
                     income: totalIncome,

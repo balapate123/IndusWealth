@@ -90,8 +90,8 @@ const SignupScreen = ({ navigation }) => {
             const response = await api.auth.signup(name, email, password);
 
             if (response.success) {
-                // Track signup event
-                identify(response.user.id.toString(), { email: response.user.email, name: response.user.name });
+                // Track signup event — pseudonymous ID only, no PII to Mixpanel
+                identify(response.user.id.toString());
                 track(EVENTS.SIGNUP);
 
                 // Auto login after signup
@@ -237,7 +237,7 @@ const SignupScreen = ({ navigation }) => {
                             {agreeTerms && <Ionicons name="checkmark" size={16} color="#0F172A" />}
                         </TouchableOpacity>
                         <Text style={styles.termsText}>
-                            By signing up, you agree to our <Text style={styles.linkText}>Terms and Conditions</Text> and <Text style={styles.linkText}>Privacy Policy</Text>.
+                            By signing up, you agree to our <Text style={styles.linkText} onPress={() => navigation.navigate('LegalDoc', { docType: 'terms' })}>Terms and Conditions</Text> and <Text style={styles.linkText} onPress={() => navigation.navigate('LegalDoc', { docType: 'privacy' })}>Privacy Policy</Text>.
                         </Text>
                     </View>
 

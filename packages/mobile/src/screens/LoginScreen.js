@@ -80,10 +80,10 @@ const LoginScreen = ({ navigation }) => {
             }
 
             if (response.success) {
-                console.log('Login success:', response.user.email);
+                console.log('Login success');
 
-                // Track login event
-                identify(response.user.id.toString(), { email: response.user.email, name: response.user.name });
+                // Track login event — pseudonymous ID only, no PII to Mixpanel
+                identify(response.user.id.toString());
                 track(EVENTS.LOGIN);
 
                 // Save user session

@@ -87,10 +87,12 @@ When you link a bank account through Plaid, we receive the following data:
 | **Sync logs** | Timestamps of data synchronization events | Service reliability |
 | **API request logs** | Request IDs, timestamps, endpoints accessed (no request body content) | Debugging and security |
 | **Error logs** | Error details when something goes wrong | Service improvement |
+| **Usage analytics events** | App events (e.g., login, signup, screen views, feature usage) tied to a pseudonymous user ID, collected via Mixpanel | Understanding feature usage to improve the app |
+
+**About usage analytics (Mixpanel):** We use Mixpanel to understand how the app is used so we can improve it. Analytics events are associated with a pseudonymous internal user ID only. We do **not** send your name, email address, bank account details, balances, transaction contents, or any other financial data to Mixpanel.
 
 **We do NOT use:**
 - Advertising trackers or ad networks
-- Third-party analytics SDKs (e.g., Google Analytics, Firebase Analytics)
 - Cross-app tracking identifiers
 - Location data
 - Device contacts, photos, or other device data
@@ -161,10 +163,11 @@ We share your information with the following third-party service providers, sole
 | **Plaid Inc.** | Bank credentials (provided by you directly to Plaid), client user ID | Bank account aggregation | United States |
 | **Google (Gemini AI)** | Aggregated financial summary (see Section 4.2) | AI insight generation and transaction categorization | United States |
 | **Render.com** | All Service data (as hosting provider) | Application hosting and database | United States |
+| **Mixpanel Inc.** | App usage events and a pseudonymous user ID (no name, email, or financial data) | Product usage analytics | United States |
 
 ### 5.2 Cross-Border Data Transfers
 
-Your personal information may be stored and processed in the **United States** through our service providers (Plaid, Google, Render.com). By using the Service, you consent to the transfer of your information outside of Canada.
+Your personal information may be stored and processed in the **United States** through our service providers (Plaid, Google, Render.com, Mixpanel). By using the Service, you consent to the transfer of your information outside of Canada.
 
 These providers are subject to United States privacy and data protection laws, which may differ from Canadian law. We take reasonable steps to ensure that your information receives an adequate level of protection, including:
 
@@ -240,8 +243,11 @@ We implement appropriate technical and organizational measures to protect your p
 ### 7.1 Technical Safeguards
 
 - **Encryption in transit**: All data transmitted between the app, our servers, and third parties is encrypted using TLS/HTTPS
+- **Encryption at rest**: Plaid access tokens and two-factor authentication secrets are encrypted with AES-256-GCM before storage
 - **Password hashing**: Passwords are hashed using bcrypt with a cost factor of 12 and are never stored in plaintext
-- **JWT authentication**: Secure token-based authentication for API access
+- **JWT authentication**: Secure token-based authentication with short-lived access tokens and rotating refresh tokens
+- **Two-factor authentication (2FA)**: Optional TOTP-based 2FA with hashed recovery codes
+- **Account lockout**: Temporary lockout after repeated failed login attempts
 - **Database security**: PostgreSQL database with parameterized queries to prevent SQL injection
 - **Rate limiting**: IP-based rate limiting to prevent brute force attacks
 - **Input validation**: Server-side validation of all user input
@@ -252,7 +258,7 @@ We implement appropriate technical and organizational measures to protect your p
 
 - Access to production systems is restricted on a need-to-know basis
 - Third-party services are reviewed for their security and privacy practices
-- Sensitive data (Plaid access tokens) is stored in environment variables separate from application code
+- Encryption keys and service credentials are stored in environment variables separate from application code
 
 ### 7.3 Breach Notification
 
