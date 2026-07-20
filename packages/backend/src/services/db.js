@@ -35,119 +35,27 @@ pool.query('SELECT NOW()')
         // Don't exit process, let it try to reconnect or let the request fail
     });
 
-// Initialize Database Schema
+// Initialize Database Schema.
+// Runs on every server boot (i.e. every Render deploy) and applies the full,
+// ordered migration list from db/migrations.js — the same list the `npm run
+// migrate` CLI uses, so the two can never drift again. Every migration is
+// idempotent, so re-running the whole list each boot is a safe no-op for
+// already-applied migrations.
+const MIGRATIONS = require('../../db/migrations');
+
 const initDb = async () => {
     try {
-        // Run initial schema
-        const initSqlPath = path.join(__dirname, '../../db/init.sql');
-        const initSql = fs.readFileSync(initSqlPath, 'utf8');
-        console.log('🔄 Initializing database schema...');
-        await pool.query(initSql);
-
-        // Run custom debts migration
-        const debSqlPath = path.join(__dirname, '../../db/add_custom_debts.sql');
-        if (fs.existsSync(debSqlPath)) {
-            const debSql = fs.readFileSync(debSqlPath, 'utf8');
-            console.log('🔄 Running custom debts migration...');
-            await pool.query(debSql);
+        console.log(`🔄 Running ${MIGRATIONS.length} database migrations...`);
+        for (const file of MIGRATIONS) {
+            const sqlPath = path.join(__dirname, '../../db', file);
+            if (!fs.existsSync(sqlPath)) {
+                console.warn(`⚠️  Migration file not found, skipping: ${file}`);
+                continue;
+            }
+            const sql = fs.readFileSync(sqlPath, 'utf8');
+            console.log(`   → ${file}`);
+            await pool.query(sql);
         }
-
-        // Run user DOB migration
-        const dobSqlPath = path.join(__dirname, '../../db/add_user_dob.sql');
-        if (fs.existsSync(dobSqlPath)) {
-            const dobSql = fs.readFileSync(dobSqlPath, 'utf8');
-            console.log('🔄 Running user DOB migration...');
-            await pool.query(dobSql);
-        }
-
-        // Run AI insights migration
-        const aiInsightsSqlPath = path.join(__dirname, '../../db/add_ai_insights.sql');
-        if (fs.existsSync(aiInsightsSqlPath)) {
-            const aiInsightsSql = fs.readFileSync(aiInsightsSqlPath, 'utf8');
-            console.log('🔄 Running AI insights migration...');
-            await pool.query(aiInsightsSql);
-        }
-
-        // Run AI categorization migration
-        const aiCategorizationSqlPath = path.join(__dirname, '../../db/add_ai_categorization.sql');
-        if (fs.existsSync(aiCategorizationSqlPath)) {
-            const aiCategorizationSql = fs.readFileSync(aiCategorizationSqlPath, 'utf8');
-            console.log('🔄 Running AI categorization migration...');
-            await pool.query(aiCategorizationSql);
-        }
-
-        // Run account alias migration
-        const accountAliasSqlPath = path.join(__dirname, '../../db/add_account_alias.sql');
-        if (fs.existsSync(accountAliasSqlPath)) {
-            const accountAliasSql = fs.readFileSync(accountAliasSqlPath, 'utf8');
-            console.log('🔄 Running account alias migration...');
-            await pool.query(accountAliasSql);
-        }
-
-        // Run transaction notes migration
-        const transactionNotesSqlPath = path.join(__dirname, '../../db/add_transaction_notes.sql');
-        if (fs.existsSync(transactionNotesSqlPath)) {
-            const transactionNotesSql = fs.readFileSync(transactionNotesSqlPath, 'utf8');
-            console.log('🔄 Running transaction notes migration...');
-            await pool.query(transactionNotesSql);
-        }
-
-        // Run educational content migration
-        const educationalContentSqlPath = path.join(__dirname, '../../db/add_educational_content.sql');
-        if (fs.existsSync(educationalContentSqlPath)) {
-            const educationalContentSql = fs.readFileSync(educationalContentSqlPath, 'utf8');
-            console.log('🔄 Running educational content migration...');
-            await pool.query(educationalContentSql);
-        }
-
-        // Run security tables migration
-        const securitySqlPath = path.join(__dirname, '../../db/add_security_tables.sql');
-        if (fs.existsSync(securitySqlPath)) {
-            const securitySql = fs.readFileSync(securitySqlPath, 'utf8');
-            console.log('🔄 Running security tables migration...');
-            await pool.query(securitySql);
-        }
-
-        // Run feedback table migration
-        const feedbackSqlPath = path.join(__dirname, '../../db/add_feedback_table.sql');
-        if (fs.existsSync(feedbackSqlPath)) {
-            const feedbackSql = fs.readFileSync(feedbackSqlPath, 'utf8');
-            console.log('🔄 Running feedback table migration...');
-            await pool.query(feedbackSql);
-        }
-
-        // Run plaid refresh cooldown migration (adds last_plaid_refresh column for rate limiting)
-        const plaidRefreshCooldownSqlPath = path.join(__dirname, '../../db/add_plaid_refresh_cooldown.sql');
-        if (fs.existsSync(plaidRefreshCooldownSqlPath)) {
-            const plaidRefreshCooldownSql = fs.readFileSync(plaidRefreshCooldownSqlPath, 'utf8');
-            console.log('🔄 Running plaid refresh cooldown migration...');
-            await pool.query(plaidRefreshCooldownSql);
-        }
-
-        // Run email verification migration
-        const emailVerificationSqlPath = path.join(__dirname, '../../db/add_email_verification.sql');
-        if (fs.existsSync(emailVerificationSqlPath)) {
-            const emailVerificationSql = fs.readFileSync(emailVerificationSqlPath, 'utf8');
-            console.log('🔄 Running email verification migration...');
-            await pool.query(emailVerificationSql);
-        }
-
-        // Run insights upgrade migration
-        const insightsUpgradeSqlPath = path.join(__dirname, '../../db/add_insights_upgrade.sql');
-        if (fs.existsSync(insightsUpgradeSqlPath)) {
-            const insightsUpgradeSql = fs.readFileSync(insightsUpgradeSqlPath, 'utf8');
-            console.log('🔄 Running insights upgrade migration...');
-            await pool.query(insightsUpgradeSql);
-        }
-
-        // Run watchdog tables migration
-        const watchdogSqlPath = path.join(__dirname, '../../db/add_watchdog_tables.sql');
-        if (fs.existsSync(watchdogSqlPath)) {
-            const watchdogSql = fs.readFileSync(watchdogSqlPath, 'utf8');
-            console.log('🔄 Running watchdog tables migration...');
-            await pool.query(watchdogSql);
-        }
-
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);

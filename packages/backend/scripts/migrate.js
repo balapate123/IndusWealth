@@ -20,16 +20,9 @@ const pool = new Pool(
         }
 );
 
-// Migration files in execution order
-const MIGRATIONS = [
-    'init.sql',
-    'add_custom_debts.sql',
-    'add_user_dob.sql',
-    'add_ai_insights.sql',
-    'add_ai_categorization.sql',
-    'add_account_alias.sql',
-    'add_category_insights.sql'
-];
+// Migration files in execution order — shared with the boot-time initializer
+// (services/db.js) so the two lists can never drift apart.
+const MIGRATIONS = require('../db/migrations');
 
 async function migrate() {
     console.log('Running database migrations...');
