@@ -22,7 +22,11 @@ class PlaidService {
             const linkTokenConfig = {
                 user: { client_user_id: userId || 'test_user' },
                 client_name: 'IndusWealth',
-                products: ['transactions', 'liabilities'],
+                // 'liabilities' removed: Plaid account not yet enabled for it (link token
+                // creation fails otherwise). Re-add once access is granted via
+                // https://dashboard.plaid.com/overview/request-products — debt routes
+                // already degrade gracefully when liabilities data is unavailable.
+                products: ['transactions'],
                 country_codes: ['CA'],
                 language: 'en',
                 webhook: process.env.PLAID_WEBHOOK_URL ||
