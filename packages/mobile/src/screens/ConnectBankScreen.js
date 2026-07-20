@@ -246,7 +246,10 @@ const ConnectBankScreen = ({ navigation, route }) => {
             // The backend /plaid/oauth-redirect endpoint bounces back to the app via deep link.
             console.log('🚀 Opening Plaid Link...');
             try {
-                open({
+                // await so a missing/failed native module (e.g. running in Expo
+                // Go, which cannot load Plaid) surfaces as an alert instead of
+                // an unhandled rejection and an infinite spinner
+                await open({
                     oauthRedirectUri: OAUTH_REDIRECT_URI,
                     onSuccess: handlePlaidSuccess,
                     onExit: handlePlaidExit,
