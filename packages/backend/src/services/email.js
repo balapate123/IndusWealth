@@ -9,8 +9,10 @@ const escapeHtml = (str) => {
 };
 
 // Email configuration
+// The from-domain (induswealth.app) must be verified in the Resend dashboard
+// (DNS: SPF + DKIM records) or every send is rejected with a 403
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.FROM_EMAIL || 'IndusWealth <noreply@induswealth.com>';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'IndusWealth <hello@induswealth.app>';
 const APP_NAME = 'IndusWealth';
 
 let resend = null;
@@ -169,7 +171,7 @@ const sendWelcomeEmail = async (to, name) => {
             </ul>
         </div>
         <p style="color:#64748B; font-size:13px; margin:0;">
-            Questions? Reach us at <a href="mailto:support@induswealth.com" style="color:#D4AF37;">support@induswealth.com</a>
+            Questions? Reach us at <a href="mailto:hello@induswealth.app" style="color:#D4AF37;">hello@induswealth.app</a>
         </p>
     `);
 

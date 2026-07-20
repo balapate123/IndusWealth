@@ -127,6 +127,8 @@ DB_HOST=localhost  DB_PORT=5432  DB_NAME=induswealth  DB_USER=induswealth  DB_PA
 PLAID_CLIENT_ID=  PLAID_SECRET=  PLAID_ENV=sandbox
 JWT_SECRET=        JWT_EXPIRES_IN=7d
 GEMINI_API_KEY=    INSIGHTS_CACHE_HOURS=6
+RESEND_API_KEY=    # Resend.com API key — without it, emails are only logged (dev mode)
+FROM_EMAIL=IndusWealth <hello@induswealth.app>   # from-domain must be verified in Resend
 ENCRYPTION_KEY=    # 64 hex chars (32 bytes) for AES-256-GCM
 CORS_ORIGINS=      # comma-separated allowed origins (prod)
 AI_CATEGORIZATION_ENABLED=false
