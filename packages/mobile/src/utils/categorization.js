@@ -88,6 +88,13 @@ export const CATEGORY_PATTERNS = {
         library: 'Ionicons',
         color: '#007AFF'
     },
+    // NOTE: no bare 'TAX' or 'CRA' keywords — they'd substring-match TAXI / CRAVE / CRAFT
+    'Taxes & Government': {
+        keywords: ['CANADA TXD', 'TXD/TAX', 'RECEIVER GENERAL', 'REVENUE CANADA', 'CRA ', 'CANADA RIT', 'CANADA FPT', 'CANADA PRO', 'CANADA FED', 'GST/HST', 'TAX PAYMENT', 'TAX REFUND', 'PROPERTY TAX', 'INCOME TAX', 'SERVICE ONTARIO'],
+        icon: 'library',
+        library: 'Ionicons',
+        color: '#8B5CF6'
+    },
     'ATM': {
         keywords: ['ATM WITHDRAWAL', 'ATM DEPOSIT', 'CASH WITHDRAWAL'],
         icon: 'cash-outline',

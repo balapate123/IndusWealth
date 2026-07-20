@@ -1,9 +1,13 @@
 /**
  * AI-Powered Transaction Categorization Service
- * Uses Gemini 2.0 Flash to intelligently categorize merchants
+ * Uses Gemini to intelligently categorize merchants
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+// gemini-2.0-flash was retired 2026-06-01 (API returns 404); default to the
+// current stable Flash model, overridable via env without a code change
+const AI_CATEGORIZATION_MODEL = process.env.GEMINI_CATEGORIZATION_MODEL || 'gemini-3.5-flash';
 
 // Lazy load to avoid circular dependency
 let CATEGORY_PATTERNS = null;
@@ -69,7 +73,7 @@ async function batchCategorizeMerchants(merchantNames) {
 
         // Call Gemini API
         const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash',
+            model: AI_CATEGORIZATION_MODEL,
             generationConfig: {
                 temperature: 0.3,          // Lower = more consistent
                 topK: 20,
@@ -124,7 +128,7 @@ async function batchCategorizeMerchants(merchantNames) {
                 category_icon: patterns[cat.category].icon,
                 category_color: patterns[cat.category].color,
                 confidence_score: cat.confidence,
-                ai_model_used: 'gemini-2.0-flash'
+                ai_model_used: AI_CATEGORIZATION_MODEL
             }));
 
         const generationTimeMs = Date.now() - startTime;
@@ -140,7 +144,7 @@ async function batchCategorizeMerchants(merchantNames) {
                 token_count_input: tokenCountInput,
                 token_count_output: tokenCountOutput,
                 generation_time_ms: generationTimeMs,
-                ai_model_used: 'gemini-2.0-flash'
+                ai_model_used: AI_CATEGORIZATION_MODEL
             }
         };
 
@@ -189,6 +193,7 @@ CATEGORY DESCRIPTIONS:
 - Transportation: Rideshare (Lyft, Uber), taxi, transit
 - Alcohol & Bars: LCBO, bars, pubs, liquor stores
 - Software & Tech: Software, apps, tech purchases
+- Taxes & Government: CRA payments, Receiver General, income/property tax payments and refunds, government fees
 
 IMPORTANT RULES:
 1. Choose the BEST matching category (exactly as listed above)
@@ -199,6 +204,7 @@ IMPORTANT RULES:
    - Shoppers Drug Mart = "Health & Pharmacy"
    - Wealthsimple, Questrade = "Investments" (NOT Subscriptions or Transfers!)
    - Lyft, Uber = "Transportation" (NOT Other!)
+   - CANADA TXD, RECEIVER GENERAL, CRA, REVENUE CANADA = "Taxes & Government" (NOT Transportation! "TXD" means tax deduction, not taxi)
 4. Default to "Shopping" if uncertain (NOT "Other")
 5. Return confidence score (0.0-1.0):
    - 0.95-1.0: Very certain (known brand)

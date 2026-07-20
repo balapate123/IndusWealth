@@ -540,6 +540,8 @@ export const api = {
         apiRequest(`/analytics?period=${period}${forceRefresh ? '&refresh=true' : ''}`),
     getMonthlyAnalytics: () => apiRequest('/analytics/monthly'),
     getCategoryAnalytics: (period = 30) => apiRequest(`/analytics/categories?period=${period}`),
+    getCategoryAIInsights: (period = 30, forceRefresh = false) =>
+        apiRequest(`/analytics/categories/insights?period=${period}${forceRefresh ? '&refresh=true' : ''}`),
 
     // Account-specific transactions
     getAccountTransactions: (accountId) => apiRequest(`/transactions?account_id=${accountId}`),

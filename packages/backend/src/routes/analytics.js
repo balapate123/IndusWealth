@@ -4,6 +4,7 @@ const db = require('../services/db');
 const plaidService = require('../services/plaid');
 const { authenticateToken } = require('../middleware/auth');
 const { categorizeTransaction, getCategoryBreakdown, batchCategorizeWithAI } = require('../services/categorization');
+const { generateCategoryInsights } = require('../services/ai_insights');
 const { createLogger } = require('../services/logger');
 const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse, getPlaidStatusFromError } = require('../utils/responseHelper');
 
@@ -620,19 +621,11 @@ const buildCategoryInsights = ({ categories, totalSpend, weekendSpend, firstHalf
     return insights.slice(0, 5);
 };
 
-// GET /analytics/categories
-// Advanced category-level analytics: per-category stats, trends,
-// merchants, day-of-week patterns, size distribution, and insights.
+// Compute the full advanced-analytics payload for a user + period.
+// Shared by GET /categories (screen data) and GET /categories/insights (AI input).
 // Reads from the DB only — the mobile app forces a Plaid sync via
-// /transactions?refresh=true before calling this on pull-to-refresh.
-router.get('/categories', authenticateToken, async (req, res, next) => {
-    const ctx = { requestId: req.requestId, userId: req.user.id };
-    const periodDays = Math.max(parseInt(req.query.period) || 30, 1);
-    logger.info('Fetching category analytics', { ...ctx, period: periodDays });
-
-    try {
-        const userId = req.user.id;
-
+// /transactions?refresh=true before calling these on pull-to-refresh.
+const computeCategoryAnalytics = async (userId, periodDays) => {
         const [transactions, monthlyTrend] = await Promise.all([
             db.getTransactions(userId, 2000),
             db.getMonthlySpending(userId, 6),
@@ -887,19 +880,7 @@ router.get('/categories', authenticateToken, async (req, res, next) => {
             expenseCount: expenses.length,
         });
 
-        const meta = await createMeta(userId, DATA_SOURCES.DATABASE, {
-            syncType: 'last_transaction_sync',
-            count: expenses.length,
-        });
-
-        logger.info('Returning category analytics', {
-            ...ctx,
-            period: periodDays,
-            categories: categories.length,
-            expenses: expenses.length,
-        });
-
-        successResponse(res, {
+        return {
             period: periodDays,
             summary: {
                 totalSpend: round2(totalSpend),
@@ -931,9 +912,126 @@ router.get('/categories', authenticateToken, async (req, res, next) => {
             topMerchants: topMerchantsOverall,
             monthlyTrend: monthlyOverall,
             insights,
-        }, meta);
+        };
+};
+
+// GET /analytics/categories
+// Advanced category-level analytics: per-category stats, trends,
+// merchants, day-of-week patterns, size distribution, and rule-based insights.
+router.get('/categories', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    const periodDays = Math.max(parseInt(req.query.period) || 30, 1);
+    logger.info('Fetching category analytics', { ...ctx, period: periodDays });
+
+    try {
+        const payload = await computeCategoryAnalytics(req.user.id, periodDays);
+
+        const meta = await createMeta(req.user.id, DATA_SOURCES.DATABASE, {
+            syncType: 'last_transaction_sync',
+            count: payload.summary.expenseCount,
+        });
+
+        logger.info('Returning category analytics', {
+            ...ctx,
+            period: periodDays,
+            categories: payload.categories.length,
+            expenses: payload.summary.expenseCount,
+        });
+
+        successResponse(res, payload, meta);
     } catch (error) {
         logger.error('Failed to fetch category analytics', { ...ctx, error });
+        next(error);
+    }
+});
+
+// GET /analytics/categories/insights
+// Gemini-generated insights for the Advanced Analytics screen, cached per
+// user + period in category_ai_insights (INSIGHTS_CACHE_HOURS, default 6h).
+// Degrades gracefully: cache errors are non-fatal, and when AI is unavailable
+// the response carries source: 'unavailable' so the app keeps its rule-based
+// insights from /categories.
+router.get('/categories/insights', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    const periodDays = Math.max(parseInt(req.query.period) || 30, 1);
+    const forceRefresh = req.query.refresh === 'true';
+    const cacheHours = parseInt(process.env.INSIGHTS_CACHE_HOURS) || 6;
+    logger.info('Fetching AI category insights', { ...ctx, period: periodDays, forceRefresh });
+
+    try {
+        const userId = req.user.id;
+
+        if (!forceRefresh) {
+            try {
+                const cached = await db.pool.query(
+                    `SELECT insights, ai_model_used, generated_at
+                     FROM category_ai_insights
+                     WHERE user_id = $1 AND period_days = $2 AND cache_expires_at > NOW()`,
+                    [userId, periodDays]
+                );
+                if (cached.rows.length > 0) {
+                    logger.info('Returning cached AI category insights', ctx);
+                    return successResponse(res, {
+                        source: 'ai',
+                        cached: true,
+                        aiModel: cached.rows[0].ai_model_used,
+                        generatedAt: cached.rows[0].generated_at,
+                        insights: cached.rows[0].insights,
+                    });
+                }
+            } catch (cacheErr) {
+                logger.warn('Category insights cache read failed — run migrations?', { ...ctx, error: cacheErr });
+            }
+        }
+
+        if (!process.env.GEMINI_API_KEY) {
+            logger.warn('GEMINI_API_KEY not set — AI category insights unavailable', ctx);
+            return successResponse(res, { source: 'unavailable', insights: [] });
+        }
+
+        const analytics = await computeCategoryAnalytics(userId, periodDays);
+        if (analytics.summary.expenseCount === 0) {
+            return successResponse(res, { source: 'unavailable', insights: [] });
+        }
+
+        const result = await generateCategoryInsights(analytics);
+        if (!result.insights || result.insights.length === 0) {
+            logger.warn('AI category insights generation returned nothing', { ...ctx, error: result.metadata?.error_message });
+            return successResponse(res, { source: 'unavailable', insights: [] });
+        }
+
+        try {
+            await db.pool.query(
+                `INSERT INTO category_ai_insights
+                 (user_id, period_days, insights, ai_model_used, generated_at, cache_expires_at)
+                 VALUES ($1, $2, $3, $4, NOW(), NOW() + make_interval(hours => $5))
+                 ON CONFLICT (user_id, period_days)
+                 DO UPDATE SET insights = EXCLUDED.insights,
+                               ai_model_used = EXCLUDED.ai_model_used,
+                               generated_at = EXCLUDED.generated_at,
+                               cache_expires_at = EXCLUDED.cache_expires_at`,
+                [userId, periodDays, JSON.stringify(result.insights), result.metadata.ai_model_used, cacheHours]
+            );
+        } catch (cacheErr) {
+            logger.warn('Category insights cache write failed — run migrations?', { ...ctx, error: cacheErr });
+        }
+
+        logger.info('Returning fresh AI category insights', {
+            ...ctx,
+            count: result.insights.length,
+            model: result.metadata.ai_model_used,
+            generationMs: result.metadata.generation_time_ms,
+        });
+
+        successResponse(res, {
+            source: 'ai',
+            cached: false,
+            aiModel: result.metadata.ai_model_used,
+            generatedAt: new Date().toISOString(),
+            insights: result.insights,
+        });
+    } catch (error) {
+        logger.error('Failed to fetch AI category insights', { ...ctx, error });
         next(error);
     }
 });

@@ -523,6 +523,7 @@ const CategoryTransactions = ({ category }) => {
 
 const AdvancedAnalyticsScreen = ({ navigation }) => {
     const [data, setData] = useState(null);
+    const [aiInsights, setAiInsights] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
@@ -540,6 +541,18 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
             if (response?.success) {
                 setData(response);
             }
+
+            // Upgrade rule-based insights to AI ones in the background —
+            // the screen stays fully usable if this never resolves
+            setAiInsights(null);
+            api.getCategoryAIInsights(selectedPeriod, forceRefresh)
+                .then((aiResponse) => {
+                    if (aiResponse?.success && aiResponse.source === 'ai'
+                        && Array.isArray(aiResponse.insights) && aiResponse.insights.length > 0) {
+                        setAiInsights(aiResponse.insights);
+                    }
+                })
+                .catch(() => { /* keep rule-based insights */ });
         } catch (err) {
             console.error('Error fetching category analytics:', err);
             setError(err.parsedError?.message || 'Unable to load analytics. Pull down to retry.');
@@ -685,16 +698,26 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
                             />
                         </View>
 
-                        {/* Smart Insights */}
-                        {data.insights?.length > 0 && (
+                        {/* Smart Insights — rule-based instantly, upgraded to AI when ready */}
+                        {(aiInsights || data.insights)?.length > 0 && (
                             <>
-                                <Text style={styles.rowHeading}>SMART INSIGHTS</Text>
+                                <View style={styles.rowHeadingRow}>
+                                    <Text style={[styles.rowHeading, styles.rowHeadingInline]}>
+                                        SMART INSIGHTS
+                                    </Text>
+                                    {aiInsights && (
+                                        <View style={styles.aiBadge}>
+                                            <Ionicons name="sparkles" size={9} color={COLORS.GOLD} />
+                                            <Text style={styles.aiBadgeText}>AI</Text>
+                                        </View>
+                                    )}
+                                </View>
                                 <ScrollView
                                     horizontal
                                     showsHorizontalScrollIndicator={false}
                                     contentContainerStyle={styles.insightRow}
                                 >
-                                    {data.insights.map((insight, index) => (
+                                    {(aiInsights || data.insights).map((insight, index) => (
                                         <InsightCard key={`${insight.type}-${index}`} insight={insight} />
                                     ))}
                                 </ScrollView>
@@ -876,6 +899,35 @@ const styles = StyleSheet.create({
         marginHorizontal: SPACING.MEDIUM,
         marginTop: SPACING.MEDIUM,
         marginBottom: SPACING.SMALL,
+    },
+    rowHeadingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: SPACING.MEDIUM,
+        marginTop: SPACING.MEDIUM,
+        marginBottom: SPACING.SMALL,
+        gap: 6,
+    },
+    rowHeadingInline: {
+        marginHorizontal: 0,
+        marginTop: 0,
+        marginBottom: 0,
+    },
+    aiBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: BORDER_RADIUS.SMALL,
+        borderWidth: 1,
+        borderColor: COLORS.CARD_BORDER,
+        gap: 3,
+    },
+    aiBadgeText: {
+        color: COLORS.GOLD,
+        fontSize: 9,
+        fontFamily: FONTS.BOLD,
+        letterSpacing: 0.5,
     },
 
     // Insights

@@ -1,6 +1,6 @@
 /**
  * AI Insights Generation Service
- * Uses Gemini Flash 2.0 to generate personalized financial insights
+ * Uses Gemini to generate personalized financial insights
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -9,8 +9,10 @@ const etfKnowledge = require('./etf_knowledge');
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Model configuration (env-configurable for easy switching)
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-pro';
+// Model configuration (env-configurable for easy switching).
+// Previous default 'gemini-2.0-pro' was never a valid GA model id, and the
+// 2.0 family was retired 2026-06-01 — default to the current stable model.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 
 // Trusted sources for educational article recommendations
 const TRUSTED_SOURCES = [
@@ -401,7 +403,128 @@ function _validateArticles(articles) {
     }).slice(0, 5); // Limit to 5 articles
 }
 
+// ============ CATEGORY ANALYTICS INSIGHTS (Advanced Analytics screen) ============
+
+// Fast model for short category insights; override via env if needed
+const CATEGORY_INSIGHT_MODEL = process.env.GEMINI_CATEGORY_INSIGHTS_MODEL || 'gemini-3.5-flash';
+
+// The AI only returns type/title/description — icon and color are mapped
+// server-side so an invalid icon name can never reach the mobile app
+const CATEGORY_INSIGHT_TYPES = {
+    spending_alert: { icon: 'trending-up', color: '#FF6B6B' },
+    saving_win: { icon: 'trending-down', color: '#4CAF50' },
+    trend: { icon: 'analytics', color: '#32ADE6' },
+    habit: { icon: 'repeat', color: '#5856D6' },
+    merchant: { icon: 'storefront', color: '#FF9500' },
+    timing: { icon: 'calendar', color: '#AF52DE' },
+    optimization: { icon: 'bulb', color: '#C9A227' },
+    positive: { icon: 'checkmark-circle', color: '#30D158' },
+};
+
+/**
+ * Generate short AI insights for the Advanced Analytics screen.
+ * Receives the aggregated payload from computeCategoryAnalytics — transaction
+ * lists are stripped before sending; only category/merchant aggregates go to
+ * Gemini (same no-PII posture as generateInsights).
+ * @param {Object} analytics - payload from /analytics/categories
+ * @returns {Object} { insights: [{type, icon, color, title, description}], metadata }
+ */
+async function generateCategoryInsights(analytics) {
+    const startTime = Date.now();
+
+    const promptData = {
+        period_days: analytics.period,
+        summary: analytics.summary,
+        categories: analytics.categories.map(c => ({
+            name: c.name,
+            total: c.total,
+            count: c.count,
+            percentage: c.percentage,
+            avgTransaction: c.avgTransaction,
+            prevTotal: c.prevTotal,
+            changePercent: c.changePercent,
+            weekdayTotal: c.weekdayTotal,
+            weekendTotal: c.weekendTotal,
+            topMerchants: (c.topMerchants || []).slice(0, 3).map(m => ({
+                name: m.name, total: m.total, count: m.count
+            })),
+        })),
+        day_of_week: analytics.dayOfWeek,
+        size_buckets: analytics.sizeBuckets,
+        monthly_trend: analytics.monthlyTrend,
+    };
+
+    const prompt = `You are a sharp, numbers-driven personal finance analyst for a Canadian budgeting app (currency: CAD).
+
+TASK: Analyze the aggregated spending data below and generate 3-5 short, high-signal insights the user can act on.
+
+RULES:
+1. Every insight MUST cite specific numbers from the data (dollar amounts, percentages, counts).
+2. Be concrete and actionable — "cut X", "you saved Y", "Z is trending up" — never vague advice.
+3. Only state what the data supports. Never invent numbers.
+4. Vary the insight types — do not repeat the same type twice.
+5. "type" must be exactly one of: ${Object.keys(CATEGORY_INSIGHT_TYPES).join(', ')}
+6. "title" under 50 characters, punchy. "description" under 200 characters, 1-2 sentences.
+7. If spending dropped or a habit improved, celebrate it (saving_win or positive).
+8. Consider the change vs the previous period (prevTotal, changePercent) — that comparison is the most valuable signal.
+
+OUTPUT (strict JSON, no markdown):
+{"insights":[{"type":"spending_alert","title":"...","description":"..."}]}
+
+DATA:
+${JSON.stringify(promptData)}`;
+
+    try {
+        const model = genAI.getGenerativeModel({
+            model: CATEGORY_INSIGHT_MODEL,
+            generationConfig: {
+                temperature: 0.6,
+                maxOutputTokens: 1024,
+                responseMimeType: 'application/json',
+            },
+        });
+
+        const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        });
+        const text = result.response.text();
+
+        let parsed;
+        try {
+            parsed = JSON.parse(text);
+        } catch (parseError) {
+            console.error('Failed to parse category insights response:', text.substring(0, 300));
+            return { insights: [], metadata: { ai_model_used: CATEGORY_INSIGHT_MODEL, error_message: parseError.message, generation_time_ms: Date.now() - startTime } };
+        }
+
+        const insights = (parsed.insights || [])
+            .filter(i => i && i.title && i.description && CATEGORY_INSIGHT_TYPES[i.type])
+            .slice(0, 5)
+            .map(i => ({
+                type: i.type,
+                icon: CATEGORY_INSIGHT_TYPES[i.type].icon,
+                color: CATEGORY_INSIGHT_TYPES[i.type].color,
+                title: String(i.title).substring(0, 60),
+                description: String(i.description).substring(0, 240),
+            }));
+
+        return {
+            insights,
+            metadata: {
+                ai_model_used: CATEGORY_INSIGHT_MODEL,
+                token_count_input: Math.ceil(prompt.length / 4),
+                token_count_output: Math.ceil(text.length / 4),
+                generation_time_ms: Date.now() - startTime,
+            },
+        };
+    } catch (error) {
+        console.error('Error generating category insights:', error.message);
+        return { insights: [], metadata: { ai_model_used: CATEGORY_INSIGHT_MODEL, error_message: error.message, generation_time_ms: Date.now() - startTime } };
+    }
+}
+
 module.exports = {
     generateInsights,
+    generateCategoryInsights,
     TRUSTED_SOURCES
 };
