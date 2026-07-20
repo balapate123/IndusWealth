@@ -79,7 +79,11 @@ async function batchCategorizeMerchants(merchantNames) {
                 topK: 20,
                 topP: 0.8,
                 maxOutputTokens: 2048,     // Smaller than insights
-                responseMimeType: 'application/json'
+                responseMimeType: 'application/json',
+                // Disable "thinking": its hidden reasoning tokens count against
+                // maxOutputTokens and can truncate the categorization JSON (same
+                // root cause as the insights truncation).
+                thinkingConfig: { thinkingBudget: 0 }
             }
         });
 
@@ -88,6 +92,9 @@ async function batchCategorizeMerchants(merchantNames) {
         });
 
         const response = result.response;
+        if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+            console.warn('⚠️ [AI Categorization] Output hit MAX_TOKENS — response truncated; some merchants may be skipped.');
+        }
         const text = response.text();
 
         // Parse JSON response

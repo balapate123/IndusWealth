@@ -49,10 +49,22 @@ async function generateInsights(userData) {
                 topP: 0.95,
                 maxOutputTokens: 8192,
                 responseMimeType: 'application/json',
+                // gemini-3.5-flash is a "thinking" model: reasoning tokens count
+                // against maxOutputTokens but are never returned, so with thinking
+                // on the visible JSON was silently truncated (finishReason
+                // MAX_TOKENS) and failed to parse. Disable thinking — this is a
+                // prescriptive schema-fill task, so it stays high quality while
+                // being faster, cheaper, and returning complete JSON.
+                thinkingConfig: { thinkingBudget: 0 },
             },
         });
 
         const response = result.response;
+        // Surface truncation loudly instead of letting it masquerade as a JSON
+        // syntax error (this bug hid for weeks behind "Unterminated string").
+        if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+            console.warn('⚠️ [AI Insights] Output hit MAX_TOKENS — response truncated. Raise maxOutputTokens or shorten the prompt.');
+        }
         const text = response.text();
 
         // Parse JSON response
@@ -479,14 +491,20 @@ ${JSON.stringify(promptData)}`;
             model: CATEGORY_INSIGHT_MODEL,
             generationConfig: {
                 temperature: 0.6,
-                maxOutputTokens: 1024,
+                maxOutputTokens: 2048,
                 responseMimeType: 'application/json',
+                // Disable "thinking" — its hidden reasoning tokens were eating the
+                // whole budget and truncating this short JSON (see generateInsights).
+                thinkingConfig: { thinkingBudget: 0 },
             },
         });
 
         const result = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
         });
+        if (result.response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+            console.warn('⚠️ [Category Insights] Output hit MAX_TOKENS — response truncated.');
+        }
         const text = result.response.text();
 
         let parsed;
