@@ -539,6 +539,7 @@ export const api = {
     getAnalytics: (period = 30, forceRefresh = false) =>
         apiRequest(`/analytics?period=${period}${forceRefresh ? '&refresh=true' : ''}`),
     getMonthlyAnalytics: () => apiRequest('/analytics/monthly'),
+    getCategoryAnalytics: (period = 30) => apiRequest(`/analytics/categories?period=${period}`),
 
     // Account-specific transactions
     getAccountTransactions: (accountId) => apiRequest(`/transactions?account_id=${accountId}`),

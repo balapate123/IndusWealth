@@ -10,6 +10,7 @@ import WatchdogScreen from '../screens/WatchdogScreen';
 import DebtAttackScreen from '../screens/DebtAttackScreen';
 import AllTransactionsScreen from '../screens/AllTransactionsScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
+import AdvancedAnalyticsScreen from '../screens/AdvancedAnalyticsScreen';
 import AccountTransactionsScreen from '../screens/AccountTransactionsScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
@@ -191,6 +192,13 @@ const AppNavigator = () => {
                 <Stack.Screen
                     name="Analytics"
                     component={AnalyticsScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="AdvancedAnalytics"
+                    component={AdvancedAnalyticsScreen}
                     options={{
                         presentation: 'card',
                     }}

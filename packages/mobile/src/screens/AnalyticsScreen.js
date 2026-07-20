@@ -520,8 +520,13 @@ const AnalyticsScreen = ({ navigation }) => {
                 </View>
                 <Text style={styles.headerTitle}>Wealth Narrative</Text>
             </View>
-            <TouchableOpacity style={styles.notificationButton}>
-                <Ionicons name="notifications-outline" size={22} color={COLORS.WHITE} />
+            <TouchableOpacity
+                style={styles.advancedButton}
+                onPress={() => navigation.navigate('AdvancedAnalytics')}
+                activeOpacity={0.7}
+            >
+                <Ionicons name="stats-chart" size={14} color={COLORS.BACKGROUND} />
+                <Text style={styles.advancedButtonText}>Advanced</Text>
             </TouchableOpacity>
         </View>
     );
@@ -990,6 +995,20 @@ const styles = StyleSheet.create({
     },
     notificationButton: {
         padding: SPACING.SMALL,
+    },
+    advancedButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.GOLD,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: BORDER_RADIUS.XL,
+        gap: 4,
+    },
+    advancedButtonText: {
+        color: COLORS.BACKGROUND,
+        fontSize: 12,
+        fontFamily: FONTS.BOLD,
     },
 
     // Period Toggle
