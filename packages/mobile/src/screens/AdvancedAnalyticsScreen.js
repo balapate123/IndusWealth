@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
     View,
     Text,
@@ -530,12 +530,29 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
     const [selectedPeriod, setSelectedPeriod] = useState(30);
     const [selectedCategoryName, setSelectedCategoryName] = useState(null);
 
+    // Mirror of `data` readable inside async closures without being a fetchData
+    // dependency, so the catch handler can tell "initial load" from "refresh".
+    const dataRef = useRef(null);
+    useEffect(() => { dataRef.current = data; }, [data]);
+
     const fetchData = useCallback(async (forceRefresh = false) => {
         try {
             setError(null);
-            // Pull-to-refresh forces a Plaid sync first (same idiom as AnalyticsScreen)
+            // Pull-to-refresh asks Plaid for a fresh sync first (same idiom as
+            // AnalyticsScreen). This is best-effort: the backend enforces a 10-min
+            // refresh cooldown and returns HTTP 429, and the network can fail — but
+            // the category analytics below reads from the server cache and stays
+            // valid regardless, so a sync failure must NOT abort the load or blank
+            // the screen.
             if (forceRefresh) {
-                await api.getTransactions('?refresh=true&limit=100');
+                try {
+                    await api.getTransactions('?refresh=true&limit=100');
+                } catch (syncErr) {
+                    console.warn(
+                        'Transaction sync skipped during refresh:',
+                        syncErr?.parsedError?.message || syncErr?.message
+                    );
+                }
             }
             const response = await api.getCategoryAnalytics(selectedPeriod);
             if (response?.success) {
@@ -555,7 +572,11 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
                 .catch(() => { /* keep rule-based insights */ });
         } catch (err) {
             console.error('Error fetching category analytics:', err);
-            setError(err.parsedError?.message || 'Unable to load analytics. Pull down to retry.');
+            // Only surface a full-screen error on the initial load. If we already
+            // have data, keep showing that last result rather than wiping the page.
+            if (!dataRef.current) {
+                setError(err.parsedError?.message || 'Unable to load analytics. Pull down to retry.');
+            }
         } finally {
             setLoading(false);
             setRefreshing(false);
