@@ -14,10 +14,10 @@ const configuration = new Configuration({
 const client = new PlaidApi(configuration);
 
 class PlaidService {
-    async createLinkToken(userId) {
+    async createLinkToken(userId, platform = 'android') {
         if (!process.env.PLAID_CLIENT_ID) throw new Error("Missing Plaid Keys");
         try {
-            console.log('🔧 Creating link token for user:', userId, '| PLAID_ENV:', process.env.PLAID_ENV);
+            console.log('🔧 Creating link token for user:', userId, '| PLAID_ENV:', process.env.PLAID_ENV, '| platform:', platform);
 
             const linkTokenConfig = {
                 user: { client_user_id: userId || 'test_user' },
@@ -33,14 +33,22 @@ class PlaidService {
                     `${process.env.BACKEND_URL || 'https://induswealth.onrender.com'}/plaid/webhook`,
             };
 
-            // OAuth redirect URI is required for Canadian banks (all use OAuth).
-            // Must be HTTPS and registered in the Plaid Dashboard.
-            // Defaults to the Render backend endpoint; override via PLAID_OAUTH_REDIRECT_URI.
-            // Only set in production — sandbox banks don't use OAuth.
+            // OAuth config for Canadian banks (all use OAuth). Only set in
+            // production — sandbox banks don't use OAuth.
+            // Per Plaid docs (https://plaid.com/docs/link/oauth/):
+            // - Android SDK: android_package_name is REQUIRED and redirect_uri
+            //   must be left blank, or Link fails to open with no callback.
+            //   The package name must be registered in the Plaid Dashboard.
+            // - iOS/web: redirect_uri (HTTPS, registered in the Dashboard).
             if (process.env.PLAID_ENV === 'production') {
-                linkTokenConfig.redirect_uri =
-                    process.env.PLAID_OAUTH_REDIRECT_URI ||
-                    'https://induswealth.onrender.com/plaid/oauth-redirect';
+                if (platform === 'android') {
+                    linkTokenConfig.android_package_name =
+                        process.env.PLAID_ANDROID_PACKAGE_NAME || 'com.induswealth.app';
+                } else {
+                    linkTokenConfig.redirect_uri =
+                        process.env.PLAID_OAUTH_REDIRECT_URI ||
+                        'https://induswealth.onrender.com/plaid/oauth-redirect';
+                }
             }
 
             const response = await client.linkTokenCreate(linkTokenConfig);

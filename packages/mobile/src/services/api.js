@@ -3,6 +3,7 @@
 // Find it with: ipconfig (Windows) or ifconfig (Mac/Linux)
 // Replace with your actual IP when testing on a physical device
 
+import { Platform } from 'react-native';
 import cache from './cache';
 import { reset as resetAnalytics } from './analytics';
 
@@ -514,7 +515,12 @@ export const api = {
         }),
 
     // Plaid Link
-    createLinkToken: () => apiRequest('/plaid/create_link_token', { method: 'POST' }),
+    // platform picks the OAuth config server-side: Android needs
+    // android_package_name in the link token, iOS/web need redirect_uri
+    createLinkToken: () => apiRequest('/plaid/create_link_token', {
+        method: 'POST',
+        body: JSON.stringify({ platform: Platform.OS }),
+    }),
 
     // Plaid Link Update Mode (for re-authentication)
     createUpdateLinkToken: () => apiRequest('/plaid/create_update_link_token', { method: 'POST' }),

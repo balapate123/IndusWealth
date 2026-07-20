@@ -41,7 +41,12 @@ router.post('/create_link_token', authenticateToken, async (req, res, next) => {
 
     try {
         const userId = req.user.id;
-        const data = await plaidService.createLinkToken(userId.toString());
+        // Platform decides OAuth config: android_package_name vs redirect_uri.
+        // Defaults to android (the only shipping client) for older app builds.
+        const platform = req.body?.platform === 'ios' || req.body?.platform === 'web'
+            ? req.body.platform
+            : 'android';
+        const data = await plaidService.createLinkToken(userId.toString(), platform);
 
         logger.info('Link token created successfully', ctx);
 
