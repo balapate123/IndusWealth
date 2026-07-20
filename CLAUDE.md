@@ -3,7 +3,7 @@
 ## Project Overview
 - **IndusWealth**: Canada-only personal finance app (jurisdiction: Ontario, PIPEDA compliance)
 - **Monorepo**: npm workspaces — `packages/backend` (Express API) + `packages/mobile` (Expo/React Native)
-- **Integrations**: Plaid (CA bank aggregation), Google Gemini AI (insights), Render.com (hosting), EAS (mobile builds)
+- **Integrations**: Plaid (CA bank aggregation), Google Gemini AI (insights), Resend (transactional email from hello@induswealth.app), Render.com (hosting), EAS (mobile builds)
 
 ---
 
@@ -19,7 +19,7 @@
 | | `src/routes/accounts.js` | Bank accounts |
 | | `src/routes/transactions.js` | Transactions + Plaid sync |
 | | `src/routes/debt.js` | Debt overview + snowball/avalanche calc |
-| | `src/routes/analytics.js` | Spending analytics |
+| | `src/routes/analytics.js` | Spending analytics + `/analytics/categories` (advanced category analytics) + `/analytics/categories/insights` (AI insights, 6h cache) |
 | | `src/routes/watchdog.js` | Recurring expense detection |
 | | `src/routes/insights.js` | AI-generated financial insights |
 | | `src/routes/educational.js` | Wealth Academy articles |
@@ -62,7 +62,8 @@
 | | `src/screens/HomeScreen.js` | Dashboard |
 | | `src/screens/DebtAttackScreen.js` | Debt payoff tool |
 | | `src/screens/WatchdogScreen.js` | Recurring expenses |
-| | `src/screens/AnalyticsScreen.js` | Spending analytics |
+| | `src/screens/AnalyticsScreen.js` | Spending analytics ("Advanced" header button opens AdvancedAnalytics) |
+| | `src/screens/AdvancedAnalyticsScreen.js` | Advanced category analytics: stat tiles, AI/rule-based insights, category drill-down, charts |
 | | `src/screens/InsightsScreen.js` | AI insights |
 | | `src/screens/ProfileScreen.js` | Profile + settings |
 | | `src/screens/WealthAcademyScreen.js` | Educational content |
@@ -83,15 +84,16 @@
 | Utils | `src/utils/categorization.js` | Client-side category helpers |
 
 ### Database Tables
-`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`
+`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`)
 
 ---
 
 ## Tech Stack
 - **Backend**: Node.js, Express 5, PostgreSQL 15 (pg), JWT (jsonwebtoken), bcryptjs, helmet, express-rate-limit, express-validator, otplib (TOTP), qrcode
 - **Mobile**: React Native 0.81.5, Expo ~54, React 19, React Navigation v6 (stack + bottom-tabs), AsyncStorage, react-native-plaid-link-sdk, react-native-svg, expo-linear-gradient
-- **AI**: Google Generative AI (Gemini) — aggregated summaries only, no PII sent
-- **Plaid**: products `transactions` + `liabilities`, country_codes `CA` only
+- **AI**: Google Generative AI (Gemini) — aggregated summaries only, no PII sent. Default model `gemini-3.5-flash` everywhere (the 2.0 family was retired 2026-06-01 and returns 404; never use `gemini-2.0-*`). Env overrides: `GEMINI_MODEL` (Insights tab), `GEMINI_CATEGORIZATION_MODEL`, `GEMINI_CATEGORY_INSIGHTS_MODEL`
+- **Plaid**: products `transactions` only (`liabilities` pending dashboard approval — re-add when granted), country_codes `CA` only. Production OAuth: Android link tokens use `android_package_name` (`com.induswealth.app`, must be registered in the Plaid dashboard); iOS/web use `redirect_uri`. The app sends `platform` in the `create_link_token` body
+- **Email**: Resend — pattern-first templates in `services/email.js`; no `RESEND_API_KEY` = dev mode (codes logged to server console only)
 - **Deployment**: Render.com (backend), EAS (mobile builds), Docker Compose (local DB)
 
 ---
@@ -129,6 +131,11 @@ JWT_SECRET=        JWT_EXPIRES_IN=7d
 GEMINI_API_KEY=    INSIGHTS_CACHE_HOURS=6
 RESEND_API_KEY=    # Resend.com API key — without it, emails are only logged (dev mode)
 FROM_EMAIL=IndusWealth <hello@induswealth.app>   # from-domain must be verified in Resend
+GEMINI_MODEL=      # optional; default gemini-3.5-flash (2.0 family is retired — 404s)
+GEMINI_CATEGORIZATION_MODEL=       # optional; default gemini-3.5-flash
+GEMINI_CATEGORY_INSIGHTS_MODEL=    # optional; default gemini-3.5-flash
+PLAID_ANDROID_PACKAGE_NAME=        # optional; default com.induswealth.app
+PLAID_OAUTH_REDIRECT_URI=          # optional; default https://induswealth.onrender.com/plaid/oauth-redirect (iOS/web only)
 ENCRYPTION_KEY=    # 64 hex chars (32 bytes) for AES-256-GCM
 CORS_ORIGINS=      # comma-separated allowed origins (prod)
 AI_CATEGORIZATION_ENABLED=false
@@ -172,3 +179,19 @@ EXPO_PUBLIC_API_URL=   # Override default API endpoint
 ### Test Credentials
 - App: `demo@induswealth.com` / `demo123`
 - Plaid sandbox: `user_good` / `pass_good`
+
+---
+
+## Current Status & Pending Steps (as of 2026-07-20)
+
+All code below is committed and pushed on `feature/web-export-fix` (latest: `827b610`). Backend deploys to Render from this branch.
+
+**Working:** Advanced Analytics page (entry: "Advanced" button on Analytics header), AI category insights with rule-based fallback, `Taxes & Government` category (fixes CANADA TXD → Transportation misclassification), Resend email verification from hello@induswealth.app (domain verified, DNS on Spaceship).
+
+**Pending / blockers:**
+1. **Plaid Android OAuth (IN PROGRESS — user finishing manually)**: `PLAID_ENV=production` on Render. The Plaid dashboard login has TWO teams: "BHARGAV KIRIT MARSONIA" (personal) and "IndusWealth". The Android package name `com.induswealth.app` was mistakenly being registered under the personal team; it must be saved under Developers → API → "Allowed Android package names" in the team whose `PLAID_CLIENT_ID` matches Render's (verify via Developers → Keys — likely the IndusWealth team). Redirect URIs list was empty on the personal team, further evidence Render's keys belong to the other team. Error until done: "Android package name must be configured in the developer dashboard."
+2. **Plaid Link cannot open in Expo Go** (native module missing). Testing bank connect requires a dev build: `cd packages/mobile && eas build --profile development --platform android`, then `npx expo start` and open the standalone dev app. JS-only changes need no rebuild; there is NO EAS Update (OTA) configured, so installed builds only get new JS via rebuild.
+3. **Run `npm run migrate` against prod DB** for `category_ai_insights` (AI insights endpoint works without it but re-calls Gemini every request).
+4. **Render env check**: if `GEMINI_MODEL` is set to the old invalid `gemini-2.0-pro`, delete it or set `gemini-3.5-flash`.
+5. `migrate.js` MIGRATIONS list is missing 8 older migration files (security tables, watchdog, etc. were applied manually) — flagged as separate task.
+6. `liabilities` product: request access in Plaid dashboard, then re-add to `products` in `services/plaid.js`.
