@@ -194,7 +194,7 @@ If our services expand in the future to include any regulated activities, we wil
 
 If you have questions about this disclaimer or our services, contact us at:
 
-- **Email**: [support@induswealth.com]
+- **Email**: [support@induswealth.app]
 
 ---
 

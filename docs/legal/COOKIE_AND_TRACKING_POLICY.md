@@ -121,7 +121,7 @@ We will update this policy if we introduce any new tracking or caching mechanism
 
 For questions about our tracking and caching practices:
 
-- **Email**: [privacy@induswealth.com]
+- **Email**: [privacy@induswealth.app]
 
 ---
 

@@ -37,11 +37,11 @@ const PRIVACY_POLICY_SECTIONS = [
     },
     {
         title: '7. Your Privacy Rights',
-        content: 'Under PIPEDA, you have the right to:\n• Access your personal information\n• Correct inaccurate information\n• Withdraw consent for data processing\n• Request deletion of your data\n• Request data portability (JSON/CSV export)\n• Challenge our compliance\n\nContact: privacy@induswealth.com\nWe will respond within 30 days as required by PIPEDA.'
+        content: 'Under PIPEDA, you have the right to:\n• Access your personal information\n• Correct inaccurate information\n• Withdraw consent for data processing\n• Request deletion of your data\n• Request data portability (JSON/CSV export)\n• Challenge our compliance\n\nContact: privacy@induswealth.app\nWe will respond within 30 days as required by PIPEDA.'
     },
     {
         title: '8. Contact Us',
-        content: 'IndusWealth Privacy Officer\nEmail: privacy@induswealth.com\nGeneral Support: support@induswealth.com\n\nOffice of the Privacy Commissioner of Canada\nWebsite: priv.gc.ca\nToll-free: 1-800-282-1376'
+        content: 'IndusWealth Privacy Officer\nEmail: privacy@induswealth.app\nGeneral Support: support@induswealth.app\n\nOffice of the Privacy Commissioner of Canada\nWebsite: priv.gc.ca\nToll-free: 1-800-282-1376'
     },
 ];
 
@@ -76,11 +76,11 @@ const TERMS_OF_SERVICE_SECTIONS = [
     },
     {
         title: '8. Dispute Resolution',
-        content: 'These Terms are governed by the laws of the Province of Ontario and the federal laws of Canada.\n\nBefore formal dispute resolution, you agree to contact support@induswealth.com and attempt informal resolution for at least 30 days.\n\nDisputes shall be submitted to the courts of Ontario, Canada.'
+        content: 'These Terms are governed by the laws of the Province of Ontario and the federal laws of Canada.\n\nBefore formal dispute resolution, you agree to contact support@induswealth.app and attempt informal resolution for at least 30 days.\n\nDisputes shall be submitted to the courts of Ontario, Canada.'
     },
     {
         title: '9. Contact',
-        content: 'Email: support@induswealth.com\nWebsite: induswealth.com\n\nBy using IndusWealth, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.'
+        content: 'Email: support@induswealth.app\nWebsite: induswealth.app\n\nBy using IndusWealth, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.'
     },
 ];
 

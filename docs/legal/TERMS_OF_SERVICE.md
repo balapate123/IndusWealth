@@ -99,7 +99,7 @@ You are responsible for:
 
 - Maintaining the confidentiality of your login credentials
 - All activities that occur under your account
-- Notifying us immediately at **[support@induswealth.com]** if you suspect unauthorized access to your account
+- Notifying us immediately at **[support@induswealth.app]** if you suspect unauthorized access to your account
 
 We are not liable for any loss or damage arising from your failure to protect your account credentials.
 
@@ -314,7 +314,7 @@ These Terms shall be governed by and construed in accordance with the laws of th
 
 ### 14.2 Informal Resolution
 
-Before initiating any formal dispute resolution, you agree to contact us at **[support@induswealth.com]** and attempt to resolve the dispute informally for at least thirty (30) days.
+Before initiating any formal dispute resolution, you agree to contact us at **[support@induswealth.app]** and attempt to resolve the dispute informally for at least thirty (30) days.
 
 ### 14.3 Jurisdiction
 
@@ -395,8 +395,8 @@ We shall not be liable for any failure or delay in performing our obligations du
 
 If you have any questions about these Terms, please contact us:
 
-- **Email**: [support@induswealth.com]
-- **Website**: [https://induswealth.com]
+- **Email**: [support@induswealth.app]
+- **Website**: [https://induswealth.app]
 
 ---
 

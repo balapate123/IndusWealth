@@ -34,8 +34,8 @@ Plaid will ask about your app's security practices. Use these answers:
 - **Is your app read-only?** Yes — we never initiate payments or transfers.
 
 ### Compliance
-- **Privacy Policy URL:** https://induswealth.com/privacy *(must be live)*
-- **Terms of Service URL:** https://induswealth.com/terms *(must be live)*
+- **Privacy Policy URL:** https://induswealth.app/privacy *(must be live)*
+- **Terms of Service URL:** https://induswealth.app/terms *(must be live)*
 - **Jurisdiction:** Canada (Ontario) — PIPEDA compliant
 - **Are you a licensed financial institution?** No — we are a personal finance tracking app, not a regulated financial institution.
 

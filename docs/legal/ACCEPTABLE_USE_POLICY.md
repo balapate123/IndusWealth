@@ -127,7 +127,7 @@ If we determine that you have violated this AUP, we may:
 
 ### 6.2 Reporting Violations
 
-If you become aware of any violation of this AUP, please report it to [support@induswealth.com].
+If you become aware of any violation of this AUP, please report it to [support@induswealth.app].
 
 ### 6.3 Investigation
 
@@ -145,7 +145,7 @@ We may update this AUP from time to time. Material changes will be communicated 
 
 For questions about this Acceptable Use Policy:
 
-- **Email**: [support@induswealth.com]
+- **Email**: [support@induswealth.app]
 
 ---
 

@@ -162,9 +162,9 @@ app.get('/', (req, res) => {
 // Security.txt (RFC 9116) — security contact disclosure
 app.get('/.well-known/security.txt', (req, res) => {
     res.type('text/plain').send(
-        `Contact: mailto:security@induswealth.com\n` +
+        `Contact: mailto:security@induswealth.app\n` +
         `Preferred-Languages: en\n` +
-        `Canonical: https://induswealth.com/.well-known/security.txt\n` +
+        `Canonical: https://induswealth.app/.well-known/security.txt\n` +
         `Expires: 2027-04-15T00:00:00.000Z\n`
     );
 });

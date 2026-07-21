@@ -281,7 +281,7 @@ Under PIPEDA and applicable provincial privacy legislation, you have the followi
 You have the right to request access to the personal information we hold about you. You can:
 
 - View your profile data, linked accounts, and transactions directly in the app
-- Request a comprehensive data export by contacting us at **[privacy@induswealth.com]**
+- Request a comprehensive data export by contacting us at **[privacy@induswealth.app]**
 
 We will respond to your access request within **30 days**, as required by PIPEDA.
 
@@ -308,7 +308,7 @@ Withdrawing consent may limit your ability to use certain features of the Servic
 You have the right to request deletion of your personal information. You can:
 
 - Delete your entire account through the Profile screen (requires password confirmation)
-- Contact us at **[privacy@induswealth.com]** to request deletion
+- Contact us at **[privacy@induswealth.app]** to request deletion
 
 We will process deletion requests within **30 days**.
 
@@ -320,7 +320,7 @@ You have the right to request your personal information in a structured, commonl
 
 If you believe we are not complying with PIPEDA or this Privacy Policy, you may:
 
-1. Contact our Privacy Officer at **[privacy@induswealth.com]**
+1. Contact our Privacy Officer at **[privacy@induswealth.app]**
 2. File a complaint with the **Office of the Privacy Commissioner of Canada**:
    - Website: [https://www.priv.gc.ca](https://www.priv.gc.ca)
    - Toll-free: 1-800-282-1376
@@ -369,7 +369,7 @@ If you are under the age of majority in your province or territory, your parent 
 
 IndusWealth is not directed at children under the age of 13. We do not knowingly collect personal information from children under 13. If we become aware that we have collected information from a child under 13 without parental consent, we will take immediate steps to delete that information.
 
-If you are a parent or guardian and believe your child has provided us with personal information, please contact us at **[privacy@induswealth.com]**.
+If you are a parent or guardian and believe your child has provided us with personal information, please contact us at **[privacy@induswealth.app]**.
 
 ---
 
@@ -434,9 +434,9 @@ If you disagree with the changes, you may delete your account before the updated
 If you have questions, concerns, or complaints about this Privacy Policy or our privacy practices, please contact:
 
 **IndusWealth Privacy Officer**
-- **Email**: [privacy@induswealth.com]
-- **General Support**: [support@induswealth.com]
-- **Website**: [https://induswealth.com]
+- **Email**: [privacy@induswealth.app]
+- **General Support**: [support@induswealth.app]
+- **Website**: [https://induswealth.app]
 
 We will acknowledge your inquiry within **5 business days** and provide a substantive response within **30 days**, as required by PIPEDA.
 

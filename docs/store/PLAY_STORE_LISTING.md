@@ -55,9 +55,9 @@ BUILT FOR CANADIANS
 
 DISCLAIMER: IndusWealth is a financial tracking and education tool. It does not provide financial, investment, legal, or tax advice. Always consult a qualified financial advisor for personalized guidance.
 
-For support: support@induswealth.com
-Privacy Policy: https://induswealth.com/privacy
-Terms of Service: https://induswealth.com/terms
+For support: support@induswealth.app
+Privacy Policy: https://induswealth.app/privacy
+Terms of Service: https://induswealth.app/terms
 ```
 
 ---
@@ -69,8 +69,8 @@ Terms of Service: https://induswealth.com/terms
 | Category | Finance |
 | Content Rating | Everyone (ESRB) / General (IARC) |
 | Target Age | 18+ (requires bank account) |
-| Email | support@induswealth.com |
-| Privacy Policy URL | https://induswealth.com/privacy *(must be live before submission)* |
+| Email | support@induswealth.app |
+| Privacy Policy URL | https://induswealth.app/privacy *(must be live before submission)* |
 
 ---
 

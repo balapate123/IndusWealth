@@ -197,7 +197,7 @@ All sub-processors are required to maintain appropriate security measures, inclu
 
 For questions about our sub-processors or data processing practices:
 
-- **Email**: [privacy@induswealth.com]
+- **Email**: [privacy@induswealth.app]
 
 ---
 

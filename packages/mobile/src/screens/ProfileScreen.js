@@ -531,8 +531,8 @@ const ProfileScreen = ({ navigation }) => {
                     <MenuItem
                         icon="help-circle"
                         label="Help & Support"
-                        subtitle="support@induswealth.com"
-                        onPress={() => Linking.openURL('mailto:support@induswealth.com')}
+                        subtitle="support@induswealth.app"
+                        onPress={() => Linking.openURL('mailto:support@induswealth.app')}
                     />
                     <View style={styles.divider} />
                     <MenuItem

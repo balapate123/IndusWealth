@@ -152,7 +152,9 @@ const ConnectBankScreen = ({ navigation, route }) => {
 
     // Shared success handler — used by both the initial open() and the OAuth resume path
     const handlePlaidSuccess = async (success) => {
-        console.log('🎉 Plaid Link success:', success.publicToken);
+        // Don't log the public token — it's a bearer credential (short-lived, but
+        // still exchangeable for an access token). Log only that we succeeded.
+        console.log('🎉 Plaid Link success — exchanging public token');
         try {
             const exchangeResponse = await api.exchangePublicToken(success.publicToken);
 

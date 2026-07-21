@@ -208,7 +208,7 @@ We will update this document when we add or change sub-processors. Material chan
 
 If you have questions about our sub-processors or data processing practices:
 
-- **Email**: [privacy@induswealth.com]
+- **Email**: [privacy@induswealth.app]
 
 ---
 

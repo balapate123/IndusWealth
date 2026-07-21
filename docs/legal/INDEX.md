@@ -19,8 +19,8 @@ This folder contains all legal, privacy, and compliance documents for IndusWealt
 - [ ] Have all documents reviewed by a qualified legal professional
 - [ ] Fill in all `[INSERT DATE]` placeholders with actual effective dates
 - [ ] Fill in `[INSERT NAME/TITLE]` for Privacy Officer
-- [ ] Confirm email addresses (support@induswealth.com, privacy@induswealth.com)
-- [ ] Confirm website URL (https://induswealth.com)
+- [ ] Confirm email addresses (support@induswealth.app, privacy@induswealth.app)
+- [ ] Confirm website URL (https://induswealth.app)
 - [ ] Review governing jurisdiction (currently: Ontario, Canada)
 - [ ] Sign Data Processing Agreements with Plaid, Google, and Render
 
