@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index, follow" />
+    <meta name="description" content="IndusWealth Privacy Policy — how we collect, use, and protect your personal information under Canada's PIPEDA." />
+    <meta name="theme-color" content="#000000" />
+    <title>Privacy Policy — IndusWealth</title>
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #0c0c0c;
+            --border: rgba(201, 162, 39, 0.22);
+            --gold: #c9a227;
+            --gold-light: #e5c048;
+            --text: #f2f2f2;
+            --text-muted: #a8a8a8;
+        }
+
+        * { box-sizing: border-box; }
+
+        html { -webkit-text-size-adjust: 100%; }
+
+        body {
+            margin: 0;
+            background: radial-gradient(1200px 600px at 50% -10%, #14110a 0%, var(--bg) 55%);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.7;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a { color: var(--gold-light); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 20px;
+            background: rgba(0, 0, 0, 0.82);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .brand .mark {
+            width: 26px; height: 26px;
+            border-radius: 7px;
+            background: linear-gradient(135deg, var(--gold-light), var(--gold));
+            display: inline-flex; align-items: center; justify-content: center;
+            color: #000; font-weight: 800; font-size: 15px;
+        }
+        .brand .name { color: #fff; }
+        .brand .name b { color: var(--gold-light); font-weight: 700; }
+
+        .nav { display: flex; gap: 18px; font-size: 14px; }
+        .nav a { color: var(--text-muted); }
+        .nav a.active { color: var(--gold-light); }
+
+        .wrap {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 40px 22px 90px;
+        }
+
+        header.doc {
+            text-align: center;
+            padding: 24px 0 30px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 34px;
+        }
+        header.doc h1 {
+            margin: 0 0 8px;
+            font-size: clamp(28px, 6vw, 40px);
+            color: #fff;
+            letter-spacing: -0.5px;
+        }
+        header.doc .sub {
+            color: var(--gold-light);
+            font-weight: 600;
+            margin: 0 0 6px;
+        }
+        header.doc .meta {
+            color: var(--text-muted);
+            font-size: 13.5px;
+        }
+        .pill {
+            display: inline-block;
+            margin-top: 14px;
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 12.5px;
+            color: var(--gold-light);
+            background: rgba(201, 162, 39, 0.06);
+        }
+
+        section {
+            margin-bottom: 30px;
+        }
+        section h2 {
+            font-size: 19px;
+            color: var(--gold-light);
+            margin: 0 0 12px;
+            padding-left: 12px;
+            border-left: 3px solid var(--gold);
+        }
+        section h3 {
+            font-size: 15px;
+            color: #fff;
+            margin: 20px 0 8px;
+        }
+        section p { margin: 0 0 12px; color: var(--text); }
+
+        ul {
+            list-style: none;
+            margin: 0 0 14px;
+            padding: 0;
+        }
+        ul li {
+            position: relative;
+            padding-left: 22px;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+        ul li::before {
+            content: "";
+            position: absolute;
+            left: 4px; top: 11px;
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--gold);
+        }
+        ul li b, ul li strong { color: #fff; }
+
+        .callout {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 18px;
+            margin: 8px 0 12px;
+        }
+        .callout.warn { border-color: rgba(255, 107, 107, 0.35); }
+
+        .contact-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px 20px;
+        }
+        .contact-card .row { margin-bottom: 4px; }
+        .muted { color: var(--text-muted); }
+
+        footer.doc {
+            margin-top: 40px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+        footer.doc a { margin: 0 8px; }
+
+        strong.no { color: #ff8080; font-weight: 700; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="brand">
+            <span class="mark">I</span>
+            <span class="name">Indus<b>Wealth</b></span>
+        </div>
+        <nav class="nav">
+            <a href="/privacy" class="active">Privacy</a>
+            <a href="/terms">Terms</a>
+        </nav>
+    </div>
+
+    <div class="wrap">
+        <header class="doc">
+            <p class="sub">IndusWealth</p>
+            <h1>Privacy Policy</h1>
+            <p class="meta">Version 1.0 — Effective March 2026</p>
+            <span class="pill">PIPEDA compliant · Canada</span>
+        </header>
+
+        <section>
+            <h2>1. Introduction</h2>
+            <p>IndusWealth ("we", "us", "our", or the "Company") is committed to protecting the privacy and security of your personal information. This Privacy Policy explains how we collect, use, disclose, store, and protect your information when you use the IndusWealth mobile application and related services (the "Service").</p>
+            <p>This Privacy Policy complies with the Personal Information Protection and Electronic Documents Act (PIPEDA, S.C. 2000, c. 5) and applicable provincial privacy legislation.</p>
+        </section>
+
+        <section>
+            <h2>2. Information We Collect</h2>
+            <h3>Information You Provide Directly</h3>
+            <ul>
+                <li><b>Email address</b> — Account authentication</li>
+                <li><b>Password</b> — Stored as a bcrypt hash (never in plaintext)</li>
+                <li><b>Name</b> — Personalization</li>
+                <li><b>Date of birth</b> — Age-based financial insights</li>
+                <li><b>Transaction notes</b> — Personal record-keeping</li>
+                <li><b>Custom debt entries</b> — Debt payoff calculations</li>
+            </ul>
+            <h3>Information from Plaid (Bank Data)</h3>
+            <ul>
+                <li><b>Account information</b> — names, types, balances</li>
+                <li><b>Transaction data</b> — names, amounts, dates, categories</li>
+                <li><b>Liability data</b> — credit card and loan balances</li>
+            </ul>
+            <h3>Usage Analytics (Mixpanel)</h3>
+            <ul>
+                <li>App events (login, screen views, feature usage) tied to a pseudonymous user ID</li>
+                <li>No name, email, or financial data is ever sent to Mixpanel</li>
+            </ul>
+            <div class="callout">
+                <p style="margin:0;">We do <strong class="no">NOT</strong> receive your bank login credentials, full account numbers, SIN, credit score, or PINs.</p>
+            </div>
+        </section>
+
+        <section>
+            <h2>3. How We Use Your Information</h2>
+            <h3>Providing the Service</h3>
+            <ul>
+                <li>Authenticating your identity and managing your account</li>
+                <li>Displaying bank account balances and transaction history</li>
+                <li>Generating spending analytics and category breakdowns</li>
+                <li>Detecting recurring subscriptions and expenses</li>
+                <li>Calculating debt payoff strategies</li>
+            </ul>
+            <h3>AI-Powered Features</h3>
+            <p>When generating insights, we send an aggregated, anonymized summary to Google Gemini. We do <strong class="no">NOT</strong> send your name, email, bank account numbers, or any data that directly identifies you.</p>
+        </section>
+
+        <section>
+            <h2>4. How We Share Your Information</h2>
+            <h3>Third-Party Service Providers</h3>
+            <ul>
+                <li><b>Plaid Inc.</b> — Bank account aggregation (United States)</li>
+                <li><b>Google Gemini AI</b> — Insight generation (United States)</li>
+                <li><b>Render.com</b> — Application hosting (United States)</li>
+                <li><b>Mixpanel Inc.</b> — Product usage analytics, pseudonymous events only (United States)</li>
+            </ul>
+            <h3>We do <strong class="no">NOT</strong>:</h3>
+            <ul>
+                <li>Sell your personal information</li>
+                <li>Share your data with advertisers</li>
+                <li>Provide your data to data brokers</li>
+                <li>Use your financial data for credit decisions</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>5. Data Retention &amp; Deletion</h2>
+            <p>We retain your personal information only as long as necessary. When you delete your account, we permanently delete all your data including:</p>
+            <ul>
+                <li>User profile and credentials</li>
+                <li>All linked bank accounts</li>
+                <li>All transaction records</li>
+                <li>All AI-generated insights</li>
+                <li>All custom debt entries</li>
+                <li>All educational bookmarks</li>
+            </ul>
+            <div class="callout warn">
+                <p style="margin:0;">This deletion is <b>irreversible</b>.</p>
+            </div>
+        </section>
+
+        <section>
+            <h2>6. Data Security</h2>
+            <ul>
+                <li><b>Encryption in transit</b> — All data encrypted using TLS/HTTPS</li>
+                <li><b>Encryption at rest</b> — Plaid tokens and 2FA secrets encrypted with AES-256-GCM</li>
+                <li><b>Password hashing</b> — bcrypt with cost factor 12</li>
+                <li><b>JWT authentication</b> — Short-lived access tokens with rotating refresh tokens</li>
+                <li><b>Two-factor authentication</b> — Optional TOTP 2FA with recovery codes</li>
+                <li><b>Account lockout</b> — Temporary lockout after repeated failed logins</li>
+                <li><b>Database security</b> — Parameterized queries to prevent SQL injection</li>
+                <li><b>Rate limiting</b> — IP-based brute force prevention</li>
+                <li><b>Input validation</b> — Server-side validation of all input</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>7. Your Privacy Rights</h2>
+            <p>Under PIPEDA, you have the right to:</p>
+            <ul>
+                <li>Access your personal information</li>
+                <li>Correct inaccurate information</li>
+                <li>Withdraw consent for data processing</li>
+                <li>Request deletion of your data</li>
+                <li>Request data portability (JSON/CSV export)</li>
+                <li>Challenge our compliance</li>
+            </ul>
+            <p>Contact: <a href="mailto:privacy@induswealth.app">privacy@induswealth.app</a><br />
+            We will respond within 30 days as required by PIPEDA.</p>
+        </section>
+
+        <section>
+            <h2>8. Contact Us</h2>
+            <div class="contact-card">
+                <div class="row"><b>IndusWealth Privacy Officer</b></div>
+                <div class="row">Email: <a href="mailto:privacy@induswealth.app">privacy@induswealth.app</a></div>
+                <div class="row">General Support: <a href="mailto:support@induswealth.app">support@induswealth.app</a></div>
+                <div class="row" style="margin-top:14px;"><b>Office of the Privacy Commissioner of Canada</b></div>
+                <div class="row">Website: <a href="https://priv.gc.ca" target="_blank" rel="noopener">priv.gc.ca</a></div>
+                <div class="row muted">Toll-free: 1-800-282-1376</div>
+            </div>
+        </section>
+
+        <footer class="doc">
+            <p>IndusWealth is committed to protecting your privacy in accordance with Canadian law.</p>
+            <p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></p>
+        </footer>
+    </div>
+</body>
+</html>

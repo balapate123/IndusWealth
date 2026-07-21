@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -120,6 +121,14 @@ if (process.env.NODE_ENV === 'production') {
         next();
     });
 }
+
+// Public static pages (Privacy Policy, Terms) — served at clean URLs: /privacy, /terms.
+// Placed before the rate limiter so public/legal pages and crawlers aren't throttled.
+// __dirname is packages/backend/src, so ../public → packages/backend/public.
+app.use(express.static(path.join(__dirname, '../public'), {
+    extensions: ['html'],
+    maxAge: '1h',
+}));
 
 // Apply rate limiting
 app.use(apiLimiter);

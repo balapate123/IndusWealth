@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index, follow" />
+    <meta name="description" content="IndusWealth Terms of Service — the agreement governing your use of the IndusWealth app and services." />
+    <meta name="theme-color" content="#000000" />
+    <title>Terms of Service — IndusWealth</title>
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #0c0c0c;
+            --border: rgba(201, 162, 39, 0.22);
+            --gold: #c9a227;
+            --gold-light: #e5c048;
+            --text: #f2f2f2;
+            --text-muted: #a8a8a8;
+        }
+
+        * { box-sizing: border-box; }
+
+        html { -webkit-text-size-adjust: 100%; }
+
+        body {
+            margin: 0;
+            background: radial-gradient(1200px 600px at 50% -10%, #14110a 0%, var(--bg) 55%);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.7;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a { color: var(--gold-light); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 20px;
+            background: rgba(0, 0, 0, 0.82);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .brand .mark {
+            width: 26px; height: 26px;
+            border-radius: 7px;
+            background: linear-gradient(135deg, var(--gold-light), var(--gold));
+            display: inline-flex; align-items: center; justify-content: center;
+            color: #000; font-weight: 800; font-size: 15px;
+        }
+        .brand .name { color: #fff; }
+        .brand .name b { color: var(--gold-light); font-weight: 700; }
+
+        .nav { display: flex; gap: 18px; font-size: 14px; }
+        .nav a { color: var(--text-muted); }
+        .nav a.active { color: var(--gold-light); }
+
+        .wrap {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 40px 22px 90px;
+        }
+
+        header.doc {
+            text-align: center;
+            padding: 24px 0 30px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 34px;
+        }
+        header.doc h1 {
+            margin: 0 0 8px;
+            font-size: clamp(28px, 6vw, 40px);
+            color: #fff;
+            letter-spacing: -0.5px;
+        }
+        header.doc .sub {
+            color: var(--gold-light);
+            font-weight: 600;
+            margin: 0 0 6px;
+        }
+        header.doc .meta {
+            color: var(--text-muted);
+            font-size: 13.5px;
+        }
+        .pill {
+            display: inline-block;
+            margin-top: 14px;
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 12.5px;
+            color: var(--gold-light);
+            background: rgba(201, 162, 39, 0.06);
+        }
+
+        section {
+            margin-bottom: 30px;
+        }
+        section h2 {
+            font-size: 19px;
+            color: var(--gold-light);
+            margin: 0 0 12px;
+            padding-left: 12px;
+            border-left: 3px solid var(--gold);
+        }
+        section h3 {
+            font-size: 15px;
+            color: #fff;
+            margin: 20px 0 8px;
+        }
+        section p { margin: 0 0 12px; color: var(--text); }
+
+        ul {
+            list-style: none;
+            margin: 0 0 14px;
+            padding: 0;
+        }
+        ul li {
+            position: relative;
+            padding-left: 22px;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+        ul li::before {
+            content: "";
+            position: absolute;
+            left: 4px; top: 11px;
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--gold);
+        }
+        ul li b, ul li strong { color: #fff; }
+
+        .callout {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 18px;
+            margin: 8px 0 12px;
+        }
+        .callout.warn { border-color: rgba(255, 107, 107, 0.35); }
+
+        .contact-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px 20px;
+        }
+        .contact-card .row { margin-bottom: 4px; }
+        .muted { color: var(--text-muted); }
+
+        footer.doc {
+            margin-top: 40px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+        footer.doc a { margin: 0 8px; }
+
+        strong.no { color: #ff8080; font-weight: 700; }
+        .legal-caps { text-transform: none; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="brand">
+            <span class="mark">I</span>
+            <span class="name">Indus<b>Wealth</b></span>
+        </div>
+        <nav class="nav">
+            <a href="/privacy">Privacy</a>
+            <a href="/terms" class="active">Terms</a>
+        </nav>
+    </div>
+
+    <div class="wrap">
+        <header class="doc">
+            <p class="sub">IndusWealth</p>
+            <h1>Terms of Service</h1>
+            <p class="meta">Version 1.0 — Effective March 2026</p>
+            <span class="pill">Governed by the laws of Ontario, Canada</span>
+        </header>
+
+        <section>
+            <h2>1. Agreement to Terms</h2>
+            <p>By creating an account, accessing, or using the IndusWealth mobile application and related services, you agree to be bound by these Terms of Service. If you do not agree, you must not access or use the Service.</p>
+            <p>These Terms constitute a legally binding agreement between you and IndusWealth, operated under the laws of Canada.</p>
+        </section>
+
+        <section>
+            <h2>2. Description of Service</h2>
+            <p>IndusWealth is a personal finance tracking and analytics application that allows you to:</p>
+            <ul>
+                <li>Link bank accounts via Plaid to view aggregated balances and transactions</li>
+                <li>View spending analytics and category breakdowns</li>
+                <li>Receive AI-generated financial insights powered by Google Gemini</li>
+                <li>Track and manage debt payoff strategies</li>
+                <li>Detect recurring subscriptions and expenses</li>
+                <li>Access curated educational financial content (Wealth Academy)</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>3. Important Disclaimers</h2>
+            <h3>No Financial Advice</h3>
+            <p>IndusWealth does <strong class="no">NOT</strong> provide financial, investment, tax, legal, or accounting advice. All content including AI insights, debt calculations, and educational articles is for informational purposes only.</p>
+            <h3>No Guarantees on AI Content</h3>
+            <p>AI insights are generated by machine learning and may contain errors. They should be independently verified before acting upon them.</p>
+            <h3>Accuracy of Data</h3>
+            <p>We rely on Plaid for bank data and do not guarantee accuracy. Your bank is the authoritative source.</p>
+        </section>
+
+        <section>
+            <h2>4. Eligibility</h2>
+            <p>To use IndusWealth, you must:</p>
+            <ul>
+                <li>Be at least 13 years of age</li>
+                <li>Be a resident of Canada</li>
+                <li>Have legal capacity to enter a binding agreement</li>
+                <li>Provide accurate information during registration</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>5. Account Security</h2>
+            <p>You are responsible for:</p>
+            <ul>
+                <li>Maintaining the confidentiality of your login credentials</li>
+                <li>All activities that occur under your account</li>
+                <li>Notifying us immediately if you suspect unauthorized access</li>
+            </ul>
+            <p>We are not liable for loss or damage from failure to protect your credentials.</p>
+        </section>
+
+        <section>
+            <h2>6. Bank Account Linking</h2>
+            <p>IndusWealth uses Plaid Inc. for bank connections. We request read-only access to your financial data.</p>
+            <h3>We cannot and do not:</h3>
+            <ul>
+                <li>Initiate transactions or transfers</li>
+                <li>Modify your bank account settings</li>
+                <li>Access your banking credentials</li>
+                <li>Access full account numbers</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>7. Limitation of Liability</h2>
+            <div class="callout">
+                <p style="margin:0 0 12px;">THE SERVICE IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND.</p>
+                <p style="margin:0 0 12px;">We are not liable for any indirect, incidental, special, consequential, or punitive damages, or any financial losses resulting from decisions made based on information provided by the Service.</p>
+                <p style="margin:0;">Total aggregate liability shall not exceed CAD $100.00.</p>
+            </div>
+        </section>
+
+        <section>
+            <h2>8. Dispute Resolution</h2>
+            <p>These Terms are governed by the laws of the Province of Ontario and the federal laws of Canada.</p>
+            <p>Before formal dispute resolution, you agree to contact <a href="mailto:support@induswealth.app">support@induswealth.app</a> and attempt informal resolution for at least 30 days.</p>
+            <p>Disputes shall be submitted to the courts of Ontario, Canada.</p>
+        </section>
+
+        <section>
+            <h2>9. Contact</h2>
+            <div class="contact-card">
+                <div class="row">Email: <a href="mailto:support@induswealth.app">support@induswealth.app</a></div>
+                <div class="row">Website: <a href="https://induswealth.app">induswealth.app</a></div>
+            </div>
+            <p style="margin-top:14px;">By using IndusWealth, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.</p>
+        </section>
+
+        <footer class="doc">
+            <p>By using IndusWealth, you acknowledge that you have read and agree to these Terms.</p>
+            <p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></p>
+        </footer>
+    </div>
+</body>
+</html>
