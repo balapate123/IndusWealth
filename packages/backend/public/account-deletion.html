@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index, follow" />
+    <meta name="description" content="How to delete your IndusWealth account and associated data." />
+    <meta name="theme-color" content="#000000" />
+    <title>Delete Your Account — IndusWealth</title>
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #0c0c0c;
+            --border: rgba(201, 162, 39, 0.22);
+            --gold: #c9a227;
+            --gold-light: #e5c048;
+            --text: #f2f2f2;
+            --text-muted: #a8a8a8;
+        }
+
+        * { box-sizing: border-box; }
+        html { -webkit-text-size-adjust: 100%; }
+
+        body {
+            margin: 0;
+            background: radial-gradient(1200px 600px at 50% -10%, #14110a 0%, var(--bg) 55%);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.7;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a { color: var(--gold-light); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .topbar {
+            position: sticky; top: 0; z-index: 10;
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 14px 20px;
+            background: rgba(0, 0, 0, 0.82);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+        }
+        .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.3px; }
+        .brand .mark {
+            width: 26px; height: 26px; border-radius: 7px;
+            background: linear-gradient(135deg, var(--gold-light), var(--gold));
+            display: inline-flex; align-items: center; justify-content: center;
+            color: #000; font-weight: 800; font-size: 15px;
+        }
+        .brand .name { color: #fff; }
+        .brand .name b { color: var(--gold-light); font-weight: 700; }
+        .nav { display: flex; gap: 18px; font-size: 14px; }
+        .nav a { color: var(--text-muted); }
+
+        .wrap { max-width: 780px; margin: 0 auto; padding: 40px 22px 90px; }
+
+        header.doc {
+            text-align: center; padding: 24px 0 30px;
+            border-bottom: 1px solid var(--border); margin-bottom: 34px;
+        }
+        header.doc h1 { margin: 0 0 8px; font-size: clamp(28px, 6vw, 40px); color: #fff; letter-spacing: -0.5px; }
+        header.doc .sub { color: var(--gold-light); font-weight: 600; margin: 0 0 6px; }
+        header.doc .meta { color: var(--text-muted); font-size: 13.5px; }
+
+        section { margin-bottom: 30px; }
+        section h2 {
+            font-size: 19px; color: var(--gold-light); margin: 0 0 12px;
+            padding-left: 12px; border-left: 3px solid var(--gold);
+        }
+        section p { margin: 0 0 12px; color: var(--text); }
+
+        ol.steps { counter-reset: step; list-style: none; margin: 0 0 14px; padding: 0; }
+        ol.steps li {
+            position: relative; padding-left: 44px; margin-bottom: 14px; color: var(--text);
+        }
+        ol.steps li::before {
+            counter-increment: step; content: counter(step);
+            position: absolute; left: 0; top: 0;
+            width: 28px; height: 28px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--gold-light), var(--gold));
+            color: #000; font-weight: 800; font-size: 14px;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        ol.steps li b { color: #fff; }
+
+        ul { list-style: none; margin: 0 0 14px; padding: 0; }
+        ul li { position: relative; padding-left: 22px; margin-bottom: 8px; color: var(--text); }
+        ul li::before {
+            content: ""; position: absolute; left: 4px; top: 11px;
+            width: 6px; height: 6px; border-radius: 50%; background: var(--gold);
+        }
+        ul li b { color: #fff; }
+
+        .callout {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; padding: 16px 18px; margin: 8px 0 12px;
+        }
+        .callout.warn { border-color: rgba(255, 107, 107, 0.35); }
+        strong.no { color: #ff8080; font-weight: 700; }
+
+        .contact-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; padding: 18px 20px;
+        }
+        .contact-card .row { margin-bottom: 4px; }
+        .muted { color: var(--text-muted); }
+
+        footer.doc {
+            margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--border);
+            text-align: center; color: var(--text-muted); font-size: 13px;
+        }
+        footer.doc a { margin: 0 8px; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="brand">
+            <span class="mark">I</span>
+            <span class="name">Indus<b>Wealth</b></span>
+        </div>
+        <nav class="nav">
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+        </nav>
+    </div>
+
+    <div class="wrap">
+        <header class="doc">
+            <p class="sub">IndusWealth</p>
+            <h1>Delete Your Account</h1>
+            <p class="meta">How to permanently delete your IndusWealth account and all associated data</p>
+        </header>
+
+        <section>
+            <h2>Option 1 — Delete instantly from the app</h2>
+            <p>If you have the IndusWealth app installed, you can delete your account yourself at any time. Deletion is immediate and permanent.</p>
+            <ol class="steps">
+                <li>Open the <b>IndusWealth</b> app and sign in.</li>
+                <li>Go to the <b>Profile</b> tab.</li>
+                <li>Tap <b>Delete Account</b>.</li>
+                <li>Confirm by entering your <b>password</b>.</li>
+            </ol>
+            <p class="muted">Your account and all associated data are removed immediately and cannot be recovered.</p>
+        </section>
+
+        <section>
+            <h2>Option 2 — Request deletion by email</h2>
+            <p>If you no longer have the app installed, email us from the address associated with your IndusWealth account:</p>
+            <div class="contact-card">
+                <div class="row">Email: <a href="mailto:privacy@induswealth.app?subject=Account%20Deletion%20Request">privacy@induswealth.app</a></div>
+                <div class="row muted">Subject: "Account Deletion Request"</div>
+            </div>
+            <p style="margin-top:12px;">We verify the request comes from the account owner and complete the deletion within <b>30 days</b>, as required by Canada's PIPEDA.</p>
+        </section>
+
+        <section>
+            <h2>What data is deleted</h2>
+            <p>When your account is deleted, we permanently remove <strong>all</strong> of your personal data, including:</p>
+            <ul>
+                <li>Your profile and login credentials</li>
+                <li>All linked bank accounts and access tokens</li>
+                <li>All transaction records and notes</li>
+                <li>All AI-generated insights</li>
+                <li>All custom debt entries</li>
+                <li>All educational bookmarks</li>
+                <li>Two-factor authentication secrets and recovery codes</li>
+            </ul>
+            <div class="callout warn">
+                <p style="margin:0;">This deletion is <strong class="no">permanent and irreversible</strong>. No personal data is retained after deletion.</p>
+            </div>
+        </section>
+
+        <section>
+            <h2>Deleting some data without closing your account</h2>
+            <p>You don't have to delete your whole account to remove data. Within the app you can:</p>
+            <ul>
+                <li><b>Disconnect a bank</b> — removes that institution's accounts and transactions</li>
+                <li><b>Remove an individual account</b> — deletes its transaction history</li>
+            </ul>
+            <p>These actions delete the associated data while keeping your IndusWealth account active.</p>
+        </section>
+
+        <footer class="doc">
+            <p>Questions about your data? Contact <a href="mailto:privacy@induswealth.app">privacy@induswealth.app</a></p>
+            <p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></p>
+        </footer>
+    </div>
+</body>
+</html>
