@@ -40,6 +40,8 @@ Measured across the 32 files in `packages/mobile/src/{screens,components,navigat
 
 | Decision | Choice | Rationale |
 |---|---|---|
+| Themes | **Two: Obsidian (dark) + Ledger (light)** | Chosen from a five-direction study. Same geometry, different colour and elevation technique, so switching modes never reflows a screen. |
+| Default mode | **Follow the OS**, overridable to Dark or Light | A tester on a light-mode phone should actually see Ledger. One-line change in `ThemeProvider` if we'd rather default to dark. |
 | Secondary/muted text | **Neutral grays; gold reserved for accent** | Stops gold leaking into body copy. Slightly changes AdvancedAnalytics' 11px labels — accepted. |
 | Auth flow | **Full rebuild** onto the black/elevated language | It's the first surface every Play tester sees; re-tokening alone would leave it looking like a different app. |
 | Migration structure | **Tokens + shared UI kit**, then rewrite screens against it | Screens shrink, and future features are consistent by default. |
@@ -48,7 +50,28 @@ Measured across the 32 files in `packages/mobile/src/{screens,components,navigat
 
 ---
 
-## 3. Token system — `src/constants/theme.js` v2
+## 3. Token system — `src/constants/tokens.js`
+
+### 3.0 Two themes, one geometry
+
+`SPACING`, `RADIUS` and `TYPE` are shared; only colour and elevation differ. The
+two modes separate surfaces by opposite means, and this is the part that is easy
+to get wrong:
+
+| | Obsidian (dark) | Ledger (light) |
+|---|---|---|
+| Page | `#000000` | `#EAE7DC` |
+| Card | `#111111` | `#FFFFFF` |
+| How a card separates | It is **lighter** than the page. No border, no shadow. | It is lighter *and* carries a `rgba(23,21,15,0.10)` hairline plus a tight contact shadow. |
+
+On a light ground the dark-mode trick inverts — a card cannot be meaningfully
+lighter than a near-white page — so Ledger pushes the page deeper (`#EAE7DC`,
+not off-white) and adds a hairline. `CARD_BORDER_WIDTH` is `0` in Obsidian and
+`1` in Ledger; components read it rather than branching on mode.
+
+Runtime plumbing lives in `src/theme/ThemeProvider.js`: `useTheme()` for tokens,
+`useThemeMode()` for the System/Dark/Light setting (persisted to AsyncStorage),
+and `useThemedStyles(factory)` for themed `StyleSheet`s.
 
 ### 3.1 Surfaces
 
@@ -99,23 +122,28 @@ label — never color alone.
 
 ### 3.5 Categorical palette — validated, fixed order
 
-Run through `dataviz/scripts/validate_palette.js` against our real surface
-(`--mode dark --surface #111111`):
+One ramp per mode, each validated by `dataviz/scripts/validate_palette.js`
+against its *own* card surface. The dark ramp is illegible on white, so light
+gets its own rather than reusing it.
 
 ```
-#00A8AD  #CB8100  #4D90FF  #84A200  #9B76FF  #00B14F  #FF269D   + #8A8A8E ("Other")
- teal     amber    blue     olive    purple   green    pink        neutral
+Obsidian, vs #111111
+#00A8AD  #CB8100  #4D90FF  #84A200  #9B76FF  #00B14F  #FF269D   + #8A8A8E
+ teal     amber    blue     olive    purple   green    pink        other
+
+Ledger, vs #FFFFFF
+#0089A1  #A96B00  #096EFF  #6D8600  #8745FF  #009340  #DA0083   + #6E6A62
 ```
 
+Both report:
+
 ```
-[PASS] Lightness band      all 7 inside L 0.48–0.67
-[PASS] Chroma floor        all 7 >= 0.1
-[PASS] CVD separation      worst adjacent #FF269D↔#00B14F ΔE 35.5 (deutan)
-[PASS] Contrast vs surface all 7 >= 3:1
-→ ALL CHECKS PASS
+[PASS] Lightness band   [PASS] Chroma floor   [PASS] CVD separation   [PASS] Contrast
 ```
 
-The current palette **fails** the same test (5 of 8 colors outside the lightness band).
+The current palette **fails** the same test (5 of 8 colors outside the lightness
+band). The light ramp needed a different teal from a straight darkening of the
+dark one — the obvious step fell below the chroma floor and read as gray on white.
 
 Applied as:
 - The app's 21 categories map onto these 7 hues; a category's **icon** is the

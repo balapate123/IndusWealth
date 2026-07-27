@@ -1,3 +1,15 @@
+/**
+ * DEPRECATED — legacy static palette, kept so un-migrated screens keep compiling.
+ *
+ * Values here are frozen at their pre-revamp state on purpose: importing this
+ * module must not change how any existing screen looks. Because it is a static
+ * import it cannot react to the user switching themes, so anything using it
+ * always renders Obsidian.
+ *
+ * New code must use `useTheme()` from src/theme/ThemeProvider.js and the tokens
+ * in src/constants/tokens.js. This file is deleted at the end of Phase 4.
+ * See docs/superpowers/specs/2026-07-27-app-theme-revamp-design.md.
+ */
 export const COLORS = {
     // Primary backgrounds
     BACKGROUND: '#000000',        // Pure black main background
