@@ -1,0 +1,79 @@
+# render.yaml — IndusWealth STAGING environment (Render Blueprint)
+# =============================================================================
+# Provisions a SEPARATE staging backend + its own database, cloned from the
+# production service's verified config:
+#   region ohio · rootDir packages/backend · build "npm install" · start "node index.js"
+#
+# It does NOT touch the existing PRODUCTION service "IndusWealth"
+# (srv-d5ndmkkoud1c739tsag0), which was created manually and deploys from
+# feature/web-export-fix. Blueprints only manage the resources named below.
+#
+# HOW TO APPLY (one time):
+#   Render Dashboard → New → Blueprint → pick repo balapate123/IndusWealth,
+#   branch `dev`. Render reads this file, then prompts for the sync:false
+#   secrets (see docs/DEPLOYMENT.md for the exact values to paste).
+#
+# NOTES / FALLBACKS:
+#   * plan: free  → web service spins down after ~15 min idle (cold start ~30s);
+#     free Postgres is deleted after 30 days. For always-on staging, bump both
+#     `plan:` values to a paid tier (e.g. web: starter, db: basic-256mb).
+#   * If Render already has a free Postgres in this workspace (only one allowed),
+#     the DB below won't provision on `free` — change its `plan:` to a paid tier.
+#   * If Render rejects `runtime: node`, replace it with `env: node` (older schema).
+# =============================================================================
+
+services:
+  - type: web
+    name: induswealth-staging
+    runtime: node
+    plan: free
+    region: ohio
+    branch: dev
+    rootDir: packages/backend
+    buildCommand: npm install
+    startCommand: node index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # --- Auto-wired from the staging database defined below ---
+      - key: DATABASE_URL
+        fromDatabase:
+          name: induswealth-staging-db
+          property: connectionString
+
+      # --- Non-secret config (mirrors production behavior) ---
+      - key: NODE_ENV
+        value: production
+      - key: PLAID_ENV
+        value: production          # staging uses REAL Plaid production (per decision)
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: INSIGHTS_CACHE_HOURS
+        value: "6"
+      - key: AI_CATEGORIZATION_ENABLED
+        value: "false"
+      - key: FROM_EMAIL
+        value: "IndusWealth <hello@induswealth.app>"
+
+      # --- Secrets: entered in the Render UI on apply, never committed to git ---
+      - key: ENCRYPTION_KEY        # fresh 64-hex key (staging DB is empty; safe)
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: PLAID_CLIENT_ID       # reuse production Plaid client id
+        sync: false
+      - key: PLAID_SECRET          # reuse production Plaid secret
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false
+
+databases:
+  - name: induswealth-staging-db
+    databaseName: induswealth
+    user: induswealth
+    plan: free
+    region: ohio

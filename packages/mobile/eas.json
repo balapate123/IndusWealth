@@ -14,7 +14,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://induswealth.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://induswealth-staging.onrender.com"
       }
     },
     "production": {
