@@ -498,6 +498,17 @@ const ProfileScreen = ({ navigation }) => {
                     />
                 </View>
 
+                {/* Preferences */}
+                <Text style={styles.sectionHeader}>PREFERENCES</Text>
+                <View style={styles.sectionCard}>
+                    <MenuItem
+                        icon="contrast"
+                        label="Appearance"
+                        subtitle="Theme and colours"
+                        onPress={() => navigation.navigate('Appearance')}
+                    />
+                </View>
+
                 {/* Quick Access */}
                 <Text style={styles.sectionHeader}>QUICK ACCESS</Text>
                 <View style={styles.sectionCard}>

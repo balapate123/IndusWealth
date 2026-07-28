@@ -25,6 +25,7 @@ import ETFListScreen from '../screens/ETFListScreen';
 import EmailVerificationScreen from '../screens/EmailVerificationScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
+import AppearanceScreen from '../screens/AppearanceScreen';
 import { RADIUS } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import { Text as UIText } from '../components/ui';
@@ -259,6 +260,13 @@ const AppNavigator = () => {
                 <Stack.Screen
                     name="ETFList"
                     component={ETFListScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="Appearance"
+                    component={AppearanceScreen}
                     options={{
                         presentation: 'card',
                     }}
