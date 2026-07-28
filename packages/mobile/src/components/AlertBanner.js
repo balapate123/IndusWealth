@@ -1,27 +1,47 @@
 import React from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    TouchableOpacity,
-} from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
+import { RADIUS, SPACING } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import { Text } from './ui';
 
-const SEVERITY_COLORS = {
-    critical: { bg: 'rgba(239, 68, 68, 0.15)', border: '#EF4444', icon: '#EF4444', text: '#FCA5A5' },
-    warning: { bg: 'rgba(245, 158, 11, 0.15)', border: '#F59E0B', icon: '#F59E0B', text: '#FDE68A' },
-    info: { bg: 'rgba(59, 130, 246, 0.15)', border: '#3B82F6', icon: '#3B82F6', text: '#93C5FD' },
+// Severity is a status encoding, so it uses the reserved semantic colours and
+// always ships with an icon and a title — never colour alone.
+const severityStyle = (theme, severity) => {
+    switch (severity) {
+        case 'critical':
+            return { color: theme.DANGER, bg: theme.DANGER_DIM, icon: 'alert-circle' };
+        case 'warning':
+            return { color: theme.WARNING, bg: theme.WARNING_DIM, icon: 'warning' };
+        default:
+            return { color: theme.INFO, bg: theme.INFO_DIM, icon: 'information-circle' };
+    }
 };
 
-const SEVERITY_ICONS = {
-    critical: 'alert-circle',
-    warning: 'warning',
-    info: 'information-circle',
-};
+const makeStyles = () => StyleSheet.create({
+    container: { marginBottom: SPACING.MEDIUM },
+    scrollContent: {
+        paddingHorizontal: SPACING.MEDIUM,
+        gap: SPACING.SMALL,
+    },
+    alertCard: {
+        width: 260,
+        padding: SPACING.MEDIUM,
+        borderRadius: RADIUS.MEDIUM,
+    },
+    alertHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+        marginBottom: 5,
+    },
+    title: { flex: 1 },
+});
 
 const AlertBanner = ({ alerts, onDismiss }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     if (!alerts || alerts.length === 0) return null;
 
     return (
@@ -32,26 +52,30 @@ const AlertBanner = ({ alerts, onDismiss }) => {
                 contentContainerStyle={styles.scrollContent}
             >
                 {alerts.map((alert, index) => {
-                    const colors = SEVERITY_COLORS[alert.severity] || SEVERITY_COLORS.info;
-                    const icon = SEVERITY_ICONS[alert.severity] || 'information-circle';
+                    const severity = severityStyle(theme, alert.severity);
 
                     return (
                         <View
                             key={alert.id || index}
-                            style={[styles.alertCard, { backgroundColor: colors.bg, borderColor: colors.border }]}
+                            style={[styles.alertCard, { backgroundColor: severity.bg }]}
                         >
                             <View style={styles.alertHeader}>
-                                <Ionicons name={icon} size={16} color={colors.icon} />
-                                <Text style={[styles.alertTitle, { color: colors.text }]} numberOfLines={1}>
+                                <Ionicons name={severity.icon} size={16} color={severity.color} />
+                                <Text variant="label" color={severity.color} style={styles.title} numberOfLines={1}>
                                     {alert.title}
                                 </Text>
                                 {onDismiss && (
-                                    <TouchableOpacity onPress={() => onDismiss(alert.id)} style={styles.dismissButton}>
-                                        <Ionicons name="close" size={14} color={colors.text} />
+                                    <TouchableOpacity
+                                        onPress={() => onDismiss(alert.id)}
+                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Dismiss alert"
+                                    >
+                                        <Ionicons name="close" size={14} color={severity.color} />
                                     </TouchableOpacity>
                                 )}
                             </View>
-                            <Text style={styles.alertMessage} numberOfLines={2}>
+                            <Text variant="meta" tone="secondary" numberOfLines={2}>
                                 {alert.message}
                             </Text>
                         </View>
@@ -61,41 +85,5 @@ const AlertBanner = ({ alerts, onDismiss }) => {
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        marginBottom: SPACING.MEDIUM,
-    },
-    scrollContent: {
-        paddingHorizontal: SPACING.MEDIUM,
-        gap: SPACING.SMALL,
-    },
-    alertCard: {
-        width: 260,
-        padding: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        borderWidth: 1,
-        marginRight: SPACING.SMALL,
-    },
-    alertHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: SPACING.SMALL,
-    },
-    alertTitle: {
-        fontSize: 13,
-        fontFamily: FONTS.BOLD,
-        marginLeft: SPACING.SMALL,
-        flex: 1,
-    },
-    dismissButton: {
-        padding: 2,
-    },
-    alertMessage: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
-        lineHeight: 16,
-    },
-});
 
 export default AlertBanner;

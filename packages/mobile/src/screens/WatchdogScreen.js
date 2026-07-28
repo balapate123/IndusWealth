@@ -1,24 +1,28 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    Platform,
-    StatusBar,
-    TouchableOpacity,
-    ActivityIndicator,
-    RefreshControl,
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
+import { RADIUS, SPACING, alpha, categoryColor } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import {
+    Screen,
+    ScreenHeader,
+    Card,
+    Text,
+    Button,
+    Chip,
+    ChipRow,
+    SegmentedControl,
+    Overline,
+    EmptyState,
+    LoadingState,
+} from '../components/ui';
 import api from '../services/api';
 import CancellationBottomSheet from '../components/CancellationBottomSheet';
 import NegotiationBottomSheet from '../components/NegotiationBottomSheet';
 import AlertBanner from '../components/AlertBanner';
 
 const CATEGORIES = [
-    { id: 'all', name: 'All', icon: null },
+    { id: 'all', name: 'All', icon: 'apps' },
     { id: 'streaming', name: 'Streaming', icon: 'tv' },
     { id: 'music', name: 'Music', icon: 'musical-notes' },
     { id: 'telecom', name: 'Telecom', icon: 'call' },
@@ -29,7 +33,93 @@ const CATEGORIES = [
     { id: 'other', name: 'Other', icon: 'construct' },
 ];
 
+const PERIOD_OPTIONS = [
+    { label: 'Monthly', value: false },
+    { label: 'Annual', value: true },
+];
+
+const makeStyles = (t) => StyleSheet.create({
+    scrollContent: { paddingBottom: 110 },
+
+    // Savings card
+    savingsTop: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: SPACING.MEDIUM,
+    },
+    piggyIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: t.ACCENT_DIM,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    flagsBadge: {
+        backgroundColor: t.SURFACE_HIGH,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: RADIUS.PILL,
+    },
+    savingsAmount: { marginTop: 2 },
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        marginTop: SPACING.SMALL,
+    },
+
+    // Expense rows
+    expenseRow: {
+        paddingVertical: SPACING.SMALL + 4,
+    },
+    expenseDivider: {
+        borderTopWidth: 1,
+        borderTopColor: t.HAIRLINE,
+    },
+    expenseTop: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL + 3,
+    },
+    logo: {
+        width: 40,
+        height: 40,
+        borderRadius: RADIUS.MEDIUM,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    expenseBody: { flex: 1 },
+    expenseNameRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        gap: SPACING.SMALL,
+    },
+    expenseName: { flex: 1 },
+    actions: {
+        flexDirection: 'row',
+        gap: SPACING.SMALL,
+        marginTop: SPACING.SMALL + 2,
+        marginLeft: 40 + SPACING.SMALL + 3,
+    },
+    statusChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        alignSelf: 'flex-start',
+        backgroundColor: t.SUCCESS_DIM,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: RADIUS.SMALL,
+    },
+});
+
 const WatchdogScreen = () => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     const [expenses, setExpenses] = useState([]);
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [flagsFound, setFlagsFound] = useState(0);
@@ -81,7 +171,7 @@ const WatchdogScreen = () => {
 
             // If the action returned a guide, show the appropriate bottom sheet
             if (result?.success && result?.data?.guide) {
-                const expense = expenses.find(e => e.id === expenseId);
+                const expense = expenses.find((e) => e.id === expenseId);
                 if (action === 'stop') {
                     setCancelSheet({ visible: true, expense, guide: result.data.guide });
                 } else if (action === 'negotiate') {
@@ -89,7 +179,6 @@ const WatchdogScreen = () => {
                 }
             }
 
-            // Refresh data after action
             fetchData();
         } catch (err) {
             console.error('Error processing action:', err);
@@ -98,262 +187,192 @@ const WatchdogScreen = () => {
 
     const filteredExpenses = selectedCategory === 'all'
         ? expenses
-        : expenses.filter(e => e.category.toLowerCase().includes(selectedCategory));
+        : expenses.filter((e) => e.category.toLowerCase().includes(selectedCategory));
 
-    const renderExpenseItem = (item) => {
-        const getActionButton = () => {
-            switch (item.action) {
-                case 'negotiate':
-                    return (
-                        <TouchableOpacity
-                            style={styles.negotiateButton}
-                            onPress={() => handleAction(item.id, 'negotiate')}
-                        >
-                            <Text style={styles.negotiateText}>Negotiate</Text>
-                        </TouchableOpacity>
-                    );
-                case 'stop':
-                    return (
-                        <TouchableOpacity
-                            style={styles.stopButton}
-                            onPress={() => handleAction(item.id, 'stop')}
-                        >
-                            <Ionicons name="close-circle" size={14} color="#EF4444" />
-                            <Text style={styles.stopText}>Stop</Text>
-                        </TouchableOpacity>
-                    );
-                case 'active':
-                    return (
-                        <View style={styles.activeButton}>
-                            <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
-                            <Text style={styles.activeText}>Active</Text>
-                        </View>
-                    );
-                default:
-                    return (
-                        <View style={{ flexDirection: 'row', gap: 8 }}>
-                            <TouchableOpacity
-                                style={styles.stopButton}
-                                onPress={() => handleAction(item.id, 'stop')}
-                            >
-                                <Ionicons name="close-circle" size={14} color="#EF4444" />
-                                <Text style={styles.stopText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.negotiateButton}
-                                onPress={() => handleAction(item.id, 'negotiate')}
-                            >
-                                <Text style={styles.negotiateText}>Negotiate</Text>
-                            </TouchableOpacity>
-                        </View>
-                    );
-            }
-        };
-
-        const renderLogo = () => {
-            const initial = item.name.charAt(0).toUpperCase();
-            const bgColor = item.logoColor ? `${item.logoColor}20` : COLORS.CARD_BORDER;
-
-            if (item.category === 'Music') {
+    const renderActions = (item) => {
+        switch (item.action) {
+            case 'negotiate':
                 return (
-                    <View style={[styles.expenseLogo, { backgroundColor: '#191414' }]}>
-                        <Ionicons name="musical-notes" size={20} color="#1DB954" />
+                    <Button
+                        title="Negotiate"
+                        variant="secondary"
+                        size="sm"
+                        onPress={() => handleAction(item.id, 'negotiate')}
+                    />
+                );
+            case 'stop':
+                return (
+                    <Button
+                        title="Stop"
+                        variant="danger"
+                        size="sm"
+                        icon="close-circle"
+                        onPress={() => handleAction(item.id, 'stop')}
+                    />
+                );
+            case 'active':
+                return (
+                    <View style={styles.statusChip}>
+                        <Ionicons name="checkmark-circle" size={14} color={theme.SUCCESS} />
+                        <Text variant="label" tone="success">Active</Text>
                     </View>
                 );
-            }
-            return (
-                <View style={[styles.expenseLogo, { backgroundColor: bgColor }]}>
-                    <Text style={[styles.logoText, { color: item.logoColor || COLORS.WHITE }]}>
-                        {initial}
-                    </Text>
-                </View>
-            );
-        };
+            default:
+                return (
+                    <>
+                        <Button
+                            title="Cancel"
+                            variant="danger"
+                            size="sm"
+                            icon="close-circle"
+                            onPress={() => handleAction(item.id, 'stop')}
+                        />
+                        <Button
+                            title="Negotiate"
+                            variant="secondary"
+                            size="sm"
+                            onPress={() => handleAction(item.id, 'negotiate')}
+                        />
+                    </>
+                );
+        }
+    };
+
+    const renderExpenseItem = (item, index) => {
+        const initial = item.name.charAt(0).toUpperCase();
+        // Merchant-supplied colour is data; otherwise fall back to the ramp so
+        // every logo tile still reads as part of one system.
+        const tint = item.logoColor || categoryColor(theme, index);
 
         return (
-            <View key={item.id} style={styles.expenseItem}>
-                <View style={styles.expenseTopRow}>
-                    {renderLogo()}
-                    <View style={styles.expenseContent}>
-                        <View style={styles.expenseRow}>
-                            <Text style={styles.expenseName} numberOfLines={1}>{item.name}</Text>
-                            <Text style={styles.expenseAmount}>${item.amount.toFixed(2)}</Text>
+            <View key={item.id} style={[styles.expenseRow, index > 0 && styles.expenseDivider]}>
+                <View style={styles.expenseTop}>
+                    <View style={[styles.logo, { backgroundColor: alpha(tint, 0.16) }]}>
+                        {item.category === 'Music' ? (
+                            <Ionicons name="musical-notes" size={20} color={tint} />
+                        ) : (
+                            <Text variant="h2" color={tint}>{initial}</Text>
+                        )}
+                    </View>
+
+                    <View style={styles.expenseBody}>
+                        <View style={styles.expenseNameRow}>
+                            <Text variant="bodyMed" style={styles.expenseName} numberOfLines={1}>
+                                {item.name}
+                            </Text>
+                            <Text variant="num">${item.amount.toFixed(2)}</Text>
                         </View>
-                        <Text style={styles.expenseDetails}>
-                            {item.dueDate ? `Due ${item.dueDate}` : item.frequency} • {item.category}
+                        <Text variant="meta" tone="muted">
+                            {item.dueDate ? `Due ${item.dueDate}` : item.frequency} · {item.category}
                             {item.confidence === 'high' ? ' ●' : item.confidence === 'medium' ? ' ○' : ''}
                         </Text>
                     </View>
                 </View>
-                <View style={styles.expenseActions}>
-                    {getActionButton()}
-                </View>
+
+                <View style={styles.actions}>{renderActions(item)}</View>
             </View>
         );
     };
 
     if (loading) {
         return (
-            <View style={[styles.container, styles.centerContent]}>
-                <ActivityIndicator size="large" color={COLORS.GOLD} />
-                <Text style={styles.loadingText}>Analyzing your expenses...</Text>
-            </View>
+            <Screen centered>
+                <LoadingState message="Analyzing your expenses..." />
+            </Screen>
         );
     }
 
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor={COLORS.BACKGROUND} />
-
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Watchdog</Text>
-                <TouchableOpacity style={styles.settingsButton}>
-                    <Ionicons name="settings-outline" size={24} color={COLORS.WHITE} />
-                </TouchableOpacity>
-            </View>
-
-            <ScrollView
-                showsVerticalScrollIndicator={false}
+        <>
+            <Screen
+                scroll
+                header={<ScreenHeader title="Watchdog" />}
+                refreshing={refreshing}
+                onRefresh={onRefresh}
                 contentContainerStyle={styles.scrollContent}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor={COLORS.GOLD}
-                        colors={[COLORS.GOLD]}
-                    />
-                }
             >
-                {/* Savings Card */}
-                <View style={styles.savingsCard}>
-                    <View style={styles.savingsCardGlow} />
-                    <View style={styles.savingsCardContent}>
-                        <View style={styles.piggyContainer}>
-                            <View style={styles.piggyIcon}>
-                                <MaterialCommunityIcons name="piggy-bank" size={28} color={COLORS.GOLD} />
-                            </View>
-                            <View style={styles.flagsBadge}>
-                                <Text style={styles.flagsText}>{flagsFound} Flags Found</Text>
-                            </View>
+                {/* Savings overview */}
+                <Card>
+                    <View style={styles.savingsTop}>
+                        <View style={styles.piggyIcon}>
+                            <MaterialCommunityIcons name="piggy-bank" size={26} color={theme.ACCENT} />
                         </View>
-
-                        {/* Annual/Monthly Toggle */}
-                        <View style={styles.toggleRow}>
-                            <TouchableOpacity
-                                style={[styles.toggleButton, !showAnnual && styles.toggleButtonActive]}
-                                onPress={() => setShowAnnual(false)}
-                            >
-                                <Text style={[styles.toggleText, !showAnnual && styles.toggleTextActive]}>Monthly</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.toggleButton, showAnnual && styles.toggleButtonActive]}
-                                onPress={() => setShowAnnual(true)}
-                            >
-                                <Text style={[styles.toggleText, showAnnual && styles.toggleTextActive]}>Annual</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        <Text style={styles.savingsLabel}>
-                            {showAnnual ? 'TOTAL ANNUAL SUBSCRIPTIONS' : 'POTENTIAL MONTHLY SAVINGS'}
-                        </Text>
-                        <Text style={styles.savingsAmount}>
-                            ${showAnnual ? totalAnnual.toFixed(2) : potentialSavings.toFixed(2)}
-                        </Text>
-
-                        <View style={styles.infoRow}>
-                            <Ionicons name="information-circle-outline" size={14} color={COLORS.TEXT_SECONDARY} />
-                            <Text style={styles.infoText}>
-                                {showAnnual
-                                    ? `$${totalMonthly.toFixed(2)}/month across all subscriptions`
-                                    : 'Based on your recurring expense analysis'}
+                        <View style={styles.flagsBadge}>
+                            <Text variant="label" tone="secondary">
+                                {flagsFound} flag{flagsFound === 1 ? '' : 's'} found
                             </Text>
                         </View>
                     </View>
-                </View>
 
-                {/* Smart Alerts */}
-                {alerts.length > 0 && (
-                    <AlertBanner alerts={alerts} />
-                )}
+                    <SegmentedControl
+                        options={PERIOD_OPTIONS}
+                        value={showAnnual}
+                        onChange={setShowAnnual}
+                        inset={false}
+                        style={{ marginBottom: SPACING.MEDIUM }}
+                    />
 
-                {/* Category Filters */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.categoryFilters}
-                    contentContainerStyle={styles.categoryFiltersContent}
-                >
+                    <Text variant="overline" tone="muted">
+                        {showAnnual ? 'Total annual subscriptions' : 'Potential monthly savings'}
+                    </Text>
+                    <Text variant="hero" style={styles.savingsAmount}>
+                        ${showAnnual ? totalAnnual.toFixed(2) : potentialSavings.toFixed(2)}
+                    </Text>
+
+                    <View style={styles.infoRow}>
+                        <Ionicons name="information-circle-outline" size={14} color={theme.TEXT_MUTED} />
+                        <Text variant="meta" tone="muted" style={{ flex: 1 }}>
+                            {showAnnual
+                                ? `$${totalMonthly.toFixed(2)}/month across all subscriptions`
+                                : 'Based on your recurring expense analysis'}
+                        </Text>
+                    </View>
+                </Card>
+
+                {alerts.length > 0 && <AlertBanner alerts={alerts} />}
+
+                <ChipRow style={{ marginBottom: SPACING.MEDIUM }}>
                     {CATEGORIES.map((category) => (
-                        <TouchableOpacity
+                        <Chip
                             key={category.id}
-                            style={[
-                                styles.categoryTab,
-                                selectedCategory === category.id && styles.categoryTabActive
-                            ]}
+                            label={category.name}
+                            icon={category.icon}
+                            active={selectedCategory === category.id}
                             onPress={() => setSelectedCategory(category.id)}
-                        >
-                            {category.icon && (
-                                <Ionicons
-                                    name={category.icon}
-                                    size={16}
-                                    color={selectedCategory === category.id ? COLORS.WHITE : COLORS.TEXT_SECONDARY}
-                                    style={styles.categoryIcon}
-                                />
-                            )}
-                            <Text style={[
-                                styles.categoryTabText,
-                                selectedCategory === category.id && styles.categoryTabTextActive
-                            ]}>
-                                {category.name}
-                            </Text>
-                        </TouchableOpacity>
+                        />
                     ))}
-                </ScrollView>
+                </ChipRow>
 
-                {/* Error Message */}
                 {error && (
-                    <View style={styles.errorContainer}>
-                        <Text style={styles.errorText}>{error}</Text>
-                    </View>
+                    <Card style={{ backgroundColor: theme.DANGER_DIM, borderColor: theme.DANGER_DIM }}>
+                        <Text variant="body" tone="danger">{error}</Text>
+                    </Card>
                 )}
 
-                {/* Recurring Expenses */}
-                <View style={styles.expensesSection}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Recurring Expenses</Text>
-                        <TouchableOpacity onPress={() => setSelectedCategory('all')}>
-                            <Text style={styles.viewAllText}>View all</Text>
-                        </TouchableOpacity>
-                    </View>
+                <Overline>Recurring expenses</Overline>
 
-                    {filteredExpenses.map(item => renderExpenseItem(item))}
+                {filteredExpenses.length > 0 ? (
+                    <Card padded={false} style={{ paddingHorizontal: SPACING.MEDIUM - 2 }}>
+                        {filteredExpenses.map((item, index) => renderExpenseItem(item, index))}
+                    </Card>
+                ) : !error ? (
+                    <Card>
+                        {expenses.length === 0 ? (
+                            <EmptyState
+                                icon="shield-outline"
+                                title="Connect your bank to activate Watchdog"
+                                message="We need at least 2 months of transaction history to detect recurring expenses."
+                            />
+                        ) : (
+                            <EmptyState
+                                icon="checkmark-circle-outline"
+                                message="No flagged expenses in this category"
+                            />
+                        )}
+                    </Card>
+                ) : null}
+            </Screen>
 
-                    {filteredExpenses.length === 0 && !error && (
-                        <View style={styles.emptyState}>
-                            {expenses.length === 0 ? (
-                                <>
-                                    <Ionicons name="shield-outline" size={48} color={COLORS.GOLD} />
-                                    <Text style={styles.emptyTitle}>Connect Your Bank to Activate Watchdog</Text>
-                                    <Text style={styles.emptyText}>
-                                        We need at least 2 months of transaction history to detect recurring expenses.
-                                    </Text>
-                                </>
-                            ) : (
-                                <>
-                                    <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.GREEN} />
-                                    <Text style={styles.emptyText}>No flagged expenses in this category</Text>
-                                </>
-                            )}
-                        </View>
-                    )}
-                </View>
-            </ScrollView>
-
-            {/* Bottom Sheets */}
             <CancellationBottomSheet
                 visible={cancelSheet.visible}
                 expense={cancelSheet.expense}
@@ -374,316 +393,8 @@ const WatchdogScreen = () => {
                     fetchData();
                 }}
             />
-        </View>
+        </>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
-        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 50,
-    },
-    centerContent: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingText: {
-        color: COLORS.TEXT_SECONDARY,
-        marginTop: SPACING.MEDIUM,
-    },
-    scrollContent: {
-        paddingBottom: 100,
-    },
-
-    // Header
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingVertical: SPACING.SMALL,
-    },
-    backButton: {
-        padding: SPACING.SMALL,
-    },
-    headerTitle: {
-        color: COLORS.WHITE,
-        fontSize: 18,
-        fontFamily: FONTS.BOLD,
-    },
-    settingsButton: {
-        padding: SPACING.SMALL,
-    },
-
-    // Savings Card
-    savingsCard: {
-        margin: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.XL,
-        backgroundColor: COLORS.CARD_BG,
-        overflow: 'hidden',
-        position: 'relative',
-    },
-    savingsCardGlow: {
-        position: 'absolute',
-        top: -50,
-        right: -50,
-        width: 150,
-        height: 150,
-        backgroundColor: COLORS.GOLD,
-        opacity: 0.1,
-        borderRadius: 75,
-    },
-    savingsCardContent: {
-        padding: SPACING.LARGE,
-    },
-    piggyContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: SPACING.LARGE,
-    },
-    piggyIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        backgroundColor: 'rgba(201, 162, 39, 0.15)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    flagsBadge: {
-        marginLeft: 'auto',
-        backgroundColor: '#0D9488',
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingVertical: SPACING.SMALL,
-        borderRadius: BORDER_RADIUS.LARGE,
-    },
-    flagsText: {
-        color: COLORS.WHITE,
-        fontSize: 12,
-        fontFamily: FONTS.BOLD,
-    },
-    savingsLabel: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 11,
-        letterSpacing: 1,
-        marginBottom: SPACING.SMALL,
-    },
-    savingsAmount: {
-        color: '#4ADE80',
-        fontSize: 42,
-        fontFamily: FONTS.BOLD,
-        marginBottom: SPACING.SMALL,
-    },
-    infoRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    infoText: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
-        marginLeft: SPACING.TINY,
-    },
-
-    // Category Filters
-    categoryFilters: {
-        marginBottom: SPACING.MEDIUM,
-    },
-    categoryFiltersContent: {
-        paddingHorizontal: SPACING.MEDIUM,
-        gap: SPACING.SMALL,
-    },
-    categoryTab: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: SPACING.SMALL,
-        paddingHorizontal: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.XL,
-        backgroundColor: COLORS.CARD_BG,
-        marginRight: SPACING.SMALL,
-    },
-    categoryTabActive: {
-        backgroundColor: '#2563EB',
-    },
-    categoryIcon: {
-        marginRight: SPACING.TINY,
-    },
-    categoryTabText: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 13,
-    },
-    categoryTabTextActive: {
-        color: COLORS.WHITE,
-    },
-
-    // Error
-    errorContainer: {
-        margin: SPACING.MEDIUM,
-        padding: SPACING.MEDIUM,
-        backgroundColor: 'rgba(244, 67, 54, 0.1)',
-        borderRadius: BORDER_RADIUS.MEDIUM,
-    },
-    errorText: {
-        color: '#F44336',
-        textAlign: 'center',
-    },
-
-    // Expenses Section
-    expensesSection: {
-        paddingHorizontal: SPACING.MEDIUM,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.MEDIUM,
-    },
-    sectionTitle: {
-        color: COLORS.WHITE,
-        fontSize: 18,
-        fontFamily: FONTS.BOLD,
-    },
-    viewAllText: {
-        color: '#3B82F6',
-        fontSize: 14,
-    },
-
-    // Expense Item
-    expenseItem: {
-        backgroundColor: COLORS.CARD_BG,
-        padding: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.LARGE,
-        marginBottom: SPACING.SMALL,
-    },
-    expenseTopRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    expenseActions: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        marginTop: SPACING.SMALL,
-        paddingTop: SPACING.SMALL,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.06)',
-    },
-    expenseLogo: {
-        width: 48,
-        height: 48,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: SPACING.MEDIUM,
-    },
-    logoText: {
-        fontSize: 16,
-        fontFamily: FONTS.BOLD,
-    },
-    expenseContent: {
-        flex: 1,
-    },
-    expenseRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 4,
-    },
-    expenseName: {
-        color: COLORS.WHITE,
-        fontSize: 15,
-        fontFamily: FONTS.BOLD,
-        flex: 1,
-    },
-    expenseAmount: {
-        color: COLORS.WHITE,
-        fontSize: 15,
-        fontFamily: FONTS.BOLD,
-    },
-    expenseDetails: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
-    },
-
-    // Action Buttons
-    negotiateButton: {
-        backgroundColor: '#2563EB',
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingVertical: 6,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-    },
-    negotiateText: {
-        color: COLORS.WHITE,
-        fontSize: 12,
-        fontFamily: FONTS.BOLD,
-    },
-    stopButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#EF4444',
-        paddingHorizontal: SPACING.SMALL,
-        paddingVertical: 4,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-    },
-    stopText: {
-        color: '#EF4444',
-        fontSize: 12,
-        marginLeft: 4,
-    },
-    activeButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.SMALL,
-        paddingVertical: 4,
-    },
-    activeText: {
-        color: '#4CAF50',
-        fontSize: 12,
-        marginLeft: 4,
-    },
-
-    // Empty State
-    emptyState: {
-        alignItems: 'center',
-        padding: SPACING.XL,
-    },
-    emptyTitle: {
-        color: COLORS.WHITE,
-        fontSize: 16,
-        fontFamily: FONTS.BOLD,
-        marginTop: SPACING.MEDIUM,
-        textAlign: 'center',
-    },
-    emptyText: {
-        color: COLORS.TEXT_MUTED,
-        marginTop: SPACING.MEDIUM,
-        textAlign: 'center',
-    },
-
-    // Toggle
-    toggleRow: {
-        flexDirection: 'row',
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        padding: 2,
-        marginBottom: SPACING.MEDIUM,
-        alignSelf: 'flex-start',
-    },
-    toggleButton: {
-        paddingVertical: SPACING.SMALL,
-        paddingHorizontal: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-    },
-    toggleButtonActive: {
-        backgroundColor: COLORS.GOLD,
-    },
-    toggleText: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
-        fontFamily: FONTS.BOLD,
-    },
-    toggleTextActive: {
-        color: '#000',
-    },
-});
 
 export default WatchdogScreen;
