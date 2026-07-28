@@ -26,15 +26,13 @@ export const CATEGORY_PATTERNS = {
         keywords: ['PETRO-CANADA', 'PIONEER STN', 'SHELL', 'ESSO', 'HUSKY', 'ULTRAMAR', 'FUEL', 'GAS STATION', 'CIRCLE K'],
         icon: 'car',
         library: 'Ionicons',
-        colorIndex: 2,
-        color: '#FF9500'
+        colorIndex: 2
     },
     'Transportation': {
         keywords: ['UBER', 'LYFT', 'TAXI', 'TTC', 'GO TRANSIT', 'TRANSIT', 'PARKING', 'PRESTO'],
         icon: 'bus',
         library: 'Ionicons',
-        colorIndex: 2,
-        color: '#5C6BC0'
+        colorIndex: 2
     },
 
     // Food & Drink
@@ -42,22 +40,19 @@ export const CATEGORY_PATTERNS = {
         keywords: ['SUBZI MANDI', 'LOBLAWS', 'METRO', 'SOBEYS', 'FRESHCO', 'NOFRILLS', 'COSTCO', 'WALMART', 'FOOD BASICS', 'HOLLAND DAZE'],
         icon: 'cart-outline',
         library: 'Ionicons',
-        colorIndex: 5,
-        color: '#34C759'
+        colorIndex: 5
     },
     'Restaurants': {
         keywords: ['CHAIIWALA', 'GWALIA SWEETS', 'RESTAURANT', 'CAFE', 'PIZZA', 'SUSHI', 'BURGER', 'MCDONALD', 'TIM HORTONS', 'STARBUCKS', 'DOORDASH', 'UBER EATS', 'SKIP DISHES', 'GRILLIES', 'MINERVA'],
         icon: 'restaurant',
         library: 'Ionicons',
-        colorIndex: 1,
-        color: '#FF6B6B'
+        colorIndex: 1
     },
     'Coffee & Snacks': {
         keywords: ['COFFEE', 'TIM HORTONS', 'STARBUCKS', 'SECOND CUP', 'DUNKIN'],
         icon: 'cafe',
         library: 'Ionicons',
-        colorIndex: 1,
-        color: '#A0522D'
+        colorIndex: 1
     },
 
     // Entertainment
@@ -65,15 +60,13 @@ export const CATEGORY_PATTERNS = {
         keywords: ['CINEPLEX', 'FAMOUS PLAYER', 'RESIDENT ADVISOR', 'THEATRE', 'CONCERT', 'TICKETMASTER', 'MOVIES'],
         icon: 'film',
         library: 'Ionicons',
-        colorIndex: 4,
-        color: '#AF52DE'
+        colorIndex: 4
     },
     'Subscriptions': {
         keywords: ['NETFLIX', 'SPOTIFY', 'AUDIBLE', 'DISNEY+', 'AMAZON PRIME', 'APPLE MUSIC', 'YOUTUBE', 'CRAVE', 'XBOX GAME', 'MICROSOFT*XBOX', 'CLAUDE', 'ANTH'],
         icon: 'play-circle',
         library: 'Ionicons',
-        colorIndex: 4,
-        color: '#5856D6'
+        colorIndex: 4
     },
 
     // Shopping
@@ -81,22 +74,19 @@ export const CATEGORY_PATTERNS = {
         keywords: ['SEPHORA', 'ZARA', 'LOCCITANE', 'WINNERS', 'H&M', 'GAP', 'UNIQLO', 'NIKE', 'ADIDAS', 'CANADIAN TIRE', 'BEST BUY', 'TIMEX', 'SP TIMEX', 'SERVICES'],
         icon: 'bag',
         library: 'Ionicons',
-        colorIndex: 6,
-        color: '#FF2D92'
+        colorIndex: 6
     },
     'Health & Pharmacy': {
         keywords: ['REXALL', 'SHOPPERS DRUG', 'PHARMACY', 'WELLNESS', 'MEDICAL', 'DOCTOR', 'CLINIC', 'HOSPITAL'],
         icon: 'medical',
         library: 'Ionicons',
-        colorIndex: 0,
-        color: '#00C7BE'
+        colorIndex: 0
     },
     'Fitness': {
         keywords: ['FIT4LESS', 'GOODLIFE', 'GYM', 'FITNESS', 'PLANET FITNESS', 'EQUINOX', 'YOGA'],
         icon: 'barbell',
         library: 'Ionicons',
-        colorIndex: 0,
-        color: '#30D158'
+        colorIndex: 0
     },
 
     // Financial
@@ -104,51 +94,44 @@ export const CATEGORY_PATTERNS = {
         keywords: ['WEALTHSIMPLE', 'QUESTRADE', 'INVESTMENT', 'TFSA', 'RRSP', 'MUTUAL FUND'],
         icon: 'trending-up',
         library: 'Ionicons',
-        colorIndex: 5,
-        color: '#32ADE6'
+        colorIndex: 5
     },
     'Transfers': {
         keywords: ['E-TRANSFER', 'INTERNET TRANSFER', 'WIRE', 'FULFILL REQUEST', 'REMITLY', 'WESTERN UNION', 'MONEYGRAM'],
         icon: 'swap-horizontal-outline',
         library: 'Ionicons',
-        colorIndex: 2,
-        color: '#007AFF'
+        colorIndex: 2
     },
     // NOTE: no bare 'TAX' or 'CRA' keywords — they'd substring-match TAXI / CRAVE / CRAFT
     'Taxes & Government': {
         keywords: ['CANADA TXD', 'TXD/TAX', 'RECEIVER GENERAL', 'REVENUE CANADA', 'CRA ', 'CANADA RIT', 'CANADA FPT', 'CANADA PRO', 'CANADA FED', 'GST/HST', 'TAX PAYMENT', 'TAX REFUND', 'PROPERTY TAX', 'INCOME TAX', 'SERVICE ONTARIO'],
         icon: 'library',
         library: 'Ionicons',
-        colorIndex: 3,
-        color: '#8B5CF6'
+        colorIndex: 3
     },
     'ATM': {
         keywords: ['ATM WITHDRAWAL', 'ATM DEPOSIT', 'CASH WITHDRAWAL'],
         icon: 'cash-outline',
         library: 'Ionicons',
-        colorIndex: 0,
-        color: '#34C759'
+        colorIndex: 0
     },
     'Fees & Charges': {
         keywords: ['SERVICE CHARGE', 'NSF FEE', 'PURCHASE INTEREST', 'NETWORK TRANSACTION FEE', 'PAYMENT PROTECTOR', 'INTEREST'],
         icon: 'receipt-outline',
         library: 'Ionicons',
-        colorIndex: 3,
-        color: '#FF3B30'
+        colorIndex: 3
     },
     'Payments': {
         keywords: ['PAYMENT THANK YOU', 'PREAUTHORIZED DEBIT BR', 'LOANS SYSTEM', 'CREDIT'],
         icon: 'card',
         library: 'Ionicons',
-        colorIndex: 2,
-        color: '#64D2FF'
+        colorIndex: 2
     },
     'Income': {
         keywords: ['PAYROLL', 'DEPOSIT', 'SALARY', 'BONUS INTEREST', 'REBATE'],
         icon: 'cash',
         library: 'Ionicons',
-        colorIndex: 5,
-        color: '#4CAF50'
+        colorIndex: 5
     },
 
     // Alcohol & Tobacco
@@ -156,8 +139,7 @@ export const CATEGORY_PATTERNS = {
         keywords: ['LCBO', 'BEER STORE', 'WINE', 'BAR', 'PUB', 'LIQUOR'],
         icon: 'beer',
         library: 'Ionicons',
-        colorIndex: 4,
-        color: '#BF5AF2'
+        colorIndex: 4
     },
 
     // Tech & Software
@@ -165,8 +147,7 @@ export const CATEGORY_PATTERNS = {
         keywords: ['MICROSOFT*STORE', 'APPLE', 'GOOGLE', 'AMAZON', 'ADOBE', 'SOFTWARE'],
         icon: 'phone-portrait',
         library: 'Ionicons',
-        colorIndex: 4,
-        color: '#5AC8FA'
+        colorIndex: 4
     },
 
     // Utilities
@@ -174,8 +155,7 @@ export const CATEGORY_PATTERNS = {
         keywords: ['HYDRO', 'ELECTRIC', 'WATER', 'GAS', 'UTILITY', 'ENBRIDGE', 'TORONTO HYDRO'],
         icon: 'flash',
         library: 'Ionicons',
-        colorIndex: 3,
-        color: '#FFC107'
+        colorIndex: 3
     },
 
     // Bank Fees
@@ -183,36 +163,35 @@ export const CATEGORY_PATTERNS = {
         keywords: ['BANK FEE', 'MONTHLY FEE', 'OVERDRAFT', 'ACCOUNT FEE'],
         icon: 'pricetag',
         library: 'Ionicons',
-        colorIndex: 3,
-        color: '#F44336'
+        colorIndex: 3
     }
 };
 
 // Plaid top-level categories that don't exist in CATEGORY_PATTERNS
 const PLAID_CATEGORY_META = {
-    'Food and Drink': { icon: 'fast-food', library: 'Ionicons', colorIndex: 1, color: '#FF6B6B' },
-    'Travel': { icon: 'airplane', library: 'Ionicons', colorIndex: 2, color: '#FF9500' },
-    'Shops': { icon: 'bag', library: 'Ionicons', colorIndex: 6, color: '#FF2D92' },
-    'Transfer': { icon: 'swap-horizontal-outline', library: 'Ionicons', colorIndex: 2, color: '#007AFF' },
-    'Payment': { icon: 'card', library: 'Ionicons', colorIndex: 2, color: '#64D2FF' },
-    'Recreation': { icon: 'game-controller', library: 'Ionicons', colorIndex: 4, color: '#AF52DE' },
-    'Service': { icon: 'pricetag', library: 'Ionicons', colorIndex: 3, color: '#FF3B30' },
-    'Community': { icon: 'people', library: 'Ionicons', colorIndex: 0, color: '#96CEB4' },
-    'Healthcare': { icon: 'medical', library: 'Ionicons', colorIndex: 0, color: '#00C7BE' },
-    'Interest': { icon: 'trending-up', library: 'Ionicons', colorIndex: 5, color: '#32ADE6' },
-    'Tax': { icon: 'document-text', library: 'Ionicons', colorIndex: 3, color: '#FF3B30' },
+    'Food and Drink': { icon: 'fast-food', library: 'Ionicons', colorIndex: 1 },
+    'Travel': { icon: 'airplane', library: 'Ionicons', colorIndex: 2 },
+    'Shops': { icon: 'bag', library: 'Ionicons', colorIndex: 6 },
+    'Transfer': { icon: 'swap-horizontal-outline', library: 'Ionicons', colorIndex: 2 },
+    'Payment': { icon: 'card', library: 'Ionicons', colorIndex: 2 },
+    'Recreation': { icon: 'game-controller', library: 'Ionicons', colorIndex: 4 },
+    'Service': { icon: 'pricetag', library: 'Ionicons', colorIndex: 3 },
+    'Community': { icon: 'people', library: 'Ionicons', colorIndex: 0 },
+    'Healthcare': { icon: 'medical', library: 'Ionicons', colorIndex: 0 },
+    'Interest': { icon: 'trending-up', library: 'Ionicons', colorIndex: 5 },
+    'Tax': { icon: 'document-text', library: 'Ionicons', colorIndex: 3 }
 };
 
 // colorIndex null resolves to the theme's neutral CATEGORY_OTHER.
-const DEFAULT_CATEGORY_META = { icon: 'wallet', library: 'Ionicons', colorIndex: null, color: '#8E8E93' };
+const DEFAULT_CATEGORY_META = { icon: 'wallet', library: 'Ionicons', colorIndex: null };
 
 /**
- * Get display metadata (icon, library, colorIndex, color) for any category name.
+ * Get display metadata (icon, library, colorIndex) for any category name.
  * Covers every custom category in CATEGORY_PATTERNS plus known Plaid
  * top-level categories, so AI/backend-assigned categories render with
  * their proper icon and colour instead of the gray wallet fallback.
  * @param {string} categoryName
- * @returns {Object} - { icon, library, colorIndex, color }
+ * @returns {Object} - { icon, library, colorIndex }
  */
 export const getCategoryMeta = (categoryName) => {
     if (!categoryName) return DEFAULT_CATEGORY_META;
@@ -222,8 +201,7 @@ export const getCategoryMeta = (categoryName) => {
         return {
             icon: pattern.icon,
             library: pattern.library,
-            colorIndex: pattern.colorIndex,
-            color: pattern.color,
+            colorIndex: pattern.colorIndex
         };
     }
 
@@ -233,7 +211,7 @@ export const getCategoryMeta = (categoryName) => {
 /**
  * Categorize a transaction based on Plaid category or pattern matching
  * @param {Object} transaction - Transaction object
- * @returns {Object} - { category, icon, library, colorIndex, color }
+ * @returns {Object} - { category, icon, library, colorIndex }
  */
 export const categorizeTransaction = (transaction) => {
     // Priority 1: Pattern matching on transaction name (Preferred for specific icons)
@@ -248,8 +226,7 @@ export const categorizeTransaction = (transaction) => {
                     category: categoryName,
                     icon: config.icon,
                     library: config.library,
-                    colorIndex: config.colorIndex,
-                    color: config.color
+                    colorIndex: config.colorIndex
                 };
             }
         }
@@ -263,8 +240,7 @@ export const categorizeTransaction = (transaction) => {
             category: assignedCategory,
             icon: meta.icon,
             library: meta.library,
-            colorIndex: meta.colorIndex,
-            color: meta.color
+            colorIndex: meta.colorIndex
         };
     }
 

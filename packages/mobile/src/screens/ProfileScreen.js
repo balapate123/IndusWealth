@@ -146,7 +146,8 @@ const makeStyles = (t) => StyleSheet.create({
     qrFrame: {
         alignItems: 'center',
         alignSelf: 'center',
-        backgroundColor: '#FFFFFF', // a QR code is only scannable on white
+        // eslint-disable-next-line no-restricted-syntax -- a QR code is only scannable on white
+        backgroundColor: '#FFFFFF',
         borderRadius: RADIUS.MEDIUM,
         padding: SPACING.MEDIUM,
         marginVertical: SPACING.MEDIUM,

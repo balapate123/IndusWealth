@@ -39,6 +39,7 @@ const makeStyles = (t) => StyleSheet.create({
     // app surface behind them would show through as a mismatched band.
     webview: {
         flex: 1,
+        // eslint-disable-next-line no-restricted-syntax -- the page's own ground, not ours
         backgroundColor: '#FFFFFF',
     },
     loadingOverlay: {
