@@ -25,6 +25,7 @@
 | | `src/routes/educational.js` | Wealth Academy articles |
 | | `src/routes/feedback.js` | User feedback |
 | | `src/routes/twoFactor.js` | TOTP 2FA setup/verify/disable |
+| | `src/routes/flags.js` | User-defined transaction flags: CRUD, bulk attach/detach, per-flag analytics |
 | Services | `src/services/db.js` | PostgreSQL pool + query helpers |
 | | `src/services/plaid.js` | Plaid API client wrapper |
 | | `src/services/encryption.js` | AES-256-GCM (Plaid tokens) |
@@ -36,6 +37,7 @@
 | | `src/services/educational_content.js` | Article management |
 | | `src/services/insight_data.js` | Insight aggregation |
 | | `src/services/logger.js` | Logging utility |
+| | `src/services/flags.js` | Flag constants: icon allowlist, ramp size, starter set |
 | | `src/services/flinks.js` | Flinks integration (alt to Plaid) |
 | Middleware | `src/middleware/auth.js` | JWT + refresh token auth (`authenticateToken`) |
 | | `src/middleware/validators.js` | express-validator input validation |
@@ -67,7 +69,10 @@
 | | `src/screens/InsightsScreen.js` | AI insights |
 | | `src/screens/ProfileScreen.js` | Profile + settings |
 | | `src/screens/WealthAcademyScreen.js` | Educational content |
-| | `src/screens/AllTransactionsScreen.js` | Transaction list |
+| | `src/screens/AllTransactionsScreen.js` | Transaction list: date range, search, flag filter, server-computed totals bar |
+| | `src/screens/FlagsScreen.js` | Flag list with per-flag totals; create |
+| | `src/screens/FlagDetailScreen.js` | One flag's analytics: totals, by month/category/merchant/account; edit + delete |
+| | `src/screens/FlagTransactionPickerScreen.js` | Multi-select picker; saves one add/remove diff |
 | | `src/screens/AllAccountsScreen.js` | Accounts list |
 | | `src/screens/AccountTransactionsScreen.js` | Per-account transactions |
 | | `src/screens/FeedbackScreen.js` | Feedback form |
@@ -84,7 +89,15 @@
 | Utils | `src/utils/categorization.js` | Client-side category helpers |
 
 ### Database Tables
-`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`)
+`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`), `transaction_flags` + `transaction_flag_links` (migration: `add_transaction_flags.sql`)
+
+### Transaction Flags
+User-defined groupings ("Home", "Trip to Montreal"), **distinct from `category`** — a category is inferred by Plaid/AI and single-valued; a flag is chosen by the user and a transaction can carry several.
+- Colour is `color_index` into the theme's 7-hue ramp, **never a hex** — dark and light resolve different ramps from the same index. Icon is the secondary encoding once flags outnumber hues.
+- Links key on `transactions.id`, which survives a sync only because `upsertTransactions` is `ON CONFLICT DO UPDATE`. Never change that to delete-and-reinsert or every user's flags detach.
+- Sign convention: positive `amount` = money out. `net = SUM(amount)` = spent minus reimbursed — the number that matters for a shared expense.
+- Totals are always server-side (`db.sumTransactions`, same `buildTransactionFilter` as the list). The device only ever holds one page, so never sum rows client-side.
+- The flag filter uses `EXISTS`, not a join, or a row with two flags returns twice.
 
 ---
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SPACING, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import {
@@ -60,6 +61,11 @@ const makeStyles = () => StyleSheet.create({
     },
     range: { marginBottom: SPACING.SMALL + 2 },
     search: { marginBottom: 0 },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL + 2,
+    },
     flagRow: { marginTop: SPACING.SMALL + 2 },
     totals: { marginTop: SPACING.SMALL + 2, marginBottom: SPACING.SMALL },
     list: { flex: 1 },
@@ -77,7 +83,7 @@ const makeStyles = () => StyleSheet.create({
     },
 });
 
-const AllTransactionsScreen = ({ navigation }) => {
+const AllTransactionsScreen = ({ navigation, route }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
 
@@ -89,7 +95,9 @@ const AllTransactionsScreen = ({ navigation }) => {
     const [totals, setTotals] = useState(null);
 
     const [range, setRange] = useState(DEFAULT_RANGE);
-    const [flagFilter, setFlagFilter] = useState(ALL_FLAGS);
+    // A flag's own screen links here pre-filtered, so arriving from "see them in
+    // the list" lands on that flag rather than on everything.
+    const [flagFilter, setFlagFilter] = useState(route?.params?.flagId ?? ALL_FLAGS);
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -319,11 +327,21 @@ const AllTransactionsScreen = ({ navigation }) => {
                 title="All transactions"
                 onBack={() => navigation.goBack()}
                 right={
-                    <Text variant="meta" tone="muted">
-                        {total > transactions.length
-                            ? `${transactions.length}/${total}`
-                            : `${total}`}
-                    </Text>
+                    <View style={styles.headerRight}>
+                        <Text variant="meta" tone="muted">
+                            {total > transactions.length
+                                ? `${transactions.length}/${total}`
+                                : `${total}`}
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('Flags')}
+                            accessibilityRole="button"
+                            accessibilityLabel="Manage flags"
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                            <Ionicons name="pricetags-outline" size={20} color={theme.ACCENT} />
+                        </TouchableOpacity>
+                    </View>
                 }
             />
             <View style={styles.controls}>

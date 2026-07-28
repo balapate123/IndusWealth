@@ -76,6 +76,11 @@ const colorForInsightType = (theme, type) => {
 const makeStyles = (t) => StyleSheet.create({
     scrollContent: { paddingBottom: 110 },
 
+    headerAction: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
     periodRow: {
         flexDirection: 'row',
         marginHorizontal: SPACING.MEDIUM,
@@ -717,6 +722,17 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         <ScreenHeader
             title={isTab ? 'Analytics' : 'Advanced Analytics'}
             onBack={isTab ? undefined : () => navigation.goBack()}
+            right={
+                <TouchableOpacity
+                    style={styles.headerAction}
+                    onPress={() => navigation.navigate('Flags')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Flags"
+                >
+                    <Ionicons name="pricetags-outline" size={16} color={theme.ACCENT} />
+                    <Text variant="label" color={theme.ACCENT}>Flags</Text>
+                </TouchableOpacity>
+            }
         />
     );
 
