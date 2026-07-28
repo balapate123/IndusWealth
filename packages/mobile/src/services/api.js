@@ -7,7 +7,22 @@ import { Platform } from 'react-native';
 import cache from './cache';
 import { reset as resetAnalytics } from './analytics';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://induswealth.onrender.com';
+const PRODUCTION_API_URL = 'https://induswealth.onrender.com';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || PRODUCTION_API_URL;
+
+/**
+ * Which backend this build talks to, for the debug line in Profile.
+ *
+ * Worth surfacing because it is otherwise invisible: the `development` EAS
+ * profile sets no env, so it falls back to packages/mobile/.env — which points
+ * at production. A build you believe is on staging can quietly be on prod, and
+ * the only symptom is confusing errors from the wrong server.
+ */
+export const getApiTarget = () => ({
+    url: API_BASE_URL,
+    host: API_BASE_URL.replace(/^https?:\/\//, ''),
+    isProduction: API_BASE_URL === PRODUCTION_API_URL,
+});
 
 // In-memory tokens for faster access
 let cachedToken = null;

@@ -23,7 +23,7 @@ import {
     Overline,
 } from '../components/ui';
 import cache from '../services/cache';
-import api from '../services/api';
+import api, { getApiTarget } from '../services/api';
 import CustomAlert from '../components/CustomAlert';
 
 const makeStyles = (t) => StyleSheet.create({
@@ -95,6 +95,16 @@ const makeStyles = (t) => StyleSheet.create({
         alignItems: 'center',
         gap: 2,
         marginTop: SPACING.LARGE,
+    },
+    envBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        marginTop: SPACING.SMALL,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: RADIUS.PILL,
+        backgroundColor: t.WARNING_DIM,
     },
 
     // Date picker
@@ -225,6 +235,8 @@ const ProfileScreen = ({ navigation }) => {
     const [selectedDay, setSelectedDay] = useState(1);
 
     const [avatarColorModalVisible, setAvatarColorModalVisible] = useState(false);
+
+    const apiTarget = getApiTarget();
 
     // Avatar options come from the validated ramp plus the brand accent, so the
     // picker can't introduce a colour the rest of the app never uses.
@@ -687,6 +699,14 @@ const ProfileScreen = ({ navigation }) => {
                 <View style={styles.footer}>
                     <Text variant="meta" tone="muted">IndusWealth v2.4.0 (Build 104)</Text>
                     <Text variant="meta" tone="muted">© 2026 IndusWealth Inc.</Text>
+                    {/* Only on non-production builds, so testers can see at a glance
+                        which backend they are actually hitting. */}
+                    {!apiTarget.isProduction && (
+                        <View style={styles.envBadge}>
+                            <Ionicons name="server-outline" size={11} color={theme.WARNING} />
+                            <Text variant="meta" tone="warning">{apiTarget.host}</Text>
+                        </View>
+                    )}
                 </View>
             </Screen>
 
