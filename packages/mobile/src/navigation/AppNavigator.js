@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { NavigationContainer } from '@react-navigation/native';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
 import InsightsScreen from '../screens/InsightsScreen';
@@ -25,13 +25,18 @@ import ETFListScreen from '../screens/ETFListScreen';
 import EmailVerificationScreen from '../screens/EmailVerificationScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
-import { COLORS, BORDER_RADIUS, SPACING } from '../constants/theme';
+import { RADIUS } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import { Text as UIText } from '../components/ui';
 import cache from '../services/cache';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-const TabBarIcon = ({ focused, name, label }) => {
+const TabBarIcon = ({ focused, name }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     const iconMap = {
         'Home': 'home-outline',
         'Insights': 'bulb-outline',
@@ -45,25 +50,28 @@ const TabBarIcon = ({ focused, name, label }) => {
             <Ionicons
                 name={iconMap[name]}
                 size={22}
-                color={focused ? COLORS.BACKGROUND : COLORS.GOLD}
+                color={focused ? theme.TEXT_ON_ACCENT : theme.TEXT_MUTED}
             />
-            <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
+            <UIText variant="meta" tone={focused ? 'onAccent' : 'muted'} style={styles.tabLabel}>
                 {name}
-            </Text>
+            </UIText>
         </View>
     );
 };
 
 // Tab Navigator (Main App)
 const TabNavigator = () => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     return (
         <Tab.Navigator
             screenOptions={{
                 headerShown: false,
                 tabBarStyle: styles.tabBar,
                 tabBarShowLabel: false,
-                tabBarActiveTintColor: COLORS.GOLD,
-                tabBarInactiveTintColor: COLORS.TEXT_SECONDARY,
+                tabBarActiveTintColor: theme.ACCENT,
+                tabBarInactiveTintColor: theme.TEXT_MUTED,
             }}
         >
             <Tab.Screen
@@ -109,11 +117,12 @@ const TabNavigator = () => {
 
 // Auth Stack Navigator
 const AuthStack = () => {
+    const theme = useTheme();
     return (
         <Stack.Navigator
             screenOptions={{
                 headerShown: false,
-                cardStyle: { backgroundColor: COLORS.BACKGROUND },
+                cardStyle: { backgroundColor: theme.BG },
             }}
         >
             <Stack.Screen name="Login" component={LoginScreen} />
@@ -128,6 +137,8 @@ const AuthStack = () => {
 
 // Main App Navigator (Stack with Tabs + Modal Screens)
 const AppNavigator = () => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [isLoading, setIsLoading] = useState(true);
     const [user, setUser] = useState(null);
 
@@ -159,7 +170,7 @@ const AppNavigator = () => {
     if (isLoading) {
         return (
             <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator size="large" color={COLORS.GOLD} />
+                <ActivityIndicator size="large" color={theme.ACCENT} />
             </View>
         );
     }
@@ -169,7 +180,7 @@ const AppNavigator = () => {
             <Stack.Navigator
                 screenOptions={{
                     headerShown: false,
-                    cardStyle: { backgroundColor: COLORS.BACKGROUND },
+                    cardStyle: { backgroundColor: theme.BG },
                 }}
                 initialRouteName={user ? "Main" : "Auth"}
             >
@@ -257,56 +268,47 @@ const AppNavigator = () => {
     );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => StyleSheet.create({
+    // Solid surface with a neutral shadow. The old gold border plus gold glow
+    // made a component you touch once per screen the loudest thing on it.
     tabBar: {
-        backgroundColor: '#000000',
+        backgroundColor: t.SURFACE,
         borderTopWidth: 0,
-        height: 70,
+        borderWidth: t.CARD_BORDER_WIDTH,
+        borderColor: t.CARD_BORDER,
+        height: 66,
         position: 'absolute',
-        bottom: 25,
+        bottom: 22,
         left: 16,
         right: 16,
-        borderRadius: 35,
-        borderWidth: 1.5,
-        borderColor: 'rgba(201, 162, 39, 0.4)',
-        elevation: 8,
-        shadowColor: COLORS.GOLD,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
+        borderRadius: RADIUS.PILL,
         paddingHorizontal: 8,
         paddingTop: 0,
         paddingBottom: 0,
         justifyContent: 'center',
         alignItems: 'center',
+        ...t.ELEVATION.FLOATING,
     },
     tabItem: {
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 10,
         paddingVertical: 6,
-        borderRadius: 20,
+        borderRadius: RADIUS.LARGE + 4,
         flexDirection: 'column',
-        minHeight: 50,
+        minHeight: 48,
     },
     tabItemActive: {
-        backgroundColor: COLORS.GOLD,
+        backgroundColor: t.ACCENT,
         paddingHorizontal: 14,
         paddingVertical: 8,
     },
     tabLabel: {
-        fontSize: 10,
-        color: COLORS.GOLD,
-        fontWeight: '500',
         marginTop: 2,
-    },
-    tabLabelActive: {
-        color: COLORS.BACKGROUND,
-        fontWeight: '600',
     },
     container: {
         flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
+        backgroundColor: t.BG,
     },
 });
 

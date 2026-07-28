@@ -27,6 +27,7 @@ const makeStyles = (t) => StyleSheet.create({
 
 const Screen = ({
     children,
+    header,
     scroll = false,
     centered = false,
     refreshing = false,
@@ -41,6 +42,7 @@ const Screen = ({
     return (
         <View style={[styles.container, centered && styles.centered, style]} {...rest}>
             <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.BG} />
+            {header}
             {scroll ? (
                 <ScrollView
                     showsVerticalScrollIndicator={false}

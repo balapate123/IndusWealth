@@ -19,6 +19,12 @@ const makeStyles = (t) => StyleSheet.create({
         height: 48,
         gap: SPACING.SMALL,
     },
+    multilineField: {
+        height: undefined,
+        minHeight: 96,
+        alignItems: 'flex-start',
+        paddingVertical: 12,
+    },
     focused: { borderColor: t.ACCENT_BORDER },
     errored: { borderColor: t.DANGER },
     input: {
@@ -36,6 +42,7 @@ const Input = ({
     error,
     icon,
     secureTextEntry = false,
+    multiline = false,
     style,
     onFocus,
     onBlur,
@@ -50,13 +57,14 @@ const Input = ({
         <View style={[styles.wrap, style]}>
             {label ? <Text variant="label" tone="secondary" style={styles.label}>{label}</Text> : null}
 
-            <View style={[styles.field, focused && styles.focused, !!error && styles.errored]}>
+            <View style={[styles.field, multiline && styles.multilineField, focused && styles.focused, !!error && styles.errored]}>
                 {icon ? <Ionicons name={icon} size={18} color={theme.TEXT_MUTED} /> : null}
 
                 <TextInput
-                    style={styles.input}
+                    style={[styles.input, multiline && { textAlignVertical: 'top', height: '100%' }]}
                     placeholderTextColor={theme.TEXT_MUTED}
                     secureTextEntry={hidden}
+                    multiline={multiline}
                     onFocus={(e) => { setFocused(true); onFocus?.(e); }}
                     onBlur={(e) => { setFocused(false); onBlur?.(e); }}
                     {...rest}

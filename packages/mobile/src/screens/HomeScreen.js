@@ -1,42 +1,49 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     View,
-    Text,
     StyleSheet,
-    ScrollView,
-    Platform,
-    StatusBar,
     TouchableOpacity,
     ActivityIndicator,
-    RefreshControl,
     Modal,
-    TextInput,
+    ScrollView,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { create, open } from '../services/plaidLink';
-import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
+import { RADIUS, SPACING, alpha, categoryColor } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import {
+    Screen,
+    Card,
+    Text,
+    Button,
+    Input,
+    ChangeBadge,
+    ListRow,
+    Chip,
+    ChipRow,
+    Overline,
+    EmptyState,
+    LoadingState,
+} from '../components/ui';
 import api from '../services/api';
 import cache from '../services/cache';
 import { categorizeTransaction } from '../utils/categorization';
 
-// Mini Balance Chart Component
-const BalanceChart = ({ width = 120, height = 40 }) => {
-    // Sample data points for the trend line (normalized 0-1)
+// Mini balance sparkline. Colour is passed in so it follows the theme accent.
+const BalanceChart = ({ width = 120, height = 40, color }) => {
     const dataPoints = [0.3, 0.4, 0.35, 0.5, 0.45, 0.6, 0.7, 0.65, 0.8, 0.85, 0.9];
 
     const padding = 2;
     const chartWidth = width - padding * 2;
     const chartHeight = height - padding * 2;
 
-    // Convert data points to path
     const points = dataPoints.map((point, index) => {
         const x = padding + (index / (dataPoints.length - 1)) * chartWidth;
         const y = padding + (1 - point) * chartHeight;
         return { x, y };
     });
 
-    // Create smooth curve path
     const linePath = points.reduce((path, point, index) => {
         if (index === 0) return `M ${point.x} ${point.y}`;
         const prev = points[index - 1];
@@ -44,36 +51,246 @@ const BalanceChart = ({ width = 120, height = 40 }) => {
         return `${path} Q ${cpX} ${prev.y} ${point.x} ${point.y}`;
     }, '');
 
-    // Create area path (for gradient fill)
     const areaPath = `${linePath} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
+    const last = points[points.length - 1];
 
     return (
         <Svg width={width} height={height}>
             <Defs>
                 <LinearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <Stop offset="0%" stopColor="#C9A227" stopOpacity="0.3" />
-                    <Stop offset="100%" stopColor="#C9A227" stopOpacity="0" />
+                    <Stop offset="0%" stopColor={color} stopOpacity="0.3" />
+                    <Stop offset="100%" stopColor={color} stopOpacity="0" />
                 </LinearGradient>
             </Defs>
             <Path d={areaPath} fill="url(#areaGradient)" />
-            <Path d={linePath} stroke="#C9A227" strokeWidth={2} fill="none" />
+            <Path d={linePath} stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            {/* Emphasised endpoint — the value the number above refers to */}
+            <Path d={`M ${last.x} ${last.y} l 0 0.01`} stroke={color} strokeWidth={5} strokeLinecap="round" />
         </Svg>
     );
 };
 
-// Account colors for color-coding transactions
-const ACCOUNT_COLORS = [
-    '#4CAF50', // Green
-    '#2196F3', // Blue
-    '#FF9800', // Orange
-    '#9C27B0', // Purple
-    '#E91E63', // Pink
-    '#00BCD4', // Cyan
-    '#FF5722', // Deep Orange
-    '#607D8B', // Blue Grey
-];
+const money = (value) =>
+    `$${Math.abs(Number(value) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const isDateToday = (dateStr) => dateStr === new Date().toISOString().slice(0, 10);
+const isDateYesterday = (dateStr) =>
+    dateStr === new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+const formatTime = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+        const date = new Date(`${dateStr}T12:00:00`);
+        if (isNaN(date.getTime())) return 'N/A';
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch (e) {
+        return 'N/A';
+    }
+};
+
+const makeStyles = (t) => StyleSheet.create({
+    scrollContent: {
+        // Clears the floating tab bar.
+        paddingBottom: 110,
+    },
+
+    // Header
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingTop: SPACING.SMALL + 4,
+        paddingBottom: SPACING.MEDIUM,
+    },
+    identity: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 11,
+    },
+    avatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: t.SURFACE_HIGH,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    onlineDot: {
+        position: 'absolute',
+        right: -1,
+        bottom: -1,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: t.SUCCESS,
+        borderWidth: 2,
+        borderColor: t.BG,
+    },
+    iconButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: t.SURFACE_HIGH,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    // Balance card
+    balanceTop: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+    },
+    balanceAmountRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 2,
+    },
+    balanceRight: {
+        alignItems: 'flex-end',
+        gap: 5,
+    },
+    savingsRow: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        marginTop: 5,
+    },
+    actions: {
+        flexDirection: 'row',
+        gap: 9,
+        marginTop: SPACING.MEDIUM,
+    },
+
+    // Accounts
+    accountBadge: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    // Transaction rows
+    txLeading: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+    },
+    accountStrip: {
+        width: 3,
+        height: 32,
+        borderRadius: 2,
+    },
+    txIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    listCard: {
+        paddingHorizontal: SPACING.MEDIUM - 2,
+        paddingVertical: 0,
+    },
+
+    // Banners
+    banner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL + 2,
+    },
+    bannerBody: { flex: 1 },
+
+    moreIndicator: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 5,
+        marginTop: SPACING.SMALL,
+    },
+    dot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: t.HAIRLINE_STRONG,
+    },
+
+    // Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: t.SCRIM,
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: t.SURFACE,
+        borderTopLeftRadius: RADIUS.CARD,
+        borderTopRightRadius: RADIUS.CARD,
+        padding: SPACING.MEDIUM,
+        paddingBottom: SPACING.XL,
+        maxHeight: '88%',
+        ...t.ELEVATION.SHEET,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: SPACING.MEDIUM,
+    },
+    detailAmountRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: SPACING.MEDIUM,
+    },
+    detailBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: RADIUS.SMALL,
+    },
+    detailRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: SPACING.MEDIUM,
+        paddingVertical: SPACING.SMALL + 2,
+        borderTopWidth: 1,
+        borderTopColor: t.HAIRLINE,
+    },
+    detailValue: {
+        flex: 1,
+        textAlign: 'right',
+    },
+    accountIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 6,
+        flex: 1,
+    },
+    accountDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    notesSection: {
+        marginTop: SPACING.MEDIUM,
+    },
+    counter: {
+        textAlign: 'right',
+        marginTop: -SPACING.SMALL,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: SPACING.SMALL + 2,
+        marginTop: SPACING.MEDIUM,
+    },
+});
 
 const HomeScreen = ({ navigation }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     const [transactions, setTransactions] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const [totalCash, setTotalCash] = useState(0);
@@ -105,7 +322,7 @@ const HomeScreen = ({ navigation }) => {
                 category: categorization.category,
                 categoryIcon: categorization.icon,
                 categoryLibrary: categorization.library,
-                categoryColor: categorization.color,
+                categoryColorIndex: categorization.colorIndex,
                 amount: tx.amount * -1,
                 time: formatTime(tx.date),
                 rawDate: tx.date,
@@ -213,7 +430,6 @@ const HomeScreen = ({ navigation }) => {
     const handleReAuthenticate = async () => {
         setReAuthLoading(true);
         try {
-            // Get update mode link token from backend
             console.log('🔄 Getting update mode link token...');
             const result = await api.createUpdateLinkToken();
 
@@ -225,16 +441,12 @@ const HomeScreen = ({ navigation }) => {
 
             console.log('✅ Got update link token, opening Plaid Link...');
 
-            // Create and open Plaid Link in update mode
-            await create({
-                token: result.link_token,
-            });
+            await create({ token: result.link_token });
 
             await open({
-                onSuccess: async (success) => {
+                onSuccess: async () => {
                     console.log('🎉 Plaid Link update success!');
                     setPlaidStatus('success');
-                    // Refresh data after successful re-authentication
                     loadData(true);
                     setReAuthLoading(false);
                 },
@@ -249,77 +461,17 @@ const HomeScreen = ({ navigation }) => {
         }
     };
 
-    // Helper functions
-    const isDateToday = (dateStr) => {
-        const today = new Date().toISOString().slice(0, 10);
-        return dateStr === today;
-    };
+    const todayTransactions = transactions.filter((t) => t.dateGroup === 'today');
+    const yesterdayTransactions = transactions.filter((t) => t.dateGroup === 'yesterday');
+    const olderTransactions = transactions.filter((t) => t.dateGroup === 'older');
 
-    const isDateYesterday = (dateStr) => {
-        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-        return dateStr === yesterday;
-    };
-
-    const formatTime = (dateStr) => {
-        // Handle null, undefined, or empty dates
-        if (!dateStr) return 'N/A';
-
-        // Plaid only provides date, not time - so show formatted date
-        try {
-            const date = new Date(dateStr + 'T12:00:00'); // Add noon to avoid timezone issues
-            if (isNaN(date.getTime())) return 'N/A';
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        } catch (e) {
-            return 'N/A';
-        }
-    };
-
-    const todayTransactions = transactions.filter(t => t.dateGroup === 'today');
-    const yesterdayTransactions = transactions.filter(t => t.dateGroup === 'yesterday');
-    const olderTransactions = transactions.filter(t => t.dateGroup === 'older');
-
-    const renderTransactionIcon = (item, isIncome) => {
-        const hasNotes = item.notes && item.notes.trim().length > 0;
-        const iconStyle = [
-            styles.transactionIcon,
-            hasNotes && styles.transactionIconWithNotes
-        ];
-
-        if (isIncome) {
-            return (
-                <View style={[...iconStyle, { backgroundColor: '#1A3D1A' }]}>
-                    <Ionicons name="cash" size={26} color="#4CAF50" />
-                </View>
-            );
-        }
-        const bgColor = `${item.categoryColor}20`;
-
-        if (item.categoryLibrary === 'FontAwesome5') {
-            return (
-                <View style={[...iconStyle, { backgroundColor: bgColor }]}>
-                    <FontAwesome5 name={item.categoryIcon} size={24} color={item.categoryColor} />
-                </View>
-            );
-        }
-        return (
-            <View style={[...iconStyle, { backgroundColor: bgColor }]}>
-                <Ionicons name={item.categoryIcon} size={26} color={item.categoryColor} />
-            </View>
-        );
-    };
-
-    // Get color for an account based on its index in the accounts array
+    // Accounts get an identity colour from the same validated ramp the
+    // categories use, so the two colour systems can't drift apart.
+    const realAccounts = accounts.filter((acc) => acc.id !== 'all' && acc.type !== 'aggregate');
     const getAccountColor = (accountId) => {
-        if (!accountId || accounts.length === 0) return ACCOUNT_COLORS[0]; // Default to first color
-
-        // Filter out the aggregate 'all' account for color matching
-        const realAccounts = accounts.filter(acc => acc.id !== 'all' && acc.type !== 'aggregate');
-
-        // Match by id (which is the plaid_account_id in formatted accounts)
-        const accountIndex = realAccounts.findIndex(acc => acc.id === accountId);
-
-        if (accountIndex === -1) return ACCOUNT_COLORS[0]; // Default color if no match
-        return ACCOUNT_COLORS[accountIndex % ACCOUNT_COLORS.length];
+        if (!accountId || realAccounts.length === 0) return categoryColor(theme, 0);
+        const index = realAccounts.findIndex((acc) => acc.id === accountId);
+        return categoryColor(theme, index === -1 ? 0 : index);
     };
 
     const openTransactionDetails = (item) => {
@@ -335,362 +487,319 @@ const HomeScreen = ({ navigation }) => {
             setSaving(true);
             await api.updateTransactionNotes(selectedTransaction.id, editNotes.trim());
 
-            // Update local state
-            setTransactions(prev => prev.map(tx =>
-                tx.id === selectedTransaction.id
-                    ? { ...tx, notes: editNotes.trim() }
-                    : tx
+            setTransactions((prev) => prev.map((tx) =>
+                tx.id === selectedTransaction.id ? { ...tx, notes: editNotes.trim() } : tx
             ));
-            setSelectedTransaction(prev => ({ ...prev, notes: editNotes.trim() }));
+            setSelectedTransaction((prev) => ({ ...prev, notes: editNotes.trim() }));
 
-            // Close modal after saving
             setShowTransactionModal(false);
-        } catch (error) {
-            console.error('Error saving notes:', error);
-            alert('Failed to save notes. Please try again.');
+        } catch (err) {
+            console.error('Error saving notes:', err);
+            setError('Could not save your note. Try again.');
         } finally {
             setSaving(false);
         }
     };
 
-    const renderTransaction = (item) => {
-        const accountColor = getAccountColor(item.account_id);
+    const renderTransaction = (item, index) => {
+        const isIncome = item.amount > 0;
+        const tint = categoryColor(theme, item.categoryColorIndex);
+        const IconSet = item.categoryLibrary === 'FontAwesome5' ? FontAwesome5 : Ionicons;
 
         return (
-            <TouchableOpacity
+            <ListRow
                 key={item.id}
-                style={styles.transactionItem}
+                divider={index > 0}
                 onPress={() => openTransactionDetails(item)}
-                activeOpacity={0.7}
-            >
-                {/* Account color indicator */}
-                {accountColor && (
-                    <View style={[styles.accountColorIndicator, { backgroundColor: accountColor }]} />
-                )}
-                {renderTransactionIcon(item, item.amount > 0)}
-                <View style={styles.transactionContent}>
-                    <Text style={styles.transactionMerchant} numberOfLines={1}>{item.merchant}</Text>
-                    <Text style={styles.transactionCategory}>{item.category}</Text>
-                </View>
-                <View style={styles.transactionRight}>
-                    <Text style={[
-                        styles.transactionAmount,
-                        { color: item.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
-                    ]}>
-                        {item.amount > 0 ? '+' : '-'}${Math.abs(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </Text>
-                    <Text style={styles.transactionTime}>{item.time}</Text>
-                </View>
-            </TouchableOpacity>
+                leading={
+                    <View style={styles.txLeading}>
+                        <View style={[styles.accountStrip, { backgroundColor: getAccountColor(item.account_id) }]} />
+                        <View style={[styles.txIcon, { backgroundColor: alpha(tint, 0.16) }]}>
+                            <IconSet name={item.categoryIcon} size={19} color={tint} />
+                        </View>
+                    </View>
+                }
+                title={item.merchant}
+                subtitle={item.category}
+                value={`${isIncome ? '+' : '−'}${money(item.amount)}`}
+                valueTone={isIncome ? 'success' : 'primary'}
+                meta={item.time}
+            />
         );
     };
 
     const renderTransactionGroup = (title, items, showSeeAll = false) => {
         if (items.length === 0) return null;
         return (
-            <View style={styles.transactionGroup}>
-                <View style={styles.groupHeader}>
-                    <Text style={styles.groupTitle}>{title}</Text>
-                    {showSeeAll && (
+            <View>
+                <Overline
+                    right={showSeeAll ? (
                         <TouchableOpacity onPress={() => navigation.navigate('AllTransactions')}>
-                            <Text style={styles.seeAllText}>See All</Text>
+                            <Text variant="label" tone="link">See all</Text>
                         </TouchableOpacity>
-                    )}
-                </View>
-                {items.map(item => renderTransaction(item))}
+                    ) : null}
+                >
+                    {title}
+                </Overline>
+                <Card padded={false} style={styles.listCard}>
+                    {items.map((item, index) => renderTransaction(item, index))}
+                </Card>
             </View>
         );
     };
 
     if (loading) {
         return (
-            <View style={[styles.container, styles.centerContent]}>
-                <ActivityIndicator size="large" color={COLORS.GOLD} />
-                <Text style={styles.loadingText}>Loading your finances...</Text>
-            </View>
+            <Screen centered>
+                <LoadingState message="Loading your finances..." />
+            </Screen>
         );
     }
 
-    return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor={COLORS.BACKGROUND} />
-
-            {/* Header */}
-            <View style={styles.header}>
-                <View style={styles.headerLeft}>
-                    <TouchableOpacity
-                        style={styles.avatarContainer}
-                        onPress={() => navigation.navigate('Profile')}
-                        activeOpacity={0.7}
-                    >
-                        <View style={styles.avatar}>
-                            <Ionicons name="person" size={24} color={COLORS.GOLD} />
-                        </View>
-                        <View style={styles.onlineIndicator} />
-                    </TouchableOpacity>
-                    <View style={styles.greetingContainer}>
-                        <Text style={styles.welcomeText}>Welcome back,</Text>
-                        <Text style={styles.userName}>{userName}</Text>
+    const header = (
+        <View style={styles.header}>
+            <View style={styles.identity}>
+                <TouchableOpacity
+                    onPress={() => navigation.navigate('Profile')}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open profile"
+                >
+                    <View style={styles.avatar}>
+                        <Ionicons name="person" size={22} color={theme.TEXT_SECONDARY} />
                     </View>
-                </View>
-                <TouchableOpacity style={styles.notificationButton}>
-                    <Ionicons name="notifications" size={24} color={COLORS.GOLD} />
+                    <View style={styles.onlineDot} />
                 </TouchableOpacity>
+                <View>
+                    <Text variant="meta" tone="muted">Welcome back,</Text>
+                    <Text variant="h2">{userName}</Text>
+                </View>
             </View>
 
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor={COLORS.GOLD}
-                        colors={[COLORS.GOLD]}
-                    />
-                }
-            >
-                {/* Balance Card */}
-                <View style={styles.balanceCard}>
-                    {/* Top row: Label + Chart + Badge */}
-                    <View style={styles.balanceTopRow}>
-                        <View style={styles.balanceLeftSection}>
-                            <Text style={styles.balanceLabel}>TOTAL LIQUID CASH</Text>
-                            <View style={styles.balanceAmountRow}>
-                                <Text style={styles.currencySign}>$</Text>
-                                <Text style={styles.balanceAmount}>
-                                    {showBalance ? totalCash.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '••••••'}
-                                </Text>
-                                <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeButton}>
-                                    <Ionicons
-                                        name={showBalance ? 'eye-outline' : 'eye-off-outline'}
-                                        size={18}
-                                        color={COLORS.GOLD}
-                                    />
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                        <View style={styles.balanceRightSection}>
-                            <View style={[
-                                styles.growthBadge,
-                                changePercent < 0 && styles.growthBadgeNegative
-                            ]}>
+            <TouchableOpacity style={styles.iconButton} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Notifications">
+                <Ionicons name="notifications-outline" size={21} color={theme.TEXT_SECONDARY} />
+            </TouchableOpacity>
+        </View>
+    );
+
+    return (
+        <Screen
+            scroll
+            header={header}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            contentContainerStyle={styles.scrollContent}
+        >
+            {/* Balance */}
+            <Card>
+                <View style={styles.balanceTop}>
+                    <View>
+                        <Text variant="overline" tone="muted">Total liquid cash</Text>
+                        <View style={styles.balanceAmountRow}>
+                            <Text variant="hero">{showBalance ? money(totalCash) : '••••••'}</Text>
+                            <TouchableOpacity
+                                onPress={() => setShowBalance((v) => !v)}
+                                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                accessibilityRole="button"
+                                accessibilityLabel={showBalance ? 'Hide balance' : 'Show balance'}
+                            >
                                 <Ionicons
-                                    name={changePercent >= 0 ? "trending-up" : "trending-down"}
-                                    size={12}
-                                    color={changePercent >= 0 ? "#4CAF50" : "#FF6B6B"}
+                                    name={showBalance ? 'eye-outline' : 'eye-off-outline'}
+                                    size={18}
+                                    color={theme.TEXT_MUTED}
                                 />
-                                <Text style={[
-                                    styles.growthText,
-                                    changePercent < 0 && styles.growthTextNegative
-                                ]}>
-                                    {changePercent >= 0 ? '+' : ''}{changePercent}%
-                                </Text>
-                            </View>
-                            <BalanceChart width={100} height={35} />
+                            </TouchableOpacity>
                         </View>
                     </View>
 
-                    {/* Savings info */}
-                    <View style={styles.savingsRow}>
-                        <Text style={[
-                            styles.savingsAmount,
-                            monthlySavings >= 0 ? styles.savingsPositive : styles.savingsNegative
-                        ]}>
-                            {monthlySavings >= 0 ? '+' : '-'}${Math.abs(monthlySavings).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </Text>
-                        <Text style={styles.savingsText}> {monthlySavings >= 0 ? 'in savings' : 'overspent'} this month</Text>
-                    </View>
-
-                    {/* Action Buttons */}
-                    <View style={styles.actionButtons}>
-                        <TouchableOpacity
-                            style={styles.addMoneyButton}
-                            onPress={() => navigation.navigate('ConnectBank')}
-                        >
-                            <Ionicons name="add" size={18} color={COLORS.BACKGROUND} />
-                            <Text style={styles.addMoneyText}>Add Account</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.transferButton}
-                            onPress={() => navigation.navigate('Analytics')}
-                        >
-                            <Ionicons name="analytics" size={18} color={COLORS.WHITE} />
-                            <Text style={styles.transferText}>Analytics</Text>
-                        </TouchableOpacity>
+                    <View style={styles.balanceRight}>
+                        <ChangeBadge percent={changePercent} />
+                        <BalanceChart width={92} height={34} color={theme.ACCENT} />
                     </View>
                 </View>
 
-                {/* Account Filters */}
-                {accounts.filter(acc => acc.type !== 'aggregate').length > 0 ? (
-                    <View style={styles.accountFiltersWrapper}>
-                        <View style={styles.accountFiltersHeader}>
-                            <Text style={styles.accountFiltersLabel}>ACCOUNTS</Text>
+                <View style={styles.savingsRow}>
+                    <Text variant="num" tone={monthlySavings >= 0 ? 'success' : 'danger'}>
+                        {monthlySavings >= 0 ? '+' : '−'}{money(monthlySavings)}
+                    </Text>
+                    <Text variant="body" tone="secondary">
+                        {monthlySavings >= 0 ? ' in savings this month' : ' overspent this month'}
+                    </Text>
+                </View>
+
+                <View style={styles.actions}>
+                    <Button
+                        title="Add account"
+                        icon="add"
+                        onPress={() => navigation.navigate('ConnectBank')}
+                        style={{ flex: 1 }}
+                    />
+                    <Button
+                        title="Analytics"
+                        icon="analytics-outline"
+                        variant="secondary"
+                        onPress={() => navigation.navigate('Analytics')}
+                        style={{ flex: 1 }}
+                    />
+                </View>
+            </Card>
+
+            {/* Accounts */}
+            {realAccounts.length > 0 ? (
+                <View>
+                    <Overline
+                        right={
                             <TouchableOpacity onPress={() => navigation.navigate('AllAccounts')}>
-                                <Text style={styles.manageText}>Manage</Text>
+                                <Text variant="label" tone="link">Manage</Text>
                             </TouchableOpacity>
-                        </View>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.accountFilters}
-                            contentContainerStyle={styles.accountFiltersContent}
-                        >
-                            {accounts.filter(acc => acc.type !== 'aggregate').map((account) => (
-                                <TouchableOpacity
+                        }
+                    >
+                        Accounts
+                    </Overline>
+                    <ChipRow style={{ marginBottom: SPACING.MEDIUM }}>
+                        {realAccounts.map((account) => {
+                            const accentColor = getAccountColor(account.id);
+                            return (
+                                <Chip
                                     key={account.id}
-                                    style={[
-                                        styles.accountTab,
-                                        selectedAccount === account.id && styles.accountTabActive
-                                    ]}
+                                    label={account.alias || account.name}
+                                    active={selectedAccount === account.id}
+                                    color={accentColor}
                                     onPress={() => {
                                         setSelectedAccount(account.id);
                                         navigation.navigate('AccountTransactions', { account });
                                     }}
-                                >
-                                    <View style={[styles.bankLogo, { backgroundColor: getAccountColor(account.id) }]}>
-                                        <Text style={styles.bankLogoText}>{account.bank?.[0] || account.name?.[0] || 'A'}</Text>
-                                    </View>
-                                    <Text style={[
-                                        styles.accountTabText,
-                                        selectedAccount === account.id && styles.accountTabTextActive
-                                    ]}>
-                                        {account.alias || account.name}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                ) : (
-                    <View style={styles.noAccountsPrompt}>
-                        <Text style={styles.noAccountsText}>Connect a bank account to get started</Text>
-                        <TouchableOpacity
-                            style={styles.connectPromptButton}
-                            onPress={() => navigation.navigate('ConnectBank')}
-                        >
-                            <Ionicons name="add" size={16} color={COLORS.BACKGROUND} />
-                            <Text style={styles.connectPromptText}>Connect Account</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-                {/* Re-authentication Banner */}
-                {plaidStatus === 'login_required' && (
-                    <TouchableOpacity
-                        style={styles.reAuthBanner}
-                        onPress={handleReAuthenticate}
-                        disabled={reAuthLoading}
-                    >
-                        <View style={styles.reAuthContent}>
-                            <Ionicons name="alert-circle" size={24} color="#FFA726" />
-                            <View style={styles.reAuthTextContainer}>
-                                <Text style={styles.reAuthTitle}>Bank Connection Expired</Text>
-                                <Text style={styles.reAuthSubtitle}>
-                                    Tap to re-authenticate and sync your latest transactions
-                                </Text>
-                            </View>
-                        </View>
-                        {reAuthLoading ? (
-                            <ActivityIndicator size="small" color="#FFA726" />
-                        ) : (
-                            <Ionicons name="chevron-forward" size={20} color="#FFA726" />
-                        )}
-                    </TouchableOpacity>
-                )}
-
-                {/* Error Message */}
-                {error && (
-                    <View style={styles.errorContainer}>
-                        <Text style={styles.errorText}>{error}</Text>
-                    </View>
-                )}
-
-                {/* Transactions */}
-                <View style={styles.transactionsContainer}>
-                    {/* Logic to show "See All" button on the FIRST visible group */}
-                    {renderTransactionGroup('TODAY', todayTransactions, todayTransactions.length > 0)}
-                    {renderTransactionGroup('YESTERDAY', yesterdayTransactions, todayTransactions.length === 0 && yesterdayTransactions.length > 0)}
-                    {renderTransactionGroup('RECENT', olderTransactions.slice(0, 20), todayTransactions.length === 0 && yesterdayTransactions.length === 0)}
-
-                    {transactions.length === 0 && !error && (
-                        <View style={styles.emptyState}>
-                            <Ionicons name="receipt-outline" size={48} color={COLORS.GOLD} />
-                            <Text style={styles.emptyText}>No transactions yet</Text>
-                        </View>
-                    )}
+                                />
+                            );
+                        })}
+                    </ChipRow>
                 </View>
+            ) : (
+                <Card>
+                    <EmptyState
+                        icon="link-outline"
+                        title="No accounts connected"
+                        message="Connect a bank account to see your balance and transactions."
+                        actionLabel="Connect account"
+                        onAction={() => navigation.navigate('ConnectBank')}
+                    />
+                </Card>
+            )}
 
-                {/* More indicator */}
-                {transactions.length > 0 && (
-                    <View style={styles.moreIndicator}>
-                        <View style={styles.dot} />
-                        <View style={styles.dot} />
-                        <View style={styles.dot} />
+            {/* Bank connection expired */}
+            {plaidStatus === 'login_required' && (
+                <Card
+                    onPress={reAuthLoading ? undefined : handleReAuthenticate}
+                    style={{ backgroundColor: theme.WARNING_DIM, borderColor: theme.WARNING_DIM }}
+                >
+                    <View style={styles.banner}>
+                        <Ionicons name="alert-circle" size={24} color={theme.WARNING} />
+                        <View style={styles.bannerBody}>
+                            <Text variant="bodyMed">Bank connection expired</Text>
+                            <Text variant="meta" tone="secondary">
+                                Tap to re-authenticate and sync your latest transactions
+                            </Text>
+                        </View>
+                        {reAuthLoading
+                            ? <ActivityIndicator size="small" color={theme.WARNING} />
+                            : <Ionicons name="chevron-forward" size={20} color={theme.WARNING} />}
                     </View>
-                )}
-            </ScrollView>
+                </Card>
+            )}
 
-            {/* Transaction Details Modal */}
+            {/* Error */}
+            {error && (
+                <Card style={{ backgroundColor: theme.DANGER_DIM, borderColor: theme.DANGER_DIM }}>
+                    <View style={styles.banner}>
+                        <Ionicons name="cloud-offline-outline" size={20} color={theme.DANGER} />
+                        <Text variant="body" tone="danger" style={styles.bannerBody}>{error}</Text>
+                    </View>
+                </Card>
+            )}
+
+            {/* Transactions — "See all" sits on the first group that has rows */}
+            {renderTransactionGroup('Today', todayTransactions, todayTransactions.length > 0)}
+            {renderTransactionGroup('Yesterday', yesterdayTransactions,
+                todayTransactions.length === 0 && yesterdayTransactions.length > 0)}
+            {renderTransactionGroup('Recent', olderTransactions.slice(0, 20),
+                todayTransactions.length === 0 && yesterdayTransactions.length === 0)}
+
+            {transactions.length === 0 && !error && realAccounts.length > 0 && (
+                <Card>
+                    <EmptyState
+                        icon="receipt-outline"
+                        title="No transactions yet"
+                        message="Pull down to sync with your bank."
+                    />
+                </Card>
+            )}
+
+            {transactions.length > 0 && (
+                <View style={styles.moreIndicator}>
+                    <View style={styles.dot} />
+                    <View style={styles.dot} />
+                    <View style={styles.dot} />
+                </View>
+            )}
+
+            {/* Transaction details */}
             <Modal
                 visible={showTransactionModal}
-                transparent={true}
+                transparent
                 animationType="slide"
                 onRequestClose={() => setShowTransactionModal(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={styles.transactionModalContent}>
+                    <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Transaction Details</Text>
+                            <Text variant="h2">Transaction details</Text>
                             <TouchableOpacity
-                                style={styles.modalCloseButton}
+                                style={styles.iconButton}
                                 onPress={() => setShowTransactionModal(false)}
+                                accessibilityRole="button"
+                                accessibilityLabel="Close"
                             >
-                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
+                                <Ionicons name="close" size={22} color={theme.TEXT_PRIMARY} />
                             </TouchableOpacity>
                         </View>
 
                         {selectedTransaction && (
-                            <View style={styles.transactionDetails}>
-                                {/* Amount */}
+                            <ScrollView showsVerticalScrollIndicator={false}>
                                 <View style={styles.detailAmountRow}>
-                                    <Text style={[
-                                        styles.detailAmount,
-                                        { color: selectedTransaction.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
-                                    ]}>
-                                        {selectedTransaction.amount > 0 ? '+' : '-'}${Math.abs(selectedTransaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    <Text variant="h1" tone={selectedTransaction.amount > 0 ? 'success' : 'primary'}>
+                                        {selectedTransaction.amount > 0 ? '+' : '−'}{money(selectedTransaction.amount)}
                                     </Text>
                                     <View style={[
-                                        styles.amountBadge,
-                                        { backgroundColor: selectedTransaction.amount > 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 107, 107, 0.2)' }
+                                        styles.detailBadge,
+                                        { backgroundColor: selectedTransaction.amount > 0 ? theme.SUCCESS_DIM : theme.SURFACE_HIGH },
                                     ]}>
-                                        <Text style={[
-                                            styles.amountBadgeText,
-                                            { color: selectedTransaction.amount > 0 ? COLORS.GREEN : '#FF6B6B' }
-                                        ]}>
+                                        <Text
+                                            variant="label"
+                                            tone={selectedTransaction.amount > 0 ? 'success' : 'secondary'}
+                                        >
                                             {selectedTransaction.amount > 0 ? 'Income' : 'Expense'}
                                         </Text>
                                     </View>
                                 </View>
 
-                                {/* Detail Rows */}
                                 <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Merchant</Text>
-                                    <Text style={styles.detailValue}>{selectedTransaction.merchant}</Text>
+                                    <Text variant="body" tone="muted">Merchant</Text>
+                                    <Text variant="bodyMed" style={styles.detailValue} numberOfLines={2}>
+                                        {selectedTransaction.merchant}
+                                    </Text>
                                 </View>
 
                                 <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Category</Text>
-                                    <Text style={styles.detailValue}>{selectedTransaction.category}</Text>
+                                    <Text variant="body" tone="muted">Category</Text>
+                                    <Text variant="bodyMed" style={styles.detailValue}>{selectedTransaction.category}</Text>
                                 </View>
 
                                 <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Date</Text>
-                                    <Text style={styles.detailValue}>
+                                    <Text variant="body" tone="muted">Date</Text>
+                                    <Text variant="bodyMed" style={styles.detailValue}>
                                         {selectedTransaction.rawDate
-                                            ? new Date(selectedTransaction.rawDate + 'T12:00:00').toLocaleDateString('en-US', {
-                                                year: 'numeric',
-                                                month: 'long',
-                                                day: 'numeric'
+                                            ? new Date(`${selectedTransaction.rawDate}T12:00:00`).toLocaleDateString('en-US', {
+                                                year: 'numeric', month: 'long', day: 'numeric',
                                             })
                                             : 'N/A'}
                                     </Text>
@@ -698,12 +807,15 @@ const HomeScreen = ({ navigation }) => {
 
                                 {selectedTransaction.account_id && (
                                     <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Account</Text>
+                                        <Text variant="body" tone="muted">Account</Text>
                                         <View style={styles.accountIndicator}>
-                                            <View style={[styles.accountDot, { backgroundColor: getAccountColor(selectedTransaction.account_id) }]} />
-                                            <Text style={styles.detailValue}>
+                                            <View style={[
+                                                styles.accountDot,
+                                                { backgroundColor: getAccountColor(selectedTransaction.account_id) },
+                                            ]} />
+                                            <Text variant="bodyMed" numberOfLines={1}>
                                                 {(() => {
-                                                    const account = accounts.find(a => a.id === selectedTransaction.account_id);
+                                                    const account = accounts.find((a) => a.id === selectedTransaction.account_id);
                                                     return account ? (account.alias || account.name) : 'N/A';
                                                 })()}
                                             </Text>
@@ -712,679 +824,48 @@ const HomeScreen = ({ navigation }) => {
                                 )}
 
                                 <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Transaction ID</Text>
-                                    <Text style={[styles.detailValue, styles.transactionId]}>{selectedTransaction.id}</Text>
+                                    <Text variant="body" tone="muted">Transaction ID</Text>
+                                    <Text variant="meta" tone="muted" style={styles.detailValue} numberOfLines={1}>
+                                        {selectedTransaction.id}
+                                    </Text>
                                 </View>
 
-                                {/* Notes Section */}
-                                <View style={styles.metadataSection}>
-                                    <Text style={styles.sectionTitle}>Notes</Text>
-                                    <TextInput
-                                        style={styles.notesInput}
+                                <View style={styles.notesSection}>
+                                    <Input
+                                        label="Notes"
                                         placeholder="Add notes about this transaction..."
-                                        placeholderTextColor={COLORS.TEXT_MUTED}
                                         value={editNotes}
                                         onChangeText={setEditNotes}
                                         multiline
                                         maxLength={500}
                                         editable={!saving}
                                     />
-                                    <Text style={styles.characterCounter}>
-                                        {editNotes.length}/500 characters
+                                    <Text variant="meta" tone="muted" style={styles.counter}>
+                                        {editNotes.length}/500
                                     </Text>
                                 </View>
-                            </View>
+                            </ScrollView>
                         )}
 
                         <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={styles.modalDoneButton}
+                            <Button
+                                title="Done"
+                                variant="secondary"
                                 onPress={() => setShowTransactionModal(false)}
-                            >
-                                <Text style={styles.modalDoneText}>Done</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                                style={{ flex: 1 }}
+                            />
+                            <Button
+                                title="Save"
                                 onPress={handleSaveNotes}
-                                disabled={saving}
-                            >
-                                {saving ? (
-                                    <ActivityIndicator size="small" color={COLORS.BACKGROUND} />
-                                ) : (
-                                    <Text style={styles.saveButtonText}>Save</Text>
-                                )}
-                            </TouchableOpacity>
+                                loading={saving}
+                                style={{ flex: 1 }}
+                            />
                         </View>
                     </View>
                 </View>
             </Modal>
-        </View>
+        </Screen>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
-        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 50,
-    },
-    centerContent: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingText: {
-        color: COLORS.WHITE,
-        marginTop: SPACING.MEDIUM,
-    },
-    scrollContent: {
-        paddingBottom: 100,
-    },
-
-    // Header
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingVertical: SPACING.SMALL,
-    },
-    headerLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    avatarContainer: {
-        position: 'relative',
-        marginRight: SPACING.SMALL,
-    },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: COLORS.CARD_BG,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: COLORS.GOLD,
-    },
-    onlineIndicator: {
-        position: 'absolute',
-        bottom: 2,
-        right: 2,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: COLORS.GREEN,
-        borderWidth: 2,
-        borderColor: COLORS.BACKGROUND,
-    },
-    greetingContainer: {
-        marginLeft: SPACING.SMALL,
-    },
-    welcomeText: {
-        color: COLORS.GOLD_LIGHT,
-        fontSize: 12,
-    },
-    userName: {
-        color: COLORS.WHITE,
-        fontSize: 16,
-        fontFamily: FONTS.BOLD,
-    },
-    notificationButton: {
-        padding: SPACING.SMALL,
-    },
-
-    // Balance Card
-    balanceCard: {
-        margin: SPACING.MEDIUM,
-        padding: SPACING.LARGE,
-        backgroundColor: COLORS.CARD_BG,
-        borderRadius: BORDER_RADIUS.XL,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
-    balanceTopRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: SPACING.MEDIUM,
-    },
-    balanceLeftSection: {
-        flex: 1,
-    },
-    balanceRightSection: {
-        alignItems: 'flex-end',
-    },
-    balanceLabel: {
-        color: COLORS.GOLD,
-        fontSize: 11,
-        letterSpacing: 1,
-        fontFamily: FONTS.MEDIUM,
-        marginBottom: 4,
-    },
-    balanceAmountRow: {
-        flexDirection: 'row',
-        alignItems: 'baseline',
-    },
-    currencySign: {
-        color: COLORS.WHITE,
-        fontSize: 22,
-        fontWeight: '600',
-        marginRight: 2,
-    },
-    balanceAmount: {
-        color: COLORS.WHITE,
-        fontSize: 32,
-        fontFamily: FONTS.BOLD,
-    },
-    eyeButton: {
-        marginLeft: SPACING.SMALL,
-        padding: 4,
-    },
-    growthBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(76, 175, 80, 0.15)',
-        paddingHorizontal: SPACING.SMALL,
-        paddingVertical: 4,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        marginBottom: SPACING.SMALL,
-    },
-    growthBadgeNegative: {
-        backgroundColor: 'rgba(255, 107, 107, 0.15)',
-    },
-    growthText: {
-        color: '#4CAF50',
-        fontSize: 12,
-        fontFamily: FONTS.BOLD,
-        marginLeft: 4,
-    },
-    growthTextNegative: {
-        color: '#FF6B6B',
-    },
-    savingsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: SPACING.LARGE,
-    },
-    savingsAmount: {
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    savingsPositive: {
-        color: '#4CAF50',
-    },
-    savingsNegative: {
-        color: '#FF6B6B',
-    },
-    savingsText: {
-        color: COLORS.WHITE,
-        fontSize: 13,
-        flex: 1,
-        opacity: 0.9,
-    },
-    balanceRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: SPACING.LARGE,
-    },
-    miniCardsRow: {
-        flexDirection: 'row',
-        marginBottom: SPACING.LARGE,
-        gap: SPACING.SMALL,
-    },
-    miniCard: {
-        width: 50,
-        height: 32,
-        backgroundColor: COLORS.CARD_BORDER,
-        borderRadius: BORDER_RADIUS.SMALL,
-    },
-    miniCardGold: {
-        backgroundColor: COLORS.GOLD,
-    },
-    actionButtons: {
-        flexDirection: 'row',
-        gap: SPACING.MEDIUM,
-    },
-    addMoneyButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: COLORS.GOLD,
-        paddingVertical: SPACING.SMALL,
-        paddingHorizontal: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.LARGE,
-        flex: 1,
-    },
-    addMoneyText: {
-        color: COLORS.BACKGROUND,
-        fontWeight: '600',
-        marginLeft: 4,
-    },
-    transferButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'transparent',
-        paddingVertical: SPACING.SMALL,
-        paddingHorizontal: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.LARGE,
-        flex: 1,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
-    transferText: {
-        color: COLORS.WHITE,
-        fontWeight: '600',
-        marginLeft: 4,
-    },
-
-    // Account Filters
-    accountFilters: {
-        marginVertical: SPACING.MEDIUM,
-    },
-    accountFiltersContent: {
-        paddingHorizontal: SPACING.MEDIUM,
-        gap: SPACING.SMALL,
-    },
-    accountTab: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: SPACING.SMALL,
-        paddingHorizontal: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.XL,
-        backgroundColor: COLORS.CARD_BG,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-        marginRight: SPACING.SMALL,
-    },
-    accountTabActive: {
-        backgroundColor: COLORS.CARD_BORDER,
-    },
-    bankLogo: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    bankLogoText: {
-        color: COLORS.WHITE,
-        fontSize: 8,
-        fontWeight: 'bold',
-    },
-    accountTabText: {
-        color: COLORS.GOLD_LIGHT,
-        marginLeft: SPACING.SMALL,
-        fontSize: 13,
-        opacity: 0.8,
-    },
-    accountTabTextActive: {
-        color: COLORS.WHITE,
-    },
-
-    // Account Filters Wrapper
-    accountFiltersWrapper: {
-        paddingHorizontal: SPACING.MEDIUM,
-        marginBottom: SPACING.MEDIUM,
-    },
-    accountFiltersHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.SMALL,
-    },
-    accountFiltersLabel: {
-        color: COLORS.GOLD,
-        fontSize: 12,
-        fontWeight: '600',
-        letterSpacing: 1,
-    },
-    manageText: {
-        color: '#3B82F6',
-        fontSize: 13,
-        fontWeight: '500',
-    },
-
-    // No Accounts Prompt
-    noAccountsPrompt: {
-        marginHorizontal: SPACING.MEDIUM,
-        marginVertical: SPACING.MEDIUM,
-        padding: SPACING.LARGE,
-        backgroundColor: COLORS.CARD_BG,
-        borderRadius: BORDER_RADIUS.LARGE,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-        borderStyle: 'dashed',
-        alignItems: 'center',
-    },
-    noAccountsText: {
-        color: COLORS.WHITE,
-        fontSize: 14,
-        marginBottom: SPACING.MEDIUM,
-        opacity: 0.9,
-    },
-    connectPromptButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.GOLD,
-        paddingVertical: SPACING.SMALL,
-        paddingHorizontal: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-    },
-    connectPromptText: {
-        color: COLORS.BACKGROUND,
-        fontSize: 13,
-        fontWeight: '600',
-        marginLeft: 4,
-    },
-
-    // Re-authentication Banner
-    reAuthBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginHorizontal: SPACING.MEDIUM,
-        marginBottom: SPACING.MEDIUM,
-        padding: SPACING.MEDIUM,
-        backgroundColor: 'rgba(255, 167, 38, 0.1)',
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 167, 38, 0.3)',
-    },
-    reAuthContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    reAuthTextContainer: {
-        marginLeft: SPACING.SMALL,
-        flex: 1,
-    },
-    reAuthTitle: {
-        color: '#FFA726',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    reAuthSubtitle: {
-        color: COLORS.WHITE,
-        fontSize: 12,
-        marginTop: 2,
-        opacity: 0.8,
-    },
-
-    // Error
-    errorContainer: {
-        margin: SPACING.MEDIUM,
-        padding: SPACING.MEDIUM,
-        backgroundColor: 'rgba(244, 67, 54, 0.1)',
-        borderRadius: BORDER_RADIUS.MEDIUM,
-    },
-    errorText: {
-        color: '#F44336',
-        textAlign: 'center',
-    },
-
-    // Transactions
-    transactionsContainer: {
-        paddingHorizontal: SPACING.MEDIUM,
-    },
-    transactionGroup: {
-        marginBottom: SPACING.MEDIUM,
-    },
-    groupHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.MEDIUM,
-    },
-    groupTitle: {
-        color: COLORS.GOLD,
-        fontSize: 12,
-        fontWeight: '600',
-        letterSpacing: 1,
-    },
-    seeAllText: {
-        color: '#3B82F6',
-        fontSize: 13,
-        fontWeight: '500',
-    },
-    transactionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.CARD_BG,
-        padding: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.LARGE,
-        marginBottom: SPACING.MEDIUM,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
-    accountColorIndicator: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: 4,
-        borderTopLeftRadius: BORDER_RADIUS.LARGE,
-        borderBottomLeftRadius: BORDER_RADIUS.LARGE,
-    },
-    transactionIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: SPACING.MEDIUM,
-    },
-    transactionIconWithNotes: {
-        borderWidth: 2,
-        borderColor: COLORS.GOLD,
-    },
-    transactionContent: {
-        flex: 1,
-    },
-    transactionMerchant: {
-        color: COLORS.WHITE,
-        fontSize: 15,
-        fontWeight: '600',
-        marginBottom: 2,
-    },
-    transactionCategory: {
-        color: COLORS.GOLD_LIGHT,
-        fontSize: 12,
-        opacity: 0.8,
-    },
-    transactionRight: {
-        alignItems: 'flex-end',
-    },
-    transactionAmount: {
-        fontSize: 15,
-        fontWeight: '600',
-        marginBottom: 2,
-    },
-    transactionTime: {
-        color: COLORS.GOLD,
-        fontSize: 11,
-        opacity: 0.7,
-    },
-
-    // Empty State
-    emptyState: {
-        alignItems: 'center',
-        padding: SPACING.XL,
-    },
-    emptyText: {
-        color: COLORS.WHITE,
-        marginTop: SPACING.MEDIUM,
-        opacity: 0.9,
-    },
-
-    // More indicator
-    moreIndicator: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 4,
-        marginTop: SPACING.MEDIUM,
-    },
-    dot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: COLORS.GOLD,
-        opacity: 0.5,
-    },
-
-    // Transaction Modal
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
-        justifyContent: 'flex-end',
-    },
-    transactionModalContent: {
-        backgroundColor: COLORS.CARD_BG,
-        borderTopLeftRadius: BORDER_RADIUS.XL,
-        borderTopRightRadius: BORDER_RADIUS.XL,
-        padding: SPACING.LARGE,
-        paddingBottom: 120,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.LARGE,
-    },
-    modalTitle: {
-        color: COLORS.WHITE,
-        fontSize: 18,
-        fontFamily: FONTS.BOLD,
-    },
-    modalCloseButton: {
-        padding: SPACING.SMALL,
-    },
-    transactionDetails: {
-        marginBottom: SPACING.LARGE,
-    },
-    detailAmountRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: SPACING.LARGE,
-        paddingBottom: SPACING.MEDIUM,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.CARD_BORDER,
-    },
-    detailAmount: {
-        fontSize: 32,
-        fontFamily: FONTS.BOLD,
-    },
-    amountBadge: {
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingVertical: SPACING.SMALL,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-    },
-    amountBadgeText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    detailRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: SPACING.MEDIUM,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.CARD_BORDER,
-    },
-    detailLabel: {
-        color: COLORS.GOLD_LIGHT,
-        fontSize: 14,
-    },
-    detailValue: {
-        color: COLORS.WHITE,
-        fontSize: 14,
-        fontFamily: FONTS.MEDIUM,
-        maxWidth: '60%',
-        textAlign: 'right',
-    },
-    accountIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    accountDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        marginRight: SPACING.SMALL,
-    },
-    transactionId: {
-        fontSize: 11,
-        color: COLORS.GOLD,
-        opacity: 0.6,
-    },
-    modalDoneButton: {
-        flex: 1,
-        backgroundColor: COLORS.CARD_BORDER,
-        paddingVertical: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.LARGE,
-        alignItems: 'center',
-    },
-    modalDoneText: {
-        color: COLORS.WHITE,
-        fontSize: 16,
-        fontWeight: '600',
-    },
-
-    // Notes Section
-    metadataSection: {
-        marginTop: SPACING.MEDIUM,
-        paddingTop: SPACING.MEDIUM,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.CARD_BORDER,
-    },
-    sectionTitle: {
-        color: COLORS.GOLD,
-        fontSize: 14,
-        fontFamily: FONTS.BOLD,
-        marginBottom: SPACING.SMALL,
-    },
-    notesInput: {
-        backgroundColor: COLORS.BACKGROUND,
-        color: COLORS.WHITE,
-        fontSize: 14,
-        padding: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-        minHeight: 80,
-        textAlignVertical: 'top',
-    },
-    characterCounter: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 12,
-        textAlign: 'right',
-        marginTop: SPACING.SMALL,
-    },
-    modalActions: {
-        flexDirection: 'row',
-        gap: SPACING.MEDIUM,
-        marginTop: SPACING.LARGE,
-    },
-    saveButton: {
-        flex: 1,
-        backgroundColor: COLORS.GOLD,
-        paddingVertical: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.LARGE,
-        alignItems: 'center',
-    },
-    saveButtonDisabled: {
-        opacity: 0.6,
-    },
-    saveButtonText: {
-        color: COLORS.BACKGROUND,
-        fontSize: 16,
-        fontWeight: '600',
-    },
-});
 
 export default HomeScreen;
