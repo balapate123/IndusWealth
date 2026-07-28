@@ -322,6 +322,82 @@ const getTransactions = async (userId, limit = 100) => {
     return result.rows;
 };
 
+const TRANSACTION_COLUMNS = `
+    t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name,
+    t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending,
+    t.iso_currency_code, t.notes,
+    a.name as account_name, a.plaid_account_id as account_id`;
+
+/**
+ * Shared WHERE clause for the paged transaction list, so the page query and the
+ * count that drives "has more" can never drift apart and disagree about how many
+ * rows exist.
+ *
+ * `days` counts back inclusive of today: 7 means today plus the six days before.
+ */
+const buildTransactionFilter = (userId, { accountId, days, search } = {}) => {
+    const clauses = ['t.user_id = $1'];
+    const params = [userId];
+
+    if (accountId && accountId !== 'all') {
+        params.push(accountId);
+        clauses.push(`a.plaid_account_id = $${params.length}`);
+    }
+
+    if (days) {
+        params.push(days);
+        clauses.push(`t.date >= CURRENT_DATE - ($${params.length}::int - 1)`);
+    }
+
+    if (search) {
+        params.push(`%${search}%`);
+        const p = `$${params.length}`;
+        // Matches what the list shows: merchant, the raw name, the user's note,
+        // and the amount as typed ("42.50").
+        clauses.push(`(
+            t.name ILIKE ${p}
+            OR t.merchant_name ILIKE ${p}
+            OR t.notes ILIKE ${p}
+            OR CAST(ABS(t.amount) AS TEXT) LIKE ${p}
+        )`);
+    }
+
+    return { where: clauses.join(' AND '), params };
+};
+
+/** One page of transactions, newest first. */
+const getTransactionsPage = async (userId, options = {}) => {
+    const { limit = 100, offset = 0 } = options;
+    const { where, params } = buildTransactionFilter(userId, options);
+
+    params.push(limit, offset);
+
+    const result = await pool.query(
+        `SELECT ${TRANSACTION_COLUMNS}
+         FROM transactions t
+         LEFT JOIN accounts a ON t.account_id = a.id
+         WHERE ${where}
+         ORDER BY t.date DESC, t.id DESC
+         LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params
+    );
+    return result.rows;
+};
+
+/** How many rows match, ignoring limit/offset — the total behind the paging. */
+const countTransactions = async (userId, options = {}) => {
+    const { where, params } = buildTransactionFilter(userId, options);
+
+    const result = await pool.query(
+        `SELECT COUNT(*)::int AS total
+         FROM transactions t
+         LEFT JOIN accounts a ON t.account_id = a.id
+         WHERE ${where}`,
+        params
+    );
+    return result.rows[0]?.total || 0;
+};
+
 // Get transactions for a specific account
 const getTransactionsByAccount = async (userId, accountId, limit = 100) => {
     const result = await pool.query(
@@ -719,6 +795,8 @@ module.exports = {
     // Transaction operations
     upsertTransactions,
     getTransactions,
+    getTransactionsPage,
+    countTransactions,
     getTransactionsByAccount,
     updateTransactionNotes,
     // Analytics operations

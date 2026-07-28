@@ -14,6 +14,13 @@ const cleanCredential = (value) =>
 const PLAID_CLIENT_ID = cleanCredential(process.env.PLAID_CLIENT_ID);
 const PLAID_SECRET = cleanCredential(process.env.PLAID_SECRET);
 
+/** How far back a sync pulls. Must cover the widest range the app offers. */
+const SYNC_WINDOW_DAYS = 90;
+/** Plaid's per-call maximum. */
+const PLAID_PAGE_SIZE = 500;
+/** Backstop so a pathological account cannot loop for thousands of pages. */
+const MAX_SYNC_TRANSACTIONS = 5000;
+
 /** Throws with the offending variable named, rather than letting Plaid guess. */
 const assertPlaidCredentials = () => {
     const missing = [];
@@ -179,28 +186,46 @@ class PlaidService {
                 }
             }
 
-            // Fetch data for the last 30 days
-            // extend endDate to tomorrow to ensure we capture all transactions from "today" 
+            // Covers the widest range the app offers (90 days). Fetching only 30
+            // meant the longer filters had nothing to show beyond whatever older
+            // rows earlier syncs happened to leave behind.
+            // extend endDate to tomorrow to ensure we capture all transactions from "today"
             // regardless of server timezone (UTC) vs user timezone (EST/PST)
             const today = new Date();
             const tomorrow = new Date(today);
             tomorrow.setDate(tomorrow.getDate() + 1);
 
             const endDate = tomorrow.toISOString().slice(0, 10);
-            const startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+            const startDate = new Date(today.getTime() - SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
             console.log(`   📅 [Plaid] Querying transactions from ${startDate} to ${endDate}`);
 
-            const response = await client.transactionsGet({
-                access_token: accessToken,
-                start_date: startDate,
-                end_date: endDate,
-                options: {
-                    count: 500
-                }
-            });
+            // Plaid returns at most 500 per call. A single call silently dropped
+            // anything past that; over 90 days an active account will exceed it,
+            // and the missing rows would look like transactions the bank never
+            // sent rather than a page we never asked for.
+            const transactions = [];
+            for (;;) {
+                const response = await client.transactionsGet({
+                    access_token: accessToken,
+                    start_date: startDate,
+                    end_date: endDate,
+                    options: {
+                        count: PLAID_PAGE_SIZE,
+                        offset: transactions.length,
+                    }
+                });
 
-            const transactions = response.data.transactions;
+                transactions.push(...response.data.transactions);
+
+                const reportedTotal = response.data.total_transactions ?? transactions.length;
+                if (transactions.length >= reportedTotal || response.data.transactions.length === 0) break;
+
+                if (transactions.length >= MAX_SYNC_TRANSACTIONS) {
+                    console.warn(`   ⚠️ [Plaid] Stopping at ${transactions.length} transactions (cap) of ${reportedTotal}`);
+                    break;
+                }
+            }
 
             // Log the date range of returned transactions
             if (transactions.length > 0) {

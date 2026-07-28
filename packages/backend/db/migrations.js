@@ -31,4 +31,5 @@ module.exports = [
     'add_insights_upgrade.sql',
     'add_watchdog_tables.sql',
     'add_category_insights.sql',
+    'add_transaction_paging_index.sql',
 ];

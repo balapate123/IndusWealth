@@ -11,6 +11,18 @@ const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse, getPlaidStatusF
 
 const logger = createLogger('TRANSACTIONS');
 
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 500;   // one page; scroll further with offset
+const MAX_DAYS = 365;
+
+/** Parse a query param as a bounded integer, falling back when absent or junk. */
+const clampInt = (value, fallback, min, max) => {
+    if (value === undefined || value === null || value === '') return fallback;
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed)) return fallback;
+    return Math.min(Math.max(parsed, min), max);
+};
+
 // GET /transactions
 // Fetches transactions from cache or Plaid (if stale)
 // Requires authentication
@@ -22,6 +34,14 @@ router.get('/', authenticateToken, async (req, res, next) => {
         const userId = req.user.id;
         const forceRefresh = req.query.refresh === 'true';
         const accountId = req.query.account_id;
+
+        // Paging and filtering. `limit` was previously accepted and ignored — the
+        // row count was hardcoded to 100 — so callers asking for ?limit=500 were
+        // quietly getting 100 and analysing a fifth of the data they thought.
+        const limit = clampInt(req.query.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
+        const offset = clampInt(req.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
+        const days = clampInt(req.query.days, null, 1, MAX_DAYS);
+        const search = (req.query.search || '').trim() || null;
 
         // Enforce 10-minute cooldown on manual Plaid refresh to limit Transactions Refresh API cost ($0.12/call)
         if (forceRefresh) {
@@ -114,18 +134,21 @@ router.get('/', authenticateToken, async (req, res, next) => {
             plaidStatus = PLAID_STATUS.CACHED;
         }
 
-        // Get transactions from database - filter by account if specified
-        if (accountId && accountId !== 'all') {
-            transactions = await db.getTransactionsByAccount(userId, accountId, 100);
-            logger.debug('Filtered by account', { ...ctx, accountId, count: transactions.length });
-        } else {
-            transactions = await db.getTransactions(userId, 100);
-        }
+        // One page of the filtered set, plus the total behind it so the client
+        // knows whether to keep scrolling. Both run through the same filter, so
+        // they cannot disagree about what matches.
+        const filter = { accountId, days, search };
+        const [page, total] = await Promise.all([
+            db.getTransactionsPage(userId, { ...filter, limit, offset }),
+            db.countTransactions(userId, filter),
+        ]);
+        transactions = page;
 
-        // Sort by date descending
-        const sortedTransactions = transactions.sort((a, b) => {
-            return new Date(b.date) - new Date(a.date);
-        });
+        logger.debug('Transaction page', { ...ctx, accountId, days, search: !!search, limit, offset, count: transactions.length, total });
+
+        // Already ordered by date DESC, id DESC in SQL — re-sorting here would
+        // only shuffle same-day rows out of the order the paging relies on.
+        const sortedTransactions = transactions;
 
         // Apply categorization to each transaction (now async)
         const categorizedTransactions = [];
@@ -193,8 +216,19 @@ router.get('/', authenticateToken, async (req, res, next) => {
         successResponse(res, {
             count: categorizedTransactions.length,
             data: categorizedTransactions,
+            // categoryBreakdown and analysis describe the returned page, not the
+            // whole window. Nothing consumes them from here — Analytics reads
+            // /analytics and Watchdog reads /watchdog — so they are kept for
+            // compatibility rather than relied on.
             categoryBreakdown,
             analysis: leakageAnalysis,
+            pagination: {
+                total,
+                limit,
+                offset,
+                hasMore: offset + categorizedTransactions.length < total,
+                days,
+            },
             plaid_status: plaidStatus
         }, meta);
     } catch (error) {
