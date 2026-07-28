@@ -1,23 +1,67 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { SPACING } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import {
-    View,
+    Screen,
+    ScreenHeader,
+    Card,
     Text,
-    StyleSheet,
-    FlatList,
-    Platform,
-    StatusBar,
-    TouchableOpacity,
-    ActivityIndicator,
-    RefreshControl,
-    Modal,
-    TextInput,
-} from 'react-native';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+    Input,
+    EmptyState,
+    LoadingState,
+} from '../components/ui';
+import TransactionRow from '../components/TransactionRow';
+import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import api from '../services/api';
 import { categorizeTransaction } from '../utils/categorization';
 
+const formatDate = (dateStr) => {
+    // Add T12:00:00 to prevent timezone shift
+    return new Date(`${dateStr}T12:00:00`).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+    });
+};
+
+const formatCurrency = (amount) =>
+    `$${Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const makeStyles = (t) => StyleSheet.create({
+    summaryRow: { flexDirection: 'row' },
+    summaryItem: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL + 2,
+    },
+    summaryIcon: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    summaryDivider: {
+        width: 1,
+        backgroundColor: t.HAIRLINE,
+        marginHorizontal: SPACING.MEDIUM,
+    },
+    search: {
+        marginHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.SMALL,
+    },
+    list: { flex: 1 },
+    listContent: {
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingBottom: 120,
+    },
+});
+
 const AccountTransactionsScreen = ({ navigation, route }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     const { account } = route.params;
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -42,7 +86,7 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                         category: categorization.category,
                         categoryIcon: categorization.icon,
                         categoryLibrary: categorization.library,
-                        categoryColor: categorization.color,
+                        categoryColorIndex: categorization.colorIndex,
                         amount: tx.amount * -1,
                         date: tx.date,
                         formattedDate: formatDate(tx.date),
@@ -51,12 +95,11 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                 });
                 setTransactions(formattedTransactions);
 
-                // Calculate totals
                 const income = formattedTransactions
-                    .filter(t => t.amount > 0)
+                    .filter((t) => t.amount > 0)
                     .reduce((sum, t) => sum + t.amount, 0);
                 const expenses = formattedTransactions
-                    .filter(t => t.amount < 0)
+                    .filter((t) => t.amount < 0)
                     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
                 setTotals({ income, expenses });
             }
@@ -77,23 +120,12 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
         fetchTransactions();
     }, [fetchTransactions]);
 
-    const formatDate = (dateStr) => {
-        // Add T12:00:00 to prevent timezone shift
-        const date = new Date(dateStr + 'T12:00:00');
-        return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-        });
-    };
-
-    // Filter and sort transactions
     const filteredTransactions = useMemo(() => {
         let result = [...transactions];
 
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase().trim();
-            result = result.filter(tx =>
+            result = result.filter((tx) =>
                 tx.merchant?.toLowerCase().includes(query) ||
                 tx.category?.toLowerCase().includes(query) ||
                 tx.notes?.toLowerCase().includes(query) ||
@@ -118,678 +150,124 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
             setSaving(true);
             await api.updateTransactionNotes(selectedTransaction.id, editNotes.trim());
 
-            // Update local state
-            setTransactions(prev => prev.map(tx =>
-                tx.id === selectedTransaction.id
-                    ? { ...tx, notes: editNotes.trim() }
-                    : tx
+            setTransactions((prev) => prev.map((tx) =>
+                tx.id === selectedTransaction.id ? { ...tx, notes: editNotes.trim() } : tx
             ));
-            setSelectedTransaction(prev => ({ ...prev, notes: editNotes.trim() }));
+            setSelectedTransaction((prev) => ({ ...prev, notes: editNotes.trim() }));
 
-            // Close modal after saving
             setShowTransactionModal(false);
         } catch (error) {
             console.error('Error saving notes:', error);
-            alert('Failed to save notes. Please try again.');
         } finally {
             setSaving(false);
         }
     };
 
-    const formatCurrency = (amount) => {
-        return `$${Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-    };
-
-    const renderTransactionIcon = (item, isIncome) => {
-        const hasNotes = item.notes && item.notes.trim().length > 0;
-        const iconStyle = [
-            styles.transactionIcon,
-            hasNotes && styles.transactionIconWithNotes
-        ];
-
-        if (isIncome) {
-            return (
-                <View style={[...iconStyle, { backgroundColor: '#1A3D1A' }]}>
-                    <Ionicons name="cash" size={26} color="#4CAF50" />
-                </View>
-            );
-        }
-        const bgColor = `${item.categoryColor}20`;
-
-        if (item.categoryLibrary === 'FontAwesome5') {
-            return (
-                <View style={[...iconStyle, { backgroundColor: bgColor }]}>
-                    <FontAwesome5 name={item.categoryIcon} size={24} color={item.categoryColor} />
-                </View>
-            );
-        }
-        return (
-            <View style={[...iconStyle, { backgroundColor: bgColor }]}>
-                <Ionicons name={item.categoryIcon} size={26} color={item.categoryColor} />
-            </View>
-        );
-    };
-
-    const renderTransaction = ({ item }) => (
-        <TouchableOpacity
-            style={styles.transactionItem}
-            onPress={() => openTransactionDetails(item)}
-            activeOpacity={0.7}
-        >
-            {renderTransactionIcon(item, item.amount > 0)}
-            <View style={styles.transactionContent}>
-                <Text style={styles.transactionMerchant} numberOfLines={1}>{item.merchant}</Text>
-                <Text style={styles.transactionCategory}>{item.category} • {item.formattedDate}</Text>
-            </View>
-            <View style={styles.transactionRight}>
-                <Text style={[
-                    styles.transactionAmount,
-                    { color: item.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
-                ]}>
-                    {item.amount > 0 ? '+' : '-'}{formatCurrency(item.amount)}
-                </Text>
-            </View>
-        </TouchableOpacity>
-    );
-
     if (loading) {
         return (
-            <View style={[styles.container, styles.centerContent]}>
-                <ActivityIndicator size="large" color={COLORS.GOLD} />
-                <Text style={styles.loadingText}>Loading transactions...</Text>
-            </View>
+            <Screen centered>
+                <LoadingState message="Loading transactions..." />
+            </Screen>
         );
     }
 
-    return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor={COLORS.BACKGROUND} />
-
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
-                </TouchableOpacity>
-                <View style={styles.headerCenter}>
-                    <Text style={styles.headerTitle} numberOfLines={1}>{account.alias || account.name}</Text>
-                    {account.mask && (
-                        <Text style={styles.headerSubtitle}>•••• {account.mask}</Text>
-                    )}
-                </View>
-                <View style={styles.headerRight} />
-            </View>
-
-            {/* Account Balance Card */}
-            <View style={styles.balanceCard}>
-                <View style={styles.balanceRow}>
-                    <View style={styles.balanceItem}>
-                        <Text style={styles.balanceLabel}>Current Balance</Text>
-                        <Text style={styles.balanceAmount}>
-                            ${(account.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </Text>
-                    </View>
-                    <View style={styles.accountBadge}>
-                        <Text style={styles.accountType}>{account.subtype || account.type}</Text>
-                    </View>
-                </View>
-
-                {/* Income/Expense Summary */}
-                <View style={styles.summaryRow}>
-                    <View style={styles.summaryItem}>
-                        <View style={styles.summaryIcon}>
-                            <Ionicons name="trending-up" size={16} color="#4CAF50" />
-                        </View>
-                        <View>
-                            <Text style={styles.summaryLabel}>Income</Text>
-                            <Text style={[styles.summaryAmount, { color: '#4CAF50' }]}>
-                                +{formatCurrency(totals.income)}
-                            </Text>
-                        </View>
-                    </View>
-                    <View style={styles.summaryItem}>
-                        <View style={[styles.summaryIcon, { backgroundColor: 'rgba(244, 67, 54, 0.15)' }]}>
-                            <Ionicons name="trending-down" size={16} color="#F44336" />
-                        </View>
-                        <View>
-                            <Text style={styles.summaryLabel}>Expenses</Text>
-                            <Text style={[styles.summaryAmount, { color: '#F44336' }]}>
-                                -{formatCurrency(totals.expenses)}
-                            </Text>
-                        </View>
-                    </View>
-                </View>
-            </View>
-
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color={COLORS.TEXT_MUTED} style={styles.searchIcon} />
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search transactions..."
-                    placeholderTextColor={COLORS.TEXT_MUTED}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                />
-                {searchQuery.length > 0 && (
-                    <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                        <Ionicons name="close-circle" size={20} color={COLORS.TEXT_MUTED} />
-                    </TouchableOpacity>
-                )}
-            </View>
-
-            {/* Transactions Header */}
-            <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Transactions</Text>
-                <Text style={styles.countText}>
-                    {searchQuery ? `${filteredTransactions.length} of ${transactions.length}` : `${transactions.length} items`}
-                </Text>
-            </View>
-
-            {/* Transaction List */}
-            <FlatList
-                data={filteredTransactions}
-                renderItem={renderTransaction}
-                keyExtractor={(item) => item.id.toString()}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor={COLORS.GOLD}
-                        colors={[COLORS.GOLD]}
-                    />
-                }
-                ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <Ionicons name={searchQuery ? "search-outline" : "receipt-outline"} size={48} color={COLORS.TEXT_MUTED} />
-                        <Text style={styles.emptyText}>
-                            {searchQuery ? `No results for "${searchQuery}"` : 'No transactions found for this account'}
-                        </Text>
-                    </View>
-                }
+    const header = (
+        <>
+            <ScreenHeader
+                title={account.alias || account.name}
+                onBack={() => navigation.goBack()}
+                right={account.mask ? <Text variant="meta" tone="muted">••{account.mask}</Text> : null}
             />
 
-            {/* Transaction Details Modal */}
-            <Modal
-                visible={showTransactionModal}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowTransactionModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.transactionModalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Transaction Details</Text>
-                            <TouchableOpacity
-                                style={styles.modalCloseButton}
-                                onPress={() => setShowTransactionModal(false)}
-                            >
-                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
-                            </TouchableOpacity>
+            <Card>
+                <View style={styles.summaryRow}>
+                    <View style={styles.summaryItem}>
+                        <View style={[styles.summaryIcon, { backgroundColor: theme.SUCCESS_DIM }]}>
+                            <Ionicons name="arrow-down" size={18} color={theme.SUCCESS} />
                         </View>
+                        <View>
+                            <Text variant="meta" tone="muted">Income</Text>
+                            <Text variant="num" tone="success">{formatCurrency(totals.income)}</Text>
+                        </View>
+                    </View>
 
-                        {selectedTransaction && (
-                            <View style={styles.transactionDetails}>
-                                {/* Amount */}
-                                <View style={styles.detailAmountRow}>
-                                    <Text style={[
-                                        styles.detailAmount,
-                                        { color: selectedTransaction.amount > 0 ? COLORS.GREEN : COLORS.WHITE }
-                                    ]}>
-                                        {selectedTransaction.amount > 0 ? '+' : '-'}{formatCurrency(selectedTransaction.amount)}
-                                    </Text>
-                                    <View style={[
-                                        styles.amountBadge,
-                                        { backgroundColor: selectedTransaction.amount > 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 107, 107, 0.2)' }
-                                    ]}>
-                                        <Text style={[
-                                            styles.amountBadgeText,
-                                            { color: selectedTransaction.amount > 0 ? COLORS.GREEN : '#FF6B6B' }
-                                        ]}>
-                                            {selectedTransaction.amount > 0 ? 'Income' : 'Expense'}
-                                        </Text>
-                                    </View>
-                                </View>
+                    <View style={styles.summaryDivider} />
 
-                                {/* Detail Rows */}
-                                <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Merchant</Text>
-                                    <Text style={styles.detailValue}>{selectedTransaction.merchant}</Text>
-                                </View>
-
-                                <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Category</Text>
-                                    <Text style={styles.detailValue}>{selectedTransaction.category}</Text>
-                                </View>
-
-                                <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Date</Text>
-                                    <Text style={styles.detailValue}>
-                                        {selectedTransaction.date
-                                            ? new Date(selectedTransaction.date + 'T12:00:00').toLocaleDateString('en-US', {
-                                                year: 'numeric',
-                                                month: 'long',
-                                                day: 'numeric'
-                                            })
-                                            : 'N/A'}
-                                    </Text>
-                                </View>
-
-                                <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Account</Text>
-                                    <Text style={styles.detailValue}>{account.alias || account.name}</Text>
-                                </View>
-
-                                <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Transaction ID</Text>
-                                    <Text style={[styles.detailValue, styles.transactionId]}>{selectedTransaction.id}</Text>
-                                </View>
-
-                                {/* Notes Section */}
-                                <View style={styles.metadataSection}>
-                                    <Text style={styles.sectionTitle}>Notes</Text>
-                                    <TextInput
-                                        style={styles.notesInput}
-                                        placeholder="Add notes about this transaction..."
-                                        placeholderTextColor={COLORS.TEXT_MUTED}
-                                        value={editNotes}
-                                        onChangeText={setEditNotes}
-                                        multiline
-                                        maxLength={500}
-                                        editable={!saving}
-                                    />
-                                    <Text style={styles.characterCounter}>
-                                        {editNotes.length}/500 characters
-                                    </Text>
-                                </View>
-                            </View>
-                        )}
-
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={styles.modalDoneButton}
-                                onPress={() => setShowTransactionModal(false)}
-                            >
-                                <Text style={styles.modalDoneText}>Done</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-                                onPress={handleSaveNotes}
-                                disabled={saving}
-                            >
-                                {saving ? (
-                                    <ActivityIndicator size="small" color={COLORS.BACKGROUND} />
-                                ) : (
-                                    <Text style={styles.saveButtonText}>Save</Text>
-                                )}
-                            </TouchableOpacity>
+                    <View style={styles.summaryItem}>
+                        <View style={[styles.summaryIcon, { backgroundColor: theme.DANGER_DIM }]}>
+                            <Ionicons name="arrow-up" size={18} color={theme.DANGER} />
+                        </View>
+                        <View>
+                            <Text variant="meta" tone="muted">Expenses</Text>
+                            <Text variant="num" tone="danger">{formatCurrency(totals.expenses)}</Text>
                         </View>
                     </View>
                 </View>
-            </Modal>
-        </View>
+            </Card>
+
+            <Input
+                icon="search"
+                placeholder="Search transactions..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onClear={() => setSearchQuery('')}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.search}
+            />
+        </>
+    );
+
+    return (
+        <>
+            <Screen header={header}>
+                <FlatList
+                    data={filteredTransactions}
+                    renderItem={({ item, index }) => (
+                        <TransactionRow
+                            transaction={item}
+                            subtitle={`${item.category} · ${item.formattedDate}`}
+                            divider={index > 0}
+                            onPress={() => openTransactionDetails(item)}
+                        />
+                    )}
+                    keyExtractor={(item) => item.id.toString()}
+                    style={styles.list}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            tintColor={theme.ACCENT}
+                            colors={[theme.ACCENT]}
+                            progressBackgroundColor={theme.SURFACE}
+                        />
+                    }
+                    ListEmptyComponent={
+                        <EmptyState
+                            icon={searchQuery ? 'search-outline' : 'receipt-outline'}
+                            title={searchQuery ? 'No matches' : 'No transactions yet'}
+                            message={searchQuery
+                                ? `Nothing matched "${searchQuery}".`
+                                : 'Transactions for this account will appear here.'}
+                        />
+                    }
+                />
+            </Screen>
+
+            <TransactionDetailSheet
+                visible={showTransactionModal}
+                transaction={selectedTransaction}
+                accountName={account.alias || account.name}
+                notes={editNotes}
+                onChangeNotes={setEditNotes}
+                saving={saving}
+                onSave={handleSaveNotes}
+                onClose={() => setShowTransactionModal(false)}
+            />
+        </>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
-        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 50,
-    },
-    centerContent: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingText: {
-        color: COLORS.TEXT_SECONDARY,
-        marginTop: SPACING.MEDIUM,
-    },
-
-    // Header
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingVertical: SPACING.MEDIUM,
-    },
-    backButton: {
-        padding: SPACING.SMALL,
-    },
-    headerCenter: {
-        flex: 1,
-        alignItems: 'center',
-    },
-    headerTitle: {
-        color: COLORS.WHITE,
-        fontSize: 18,
-        fontWeight: '600',
-    },
-    headerSubtitle: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
-        marginTop: 2,
-    },
-    headerRight: {
-        width: 40,
-    },
-
-    // Balance Card
-    balanceCard: {
-        marginHorizontal: SPACING.MEDIUM,
-        marginBottom: SPACING.MEDIUM,
-        padding: SPACING.LARGE,
-        backgroundColor: COLORS.CARD_BG,
-        borderRadius: BORDER_RADIUS.XL,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
-    balanceRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: SPACING.MEDIUM,
-    },
-    balanceItem: {},
-    balanceLabel: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
-        marginBottom: 4,
-    },
-    balanceAmount: {
-        color: COLORS.WHITE,
-        fontSize: 28,
-        fontWeight: 'bold',
-    },
-    accountBadge: {
-        backgroundColor: COLORS.CARD_BORDER,
-        paddingHorizontal: SPACING.SMALL,
-        paddingVertical: 4,
-        borderRadius: BORDER_RADIUS.SMALL,
-    },
-    accountType: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 11,
-        textTransform: 'capitalize',
-    },
-    summaryRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingTop: SPACING.MEDIUM,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.CARD_BORDER,
-    },
-    summaryItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    summaryIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(76, 175, 80, 0.15)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: SPACING.SMALL,
-    },
-    summaryLabel: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 11,
-    },
-    summaryAmount: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-
-    // Section Header
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.MEDIUM,
-        marginBottom: SPACING.SMALL,
-    },
-    sectionTitle: {
-        color: COLORS.WHITE,
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    countText: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 13,
-    },
-
-    // List
-    listContent: {
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingBottom: 100,
-    },
-
-    // Transaction Item
-    transactionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.CARD_BG,
-        padding: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.LARGE,
-        marginBottom: SPACING.SMALL,
-    },
-    transactionIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: SPACING.MEDIUM,
-    },
-    transactionIconWithNotes: {
-        borderWidth: 2,
-        borderColor: COLORS.GOLD,
-    },
-    transactionContent: {
-        flex: 1,
-    },
-    transactionMerchant: {
-        color: COLORS.WHITE,
-        fontSize: 15,
-        fontWeight: '600',
-        marginBottom: 2,
-    },
-    transactionCategory: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
-    },
-    transactionRight: {
-        alignItems: 'flex-end',
-    },
-    transactionAmount: {
-        fontSize: 15,
-        fontWeight: '600',
-    },
-
-    // Empty State
-    emptyState: {
-        alignItems: 'center',
-        padding: SPACING.XL,
-        marginTop: 50,
-    },
-    emptyText: {
-        color: COLORS.TEXT_MUTED,
-        marginTop: SPACING.MEDIUM,
-        textAlign: 'center',
-    },
-
-    // Search Bar
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.CARD_BG,
-        marginHorizontal: SPACING.MEDIUM,
-        marginBottom: SPACING.MEDIUM,
-        paddingHorizontal: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.LARGE,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
-    searchIcon: {
-        marginRight: SPACING.SMALL,
-    },
-    searchInput: {
-        flex: 1,
-        color: COLORS.WHITE,
-        fontSize: 16,
-        paddingVertical: SPACING.MEDIUM,
-    },
-    clearButton: {
-        padding: SPACING.SMALL,
-    },
-
-    // Modal
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        justifyContent: 'flex-end',
-    },
-    transactionModalContent: {
-        backgroundColor: COLORS.CARD_BG,
-        borderTopLeftRadius: BORDER_RADIUS.XL,
-        borderTopRightRadius: BORDER_RADIUS.XL,
-        padding: SPACING.LARGE,
-        maxHeight: '80%',
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.LARGE,
-        paddingBottom: SPACING.MEDIUM,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.CARD_BORDER,
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: COLORS.WHITE,
-    },
-    modalCloseButton: {
-        padding: SPACING.SMALL,
-    },
-    transactionDetails: {
-        marginBottom: SPACING.LARGE,
-    },
-    detailAmountRow: {
-        alignItems: 'center',
-        marginBottom: SPACING.XL,
-    },
-    detailAmount: {
-        fontSize: 36,
-        fontWeight: 'bold',
-        marginBottom: SPACING.SMALL,
-    },
-    amountBadge: {
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingVertical: 4,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-    },
-    amountBadgeText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    detailRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: SPACING.MEDIUM,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.CARD_BORDER,
-    },
-    detailLabel: {
-        fontSize: 16,
-        color: COLORS.TEXT_SECONDARY,
-    },
-    detailValue: {
-        fontSize: 16,
-        color: COLORS.WHITE,
-        fontWeight: '500',
-        flex: 1,
-        textAlign: 'right',
-        marginLeft: SPACING.MEDIUM,
-    },
-    transactionId: {
-        fontSize: 12,
-        color: COLORS.TEXT_MUTED,
-        fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    },
-    modalDoneButton: {
-        flex: 1,
-        backgroundColor: COLORS.CARD_BORDER,
-        paddingVertical: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.LARGE,
-        alignItems: 'center',
-    },
-    modalDoneText: {
-        color: COLORS.WHITE,
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-
-    // Notes Section
-    metadataSection: {
-        marginTop: SPACING.MEDIUM,
-        paddingTop: SPACING.MEDIUM,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.CARD_BORDER,
-    },
-    sectionTitle: {
-        color: COLORS.GOLD,
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: SPACING.SMALL,
-    },
-    notesInput: {
-        backgroundColor: COLORS.BACKGROUND,
-        color: COLORS.WHITE,
-        fontSize: 14,
-        padding: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-        minHeight: 80,
-        textAlignVertical: 'top',
-    },
-    characterCounter: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 12,
-        textAlign: 'right',
-        marginTop: SPACING.SMALL,
-    },
-    modalActions: {
-        flexDirection: 'row',
-        gap: SPACING.MEDIUM,
-        marginTop: SPACING.LARGE,
-    },
-    saveButton: {
-        flex: 1,
-        backgroundColor: COLORS.GOLD,
-        paddingVertical: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.LARGE,
-        alignItems: 'center',
-    },
-    saveButtonDisabled: {
-        opacity: 0.6,
-    },
-    saveButtonText: {
-        color: COLORS.BACKGROUND,
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-});
 
 export default AccountTransactionsScreen;
