@@ -1,25 +1,28 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
     View,
-    Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    ActivityIndicator,
-    RefreshControl,
     Linking,
-    Dimensions,
-    Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { SPACING } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import {
+    Screen,
+    Card,
+    Text,
+    Chip,
+    ChipRow,
+    EmptyState,
+    LoadingState,
+} from '../components/ui';
 import api from '../services/api';
 import ArticleCard from '../components/ArticleCard';
 import FinancialHealthScore from '../components/FinancialHealthScore';
 import InsightCardV2 from '../components/InsightCardV2';
 import InvestmentCorner from '../components/InvestmentCorner';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const TABS = [
     { key: 'all', label: 'All' },
@@ -28,7 +31,77 @@ const TABS = [
     { key: 'low', label: 'Low' },
 ];
 
+const makeStyles = (t) => StyleSheet.create({
+    header: {
+        paddingHorizontal: SPACING.LARGE,
+        paddingBottom: SPACING.MEDIUM,
+    },
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: SPACING.MEDIUM,
+    },
+    summaryCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: t.ACCENT_DIM,
+        borderRadius: 12,
+        padding: SPACING.MEDIUM,
+        gap: SPACING.SMALL,
+    },
+    content: {
+        paddingHorizontal: SPACING.LARGE,
+        paddingTop: SPACING.SMALL,
+        paddingBottom: 120,
+    },
+    tabs: {
+        paddingHorizontal: 0,
+        marginBottom: SPACING.MEDIUM,
+    },
+    centered: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    academy: {
+        marginTop: SPACING.LARGE,
+        marginBottom: SPACING.MEDIUM,
+    },
+    academyHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 2,
+    },
+    academyTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+    },
+    viewAll: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.TINY,
+    },
+    academyScroll: {
+        paddingRight: SPACING.LARGE,
+        paddingTop: SPACING.MEDIUM,
+    },
+    disclaimer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 6,
+        marginBottom: SPACING.MEDIUM,
+        padding: SPACING.MEDIUM - 4,
+        backgroundColor: t.SURFACE_SUNKEN,
+        borderRadius: 8,
+    },
+});
+
 const InsightsScreen = ({ navigation, route }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     const [insights, setInsights] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -62,8 +135,7 @@ const InsightsScreen = ({ navigation, route }) => {
             // If this is from a new bank connection and we have few/no insights, retry
             if (isFromBankConnection && retryCount < 2) {
                 console.log(`Retrying insights load (attempt ${retryCount + 1}/2)...`);
-                setRetryCount(prev => prev + 1);
-                // Wait 3 seconds and retry
+                setRetryCount((prev) => prev + 1);
                 setTimeout(() => {
                     loadInsights(true, true);
                 }, 3000);
@@ -91,8 +163,7 @@ const InsightsScreen = ({ navigation, route }) => {
             const response = await api.getEducationalArticles(null, 1, 10);
 
             if (response.success && response.data) {
-                const articles = response.data.articles || [];
-                setAcademyArticles(articles);
+                setAcademyArticles(response.data.articles || []);
             }
         } catch (err) {
             console.error('Failed to load academy articles:', err);
@@ -120,12 +191,9 @@ const InsightsScreen = ({ navigation, route }) => {
             } else {
                 await api.removeArticleBookmark(articleId);
             }
-            // Update local state
-            setAcademyArticles(prev =>
-                prev.map(article =>
-                    article.id === articleId
-                        ? { ...article, isBookmarked: shouldBookmark }
-                        : article
+            setAcademyArticles((prev) =>
+                prev.map((article) =>
+                    article.id === articleId ? { ...article, isBookmarked: shouldBookmark } : article
                 )
             );
         } catch (err) {
@@ -136,20 +204,16 @@ const InsightsScreen = ({ navigation, route }) => {
     // Handle navigation from bank connection success
     useEffect(() => {
         const unsubscribe = navigation.addListener('focus', () => {
-            // Check if we're coming from bank connection
             if (route.params?.forceRefresh && route.params?.fromBankConnection) {
                 setIsFromBankConnection(true);
                 setLoading(true);
                 setRetryCount(0);
 
-                // First fetch transactions to ensure they're synced, then load insights
                 const syncAndLoadInsights = async () => {
                     try {
                         console.log('Syncing transactions before loading insights...');
-                        // Force fetch transactions first to populate the database
-                        await api.getTransactions('?refresh=true'); // force refresh
+                        await api.getTransactions('?refresh=true');
                         console.log('Transactions synced, now loading insights...');
-                        // Now load insights with the fresh data
                         await loadInsights(true);
                     } catch (err) {
                         console.error('Error during sync and insights load:', err);
@@ -161,7 +225,6 @@ const InsightsScreen = ({ navigation, route }) => {
 
                 syncAndLoadInsights();
 
-                // Clear the params to avoid re-triggering
                 navigation.setParams({ forceRefresh: false, fromBankConnection: false });
             }
         });
@@ -174,7 +237,7 @@ const InsightsScreen = ({ navigation, route }) => {
         loadInsights(true);
     };
 
-    const handleAction = async (action, insightId) => {
+    const handleAction = async (action) => {
         if (!action) return;
 
         try {
@@ -195,459 +258,191 @@ const InsightsScreen = ({ navigation, route }) => {
 
     const handleDismiss = async (insightId) => {
         // Optimistically remove from UI
-        setInsights(prev => prev.filter(i => i.id !== insightId));
+        setInsights((prev) => prev.filter((i) => i.id !== insightId));
 
         try {
             await api.dismissInsight(insightId);
         } catch (err) {
             console.error('Failed to dismiss insight:', err);
-            // Reload on error
             loadInsights();
         }
     };
 
-    // Filter insights by active tab
     const filteredInsights = useMemo(() => {
         if (activeTab === 'all') return insights;
-        return insights.filter(i => i.priority === activeTab);
+        return insights.filter((i) => i.priority === activeTab);
     }, [insights, activeTab]);
 
-    // Count insights by priority for tab badges
     const priorityCounts = useMemo(() => ({
         all: insights.length,
-        high: insights.filter(i => i.priority === 'high').length,
-        medium: insights.filter(i => i.priority === 'medium').length,
-        low: insights.filter(i => i.priority === 'low').length,
+        high: insights.filter((i) => i.priority === 'high').length,
+        medium: insights.filter((i) => i.priority === 'medium').length,
+        low: insights.filter((i) => i.priority === 'low').length,
     }), [insights]);
+
+    const pageHeader = (
+        <View style={styles.header}>
+            <View style={styles.headerTop}>
+                <View style={{ flex: 1 }}>
+                    <Text variant="hero">AI Insights</Text>
+                    <Text variant="body" tone="secondary">Personalized financial recommendations</Text>
+                </View>
+            </View>
+
+            {summary ? (
+                <View style={styles.summaryCard}>
+                    <Ionicons name="sparkles" size={18} color={theme.ACCENT} />
+                    <Text variant="meta" tone="secondary" style={{ flex: 1 }}>{summary}</Text>
+                </View>
+            ) : null}
+        </View>
+    );
 
     if (loading) {
         return (
-            <View style={styles.container}>
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>AI Insights</Text>
-                    <Text style={styles.headerSubtitle}>Personalized financial recommendations</Text>
-                </View>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={COLORS.GOLD} />
-                    <Text style={styles.loadingText}>
-                        {isFromBankConnection
-                            ? retryCount > 0
-                                ? 'Waiting for transactions to sync...'
-                                : 'Categorizing transactions and generating insights...'
-                            : 'Analyzing your finances...'}
-                    </Text>
+            <Screen header={pageHeader}>
+                <View style={styles.centered}>
+                    <LoadingState
+                        message={
+                            isFromBankConnection
+                                ? retryCount > 0
+                                    ? 'Waiting for transactions to sync...'
+                                    : 'Categorizing transactions and generating insights...'
+                                : 'Analyzing your finances...'
+                        }
+                    />
                     {isFromBankConnection && (
-                        <Text style={styles.loadingSubtext}>
+                        <Text variant="meta" tone="muted" style={{ textAlign: 'center', paddingHorizontal: SPACING.XL }}>
                             {retryCount > 0
                                 ? `Your bank is syncing data (${retryCount}/2)...`
                                 : 'This may take a moment as we analyze your financial data'}
                         </Text>
                     )}
                 </View>
-            </View>
+            </Screen>
         );
     }
 
     if (error) {
         return (
-            <View style={styles.container}>
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>AI Insights</Text>
-                    <Text style={styles.headerSubtitle}>Personalized financial recommendations</Text>
+            <Screen header={pageHeader}>
+                <View style={styles.centered}>
+                    <EmptyState
+                        icon="cloud-offline-outline"
+                        title="Couldn't load insights"
+                        message={error}
+                        actionLabel="Retry"
+                        onAction={() => loadInsights()}
+                    />
                 </View>
-                <View style={styles.errorContainer}>
-                    <Ionicons name="alert-circle-outline" size={64} color={COLORS.RED} />
-                    <Text style={styles.errorText}>{error}</Text>
-                    <TouchableOpacity
-                        style={styles.retryButton}
-                        onPress={() => loadInsights()}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={styles.retryButtonText}>Retry</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+            </Screen>
         );
     }
 
     return (
-        <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <View style={styles.headerTop}>
-                    <View>
-                        <Text style={styles.headerTitle}>AI Insights</Text>
-                        <Text style={styles.headerSubtitle}>Personalized financial recommendations</Text>
-                    </View>
-                    <TouchableOpacity
-                        style={styles.infoButton}
-                        onPress={() => {/* Show info modal */ }}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="information-circle-outline" size={24} color={COLORS.GOLD} />
-                    </TouchableOpacity>
-                </View>
+        <Screen
+            scroll
+            header={pageHeader}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            contentContainerStyle={styles.content}
+        >
+            <FinancialHealthScore healthScore={healthScore} />
 
-                {summary && (
-                    <View style={styles.summaryCard}>
-                        <Ionicons name="sparkles" size={18} color={COLORS.GOLD} />
-                        <Text style={styles.summaryText}>{summary}</Text>
-                    </View>
-                )}
-            </View>
+            {insights.length > 0 && (
+                <ChipRow style={styles.tabs}>
+                    {TABS.map((tab) => {
+                        const count = priorityCounts[tab.key];
+                        return (
+                            <Chip
+                                key={tab.key}
+                                label={count > 0 ? `${tab.label} · ${count}` : tab.label}
+                                active={activeTab === tab.key}
+                                onPress={() => setActiveTab(tab.key)}
+                            />
+                        );
+                    })}
+                </ChipRow>
+            )}
 
-            {/* Insights List */}
-            <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={handleRefresh}
-                        tintColor={COLORS.GOLD}
-                        colors={[COLORS.GOLD]}
+            {filteredInsights.length === 0 && insights.length === 0 ? (
+                <Card inset={false} style={{ marginBottom: SPACING.MEDIUM }}>
+                    <EmptyState
+                        icon="checkmark-circle-outline"
+                        title="You're all set"
+                        message="No new insights right now. Keep up the great work managing your finances."
                     />
-                }
-            >
-                {/* Financial Health Score */}
-                <FinancialHealthScore healthScore={healthScore} />
+                </Card>
+            ) : filteredInsights.length === 0 ? (
+                <Card inset={false} style={{ marginBottom: SPACING.MEDIUM }}>
+                    <EmptyState
+                        icon="filter-outline"
+                        title={`No ${activeTab} priority insights`}
+                        message="Try a different filter to see more."
+                    />
+                </Card>
+            ) : (
+                filteredInsights.map((insight) => (
+                    <InsightCardV2
+                        key={insight.id}
+                        insight={insight}
+                        onAction={handleAction}
+                        onDismiss={handleDismiss}
+                    />
+                ))
+            )}
 
-                {/* Priority Tab Bar */}
-                {insights.length > 0 && (
-                    <View style={styles.tabBar}>
-                        {TABS.map((tab) => {
-                            const isActive = activeTab === tab.key;
-                            const count = priorityCounts[tab.key];
-                            return (
-                                <TouchableOpacity
-                                    key={tab.key}
-                                    style={[styles.tab, isActive && styles.activeTab]}
-                                    onPress={() => setActiveTab(tab.key)}
-                                    activeOpacity={0.7}
-                                >
-                                    <Text style={[styles.tabText, isActive && styles.activeTabText]}>
-                                        {tab.label}
-                                    </Text>
-                                    {count > 0 && (
-                                        <View style={[styles.tabBadge, isActive && styles.activeTabBadge]}>
-                                            <Text style={[styles.tabBadgeText, isActive && styles.activeTabBadgeText]}>
-                                                {count}
-                                            </Text>
-                                        </View>
-                                    )}
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
-                )}
+            <InvestmentCorner navigation={navigation} />
 
-                {/* Insight Cards */}
-                {filteredInsights.length === 0 && insights.length === 0 ? (
-                    <View style={styles.emptyContainer}>
-                        <Ionicons name="checkmark-circle-outline" size={64} color={COLORS.GREEN} />
-                        <Text style={styles.emptyTitle}>You're all set!</Text>
-                        <Text style={styles.emptyText}>
-                            No new insights right now. Keep up the great work managing your finances!
-                        </Text>
-                    </View>
-                ) : filteredInsights.length === 0 ? (
-                    <View style={styles.emptyContainer}>
-                        <Ionicons name="filter-outline" size={48} color={COLORS.TEXT_MUTED} />
-                        <Text style={styles.emptyTitle}>No {activeTab} priority insights</Text>
-                        <Text style={styles.emptyText}>
-                            Try selecting a different filter to see more insights.
-                        </Text>
-                    </View>
-                ) : (
-                    filteredInsights.map((insight) => (
-                        <InsightCardV2
-                            key={insight.id}
-                            insight={insight}
-                            onAction={handleAction}
-                            onDismiss={handleDismiss}
-                        />
-                    ))
-                )}
-
-                {/* Investment Corner */}
-                <InvestmentCorner navigation={navigation} />
-
-                {/* Wealth Academy Section */}
-                {academyArticles.length > 0 && (
-                    <View style={styles.academySection}>
-                        <View style={styles.academySectionHeader}>
-                            <View style={styles.academyTitleRow}>
-                                <Ionicons name="school-outline" size={22} color={COLORS.GOLD} />
-                                <Text style={styles.academySectionTitle}>Wealth Academy</Text>
-                            </View>
-                            <TouchableOpacity
-                                style={styles.viewAllButton}
-                                onPress={() => navigation.navigate('WealthAcademy')}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={styles.viewAllText}>VIEW ALL</Text>
-                                <Ionicons name="chevron-forward" size={14} color={COLORS.GOLD} />
-                            </TouchableOpacity>
+            {academyArticles.length > 0 && (
+                <View style={styles.academy}>
+                    <View style={styles.academyHeader}>
+                        <View style={styles.academyTitleRow}>
+                            <Ionicons name="school-outline" size={22} color={theme.ACCENT} />
+                            <Text variant="h2">Wealth Academy</Text>
                         </View>
-                        <Text style={styles.academySubtitle}>
-                            Curated articles to help you grow your financial knowledge
-                        </Text>
-
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.academyScrollContent}
+                        <TouchableOpacity
+                            style={styles.viewAll}
+                            onPress={() => navigation.navigate('WealthAcademy')}
+                            activeOpacity={0.7}
                         >
-                            {academyArticles.map((article) => (
-                                <ArticleCard
-                                    key={article.id}
-                                    article={article}
-                                    variant="horizontal"
-                                    onPress={handleArticlePress}
-                                    onBookmark={handleArticleBookmark}
-                                />
-                            ))}
-                        </ScrollView>
+                            <Text variant="label" tone="link">View all</Text>
+                            <Ionicons name="chevron-forward" size={14} color={theme.LINK} />
+                        </TouchableOpacity>
                     </View>
-                )}
-
-                {/* Financial Disclaimer */}
-                <View style={styles.disclaimerBanner}>
-                    <Ionicons name="information-circle-outline" size={14} color="#888" />
-                    <Text style={styles.disclaimerText}>
-                        AI insights are for informational purposes only and do not constitute financial, investment, or tax advice. ETF data is approximate, updated quarterly, and may not reflect current market conditions. Past performance does not guarantee future results. Consult a qualified financial advisor before making investment decisions.
+                    <Text variant="meta" tone="muted">
+                        Curated articles to help you grow your financial knowledge
                     </Text>
-                </View>
 
-                {/* Bottom Spacer for Tab Bar */}
-                <View style={styles.bottomSpacer} />
-            </ScrollView>
-        </View>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.academyScroll}
+                    >
+                        {academyArticles.map((article) => (
+                            <ArticleCard
+                                key={article.id}
+                                article={article}
+                                variant="horizontal"
+                                onPress={handleArticlePress}
+                                onBookmark={handleArticleBookmark}
+                            />
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
+
+            <View style={styles.disclaimer}>
+                <Ionicons name="information-circle-outline" size={14} color={theme.TEXT_MUTED} />
+                <Text variant="meta" tone="muted" style={{ flex: 1 }}>
+                    AI insights are for informational purposes only and do not constitute financial,
+                    investment, or tax advice. ETF data is approximate, updated quarterly, and may not
+                    reflect current market conditions. Past performance does not guarantee future
+                    results. Consult a qualified financial advisor before making investment decisions.
+                </Text>
+            </View>
+        </Screen>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
-    },
-    header: {
-        paddingTop: Platform.OS === 'ios' ? 60 : 40,
-        paddingHorizontal: SPACING.LARGE,
-        paddingBottom: SPACING.MEDIUM,
-    },
-    headerTop: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: SPACING.MEDIUM,
-    },
-    headerTitle: {
-        fontSize: 32,
-        fontWeight: '700',
-        color: COLORS.WHITE,
-        marginBottom: SPACING.TINY,
-    },
-    headerSubtitle: {
-        fontSize: 14,
-        color: COLORS.GOLD_LIGHT,
-    },
-    infoButton: {
-        padding: SPACING.TINY,
-    },
-    summaryCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(201, 162, 39, 0.1)',
-        borderWidth: 1,
-        borderColor: 'rgba(201, 162, 39, 0.3)',
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        padding: SPACING.MEDIUM,
-        gap: SPACING.SMALL,
-    },
-    summaryText: {
-        flex: 1,
-        fontSize: 13,
-        color: COLORS.GOLD_LIGHT,
-        lineHeight: 18,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        paddingHorizontal: SPACING.LARGE,
-        paddingTop: SPACING.SMALL,
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: SPACING.MEDIUM,
-    },
-    loadingText: {
-        fontSize: 16,
-        color: COLORS.WHITE,
-    },
-    loadingSubtext: {
-        fontSize: 13,
-        color: COLORS.GOLD_LIGHT,
-        textAlign: 'center',
-        maxWidth: '80%',
-        marginTop: SPACING.SMALL,
-        opacity: 0.8,
-    },
-    errorContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.LARGE,
-        gap: SPACING.MEDIUM,
-    },
-    errorText: {
-        fontSize: 16,
-        color: COLORS.WHITE,
-        textAlign: 'center',
-    },
-    retryButton: {
-        backgroundColor: COLORS.GOLD,
-        paddingHorizontal: SPACING.LARGE,
-        paddingVertical: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        marginTop: SPACING.SMALL,
-    },
-    retryButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.BACKGROUND,
-    },
-    // Tab Bar
-    tabBar: {
-        flexDirection: 'row',
-        marginBottom: SPACING.MEDIUM,
-        gap: SPACING.SMALL,
-    },
-    tab: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: BORDER_RADIUS.SMALL,
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        gap: 6,
-    },
-    activeTab: {
-        backgroundColor: COLORS.GOLD,
-    },
-    tabText: {
-        fontSize: 13,
-        color: COLORS.TEXT_MUTED,
-        fontWeight: '500',
-    },
-    activeTabText: {
-        color: COLORS.BACKGROUND,
-        fontWeight: '600',
-    },
-    tabBadge: {
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        borderRadius: 10,
-        minWidth: 20,
-        height: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 4,
-    },
-    activeTabBadge: {
-        backgroundColor: 'rgba(0,0,0,0.2)',
-    },
-    tabBadgeText: {
-        fontSize: 11,
-        color: COLORS.TEXT_MUTED,
-        fontWeight: '600',
-    },
-    activeTabBadgeText: {
-        color: COLORS.BACKGROUND,
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: SPACING.XL * 2,
-        gap: SPACING.MEDIUM,
-    },
-    emptyTitle: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: COLORS.WHITE,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: COLORS.WHITE,
-        textAlign: 'center',
-        maxWidth: '80%',
-        lineHeight: 20,
-        opacity: 0.9,
-    },
-    bottomSpacer: {
-        height: 120,
-    },
-    disclaimerBanner: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        gap: 6,
-        marginBottom: SPACING.MEDIUM,
-        padding: SPACING.SMALL,
-        backgroundColor: 'rgba(255,255,255,0.04)',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
-    },
-    disclaimerText: {
-        flex: 1,
-        fontSize: 11,
-        color: '#888',
-        lineHeight: 16,
-    },
-    // Wealth Academy styles
-    academySection: {
-        marginTop: SPACING.LARGE,
-        marginBottom: SPACING.MEDIUM,
-    },
-    academySectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.TINY,
-    },
-    academyTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.SMALL,
-    },
-    academySectionTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: COLORS.WHITE,
-    },
-    viewAllButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.TINY,
-    },
-    viewAllText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: COLORS.GOLD,
-        letterSpacing: 0.5,
-    },
-    academySubtitle: {
-        fontSize: 13,
-        color: COLORS.TEXT_SECONDARY,
-        marginBottom: SPACING.MEDIUM,
-        opacity: 0.8,
-    },
-    academyScrollContent: {
-        paddingRight: SPACING.LARGE,
-    },
-});
 
 export default InsightsScreen;

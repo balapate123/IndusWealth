@@ -1,200 +1,44 @@
 import React, { useState } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    Modal,
-    ScrollView,
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { RADIUS, SPACING } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import { Card, Text, BarTrack } from './ui';
 
 const CIRCLE_SIZE = 140;
 const STROKE_WIDTH = 10;
-const RADIUS = (CIRCLE_SIZE - STROKE_WIDTH) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+const ARC_RADIUS = (CIRCLE_SIZE - STROKE_WIDTH) / 2;
+const CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS;
 
-const getScoreColor = (score) => {
-    if (score >= 90) return COLORS.HEALTH_EXCELLENT;
-    if (score >= 75) return COLORS.HEALTH_GOOD;
-    if (score >= 60) return COLORS.HEALTH_FAIR;
-    if (score >= 40) return COLORS.HEALTH_POOR;
-    return COLORS.HEALTH_CRITICAL;
+/**
+ * A health score is a status encoding, so it uses the reserved semantic colours
+ * rather than five bespoke ones. Colour carries severity coarsely; the label
+ * below it carries the precision, so nothing depends on colour alone.
+ */
+const scoreColor = (theme, score) => {
+    if (score >= 75) return theme.SUCCESS;
+    if (score >= 50) return theme.WARNING;
+    return theme.DANGER;
 };
 
-const getScoreLabel = (score) => {
+const scoreLabel = (score) => {
     if (score >= 90) return 'Excellent';
     if (score >= 75) return 'Good';
     if (score >= 60) return 'Fair';
-    if (score >= 40) return 'Needs Work';
+    if (score >= 40) return 'Needs work';
     return 'Critical';
 };
 
-const FinancialHealthScore = ({ healthScore }) => {
-    const [showBreakdown, setShowBreakdown] = useState(false);
-
-    if (!healthScore) return null;
-
-    const { score, grade, breakdown, trend, previous_score } = healthScore;
-    const scoreColor = getScoreColor(score);
-    const strokeDashoffset = CIRCUMFERENCE - (score / 100) * CIRCUMFERENCE;
-
-    const trendIcon = trend === 'improving' ? 'arrow-up' : trend === 'declining' ? 'arrow-down' : 'remove';
-    const trendColor = trend === 'improving' ? COLORS.GREEN : trend === 'declining' ? COLORS.RED : COLORS.TEXT_MUTED;
-    const trendText = trend === 'improving'
-        ? `Up ${previous_score ? score - previous_score : ''} pts`
-        : trend === 'declining'
-            ? `Down ${previous_score ? previous_score - score : ''} pts`
-            : 'Stable';
-
-    return (
-        <View style={styles.container}>
-            <TouchableOpacity
-                style={styles.scoreContainer}
-                onPress={() => setShowBreakdown(true)}
-                activeOpacity={0.8}
-            >
-                {/* Circular Progress */}
-                <View style={styles.circleContainer}>
-                    <Svg width={CIRCLE_SIZE} height={CIRCLE_SIZE}>
-                        {/* Background circle */}
-                        <Circle
-                            cx={CIRCLE_SIZE / 2}
-                            cy={CIRCLE_SIZE / 2}
-                            r={RADIUS}
-                            stroke="rgba(255,255,255,0.08)"
-                            strokeWidth={STROKE_WIDTH}
-                            fill="none"
-                        />
-                        {/* Score arc */}
-                        <Circle
-                            cx={CIRCLE_SIZE / 2}
-                            cy={CIRCLE_SIZE / 2}
-                            r={RADIUS}
-                            stroke={scoreColor}
-                            strokeWidth={STROKE_WIDTH}
-                            fill="none"
-                            strokeDasharray={CIRCUMFERENCE}
-                            strokeDashoffset={strokeDashoffset}
-                            strokeLinecap="round"
-                            rotation="-90"
-                            origin={`${CIRCLE_SIZE / 2}, ${CIRCLE_SIZE / 2}`}
-                        />
-                    </Svg>
-                    {/* Score number in center */}
-                    <View style={styles.scoreCenter}>
-                        <Text style={[styles.scoreNumber, { color: scoreColor }]}>{score}</Text>
-                        <Text style={styles.gradeText}>{grade}</Text>
-                    </View>
-                </View>
-
-                {/* Label and Trend */}
-                <View style={styles.labelContainer}>
-                    <Text style={[styles.scoreLabel, { color: scoreColor }]}>
-                        {getScoreLabel(score)}
-                    </Text>
-                    <View style={styles.trendRow}>
-                        <Ionicons name={trendIcon} size={14} color={trendColor} />
-                        <Text style={[styles.trendText, { color: trendColor }]}>{trendText}</Text>
-                    </View>
-                </View>
-
-                {/* Mini breakdown bar */}
-                {breakdown && (
-                    <View style={styles.miniBreakdown}>
-                        {Object.values(breakdown).map((dim, i) => (
-                            <View
-                                key={i}
-                                style={[
-                                    styles.miniSegment,
-                                    {
-                                        flex: dim.weight,
-                                        backgroundColor: getScoreColor(dim.score),
-                                        opacity: 0.7 + (dim.score / 100) * 0.3,
-                                    },
-                                ]}
-                            />
-                        ))}
-                    </View>
-                )}
-
-                <Text style={styles.tapHint}>Tap for details</Text>
-            </TouchableOpacity>
-
-            {/* Breakdown Modal */}
-            <Modal
-                visible={showBreakdown}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowBreakdown(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Financial Health Breakdown</Text>
-                            <TouchableOpacity onPress={() => setShowBreakdown(false)}>
-                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.modalScoreRow}>
-                            <Text style={[styles.modalScore, { color: scoreColor }]}>{score}</Text>
-                            <Text style={styles.modalGrade}> / 100 ({grade})</Text>
-                        </View>
-
-                        <ScrollView style={styles.breakdownList}>
-                            {breakdown && Object.entries(breakdown).map(([key, dim]) => (
-                                <View key={key} style={styles.breakdownItem}>
-                                    <View style={styles.breakdownHeader}>
-                                        <Text style={styles.breakdownLabel}>{dim.label}</Text>
-                                        <Text style={[styles.breakdownScore, { color: getScoreColor(dim.score) }]}>
-                                            {dim.score}/100
-                                        </Text>
-                                    </View>
-                                    <View style={styles.breakdownBar}>
-                                        <View
-                                            style={[
-                                                styles.breakdownFill,
-                                                {
-                                                    width: `${dim.score}%`,
-                                                    backgroundColor: getScoreColor(dim.score),
-                                                },
-                                            ]}
-                                        />
-                                    </View>
-                                    <Text style={styles.breakdownDetail}>{dim.detail}</Text>
-                                    <Text style={styles.breakdownWeight}>Weight: {dim.weight}%</Text>
-                                </View>
-                            ))}
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
-        </View>
-    );
-};
-
-const styles = StyleSheet.create({
-    container: {
-        marginBottom: SPACING.LARGE,
-    },
-    scoreContainer: {
-        backgroundColor: COLORS.CARD_BG,
-        borderRadius: BORDER_RADIUS.LARGE,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-        padding: SPACING.LARGE,
-        alignItems: 'center',
-    },
-    circleContainer: {
+const makeStyles = (t) => StyleSheet.create({
+    score: { alignItems: 'center' },
+    circle: {
         position: 'relative',
         width: CIRCLE_SIZE,
         height: CIRCLE_SIZE,
         marginBottom: SPACING.SMALL,
     },
-    scoreCenter: {
+    center: {
         position: 'absolute',
         top: 0,
         left: 0,
@@ -203,33 +47,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    scoreNumber: {
-        fontSize: 36,
-        fontWeight: '700',
-    },
-    gradeText: {
-        fontSize: 14,
-        color: COLORS.TEXT_MUTED,
-        fontWeight: '600',
-    },
-    labelContainer: {
-        alignItems: 'center',
-        marginBottom: SPACING.SMALL,
-    },
-    scoreLabel: {
-        fontSize: 18,
-        fontWeight: '700',
-        marginBottom: SPACING.TINY,
-    },
-    trendRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    trendText: {
-        fontSize: 13,
-        fontWeight: '500',
-    },
+    label: { alignItems: 'center', marginBottom: SPACING.SMALL },
+    trendRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
     miniBreakdown: {
         flexDirection: 'row',
         width: '100%',
@@ -239,26 +58,20 @@ const styles = StyleSheet.create({
         gap: 2,
         marginBottom: SPACING.SMALL,
     },
-    miniSegment: {
-        height: '100%',
-        borderRadius: 3,
-    },
-    tapHint: {
-        fontSize: 11,
-        color: COLORS.TEXT_MUTED,
-        opacity: 0.6,
-    },
+    miniSegment: { height: '100%', borderRadius: 3 },
+
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.8)',
+        backgroundColor: t.SCRIM,
         justifyContent: 'flex-end',
     },
     modalContent: {
-        backgroundColor: '#111',
-        borderTopLeftRadius: BORDER_RADIUS.XL,
-        borderTopRightRadius: BORDER_RADIUS.XL,
+        backgroundColor: t.SURFACE,
+        borderTopLeftRadius: RADIUS.CARD,
+        borderTopRightRadius: RADIUS.CARD,
         padding: SPACING.LARGE,
         maxHeight: '80%',
+        ...t.ELEVATION.SHEET,
     },
     modalHeader: {
         flexDirection: 'row',
@@ -266,68 +79,156 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: SPACING.MEDIUM,
     },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: COLORS.WHITE,
-    },
     modalScoreRow: {
         flexDirection: 'row',
         alignItems: 'baseline',
-        marginBottom: SPACING.LARGE,
-    },
-    modalScore: {
-        fontSize: 42,
-        fontWeight: '700',
-    },
-    modalGrade: {
-        fontSize: 18,
-        color: COLORS.TEXT_MUTED,
-    },
-    breakdownList: {
         marginBottom: SPACING.LARGE,
     },
     breakdownItem: {
         marginBottom: SPACING.MEDIUM,
         paddingBottom: SPACING.MEDIUM,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.06)',
+        borderBottomColor: t.HAIRLINE,
     },
     breakdownHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginBottom: SPACING.SMALL,
     },
-    breakdownLabel: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: COLORS.WHITE,
-    },
-    breakdownScore: {
-        fontSize: 15,
-        fontWeight: '700',
-    },
-    breakdownBar: {
-        height: 8,
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderRadius: 4,
-        overflow: 'hidden',
-        marginBottom: SPACING.TINY,
-    },
-    breakdownFill: {
-        height: '100%',
-        borderRadius: 4,
-    },
-    breakdownDetail: {
-        fontSize: 12,
-        color: COLORS.TEXT_MUTED,
-        marginTop: SPACING.TINY,
-    },
-    breakdownWeight: {
-        fontSize: 11,
-        color: 'rgba(255,255,255,0.3)',
-        marginTop: 2,
-    },
+    breakdownDetail: { marginTop: SPACING.TINY + 2 },
 });
+
+const FinancialHealthScore = ({ healthScore }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+    const [showBreakdown, setShowBreakdown] = useState(false);
+
+    if (!healthScore) return null;
+
+    const { score, grade, breakdown, trend, previous_score } = healthScore;
+    const color = scoreColor(theme, score);
+    const strokeDashoffset = CIRCUMFERENCE - (score / 100) * CIRCUMFERENCE;
+
+    const trendIcon = trend === 'improving' ? 'arrow-up' : trend === 'declining' ? 'arrow-down' : 'remove';
+    const trendColor = trend === 'improving'
+        ? theme.SUCCESS
+        : trend === 'declining' ? theme.DANGER : theme.TEXT_MUTED;
+    const trendText = trend === 'improving'
+        ? `Up ${previous_score ? score - previous_score : ''} pts`
+        : trend === 'declining'
+            ? `Down ${previous_score ? previous_score - score : ''} pts`
+            : 'Stable';
+
+    return (
+        <>
+            <Card inset={false} onPress={() => setShowBreakdown(true)} style={{ marginBottom: SPACING.LARGE }}>
+                <View style={styles.score}>
+                    <View style={styles.circle}>
+                        <Svg width={CIRCLE_SIZE} height={CIRCLE_SIZE}>
+                            <Circle
+                                cx={CIRCLE_SIZE / 2}
+                                cy={CIRCLE_SIZE / 2}
+                                r={ARC_RADIUS}
+                                stroke={theme.SURFACE_SUNKEN}
+                                strokeWidth={STROKE_WIDTH}
+                                fill="none"
+                            />
+                            <Circle
+                                cx={CIRCLE_SIZE / 2}
+                                cy={CIRCLE_SIZE / 2}
+                                r={ARC_RADIUS}
+                                stroke={color}
+                                strokeWidth={STROKE_WIDTH}
+                                fill="none"
+                                strokeDasharray={CIRCUMFERENCE}
+                                strokeDashoffset={strokeDashoffset}
+                                strokeLinecap="round"
+                                rotation="-90"
+                                origin={`${CIRCLE_SIZE / 2}, ${CIRCLE_SIZE / 2}`}
+                            />
+                        </Svg>
+                        <View style={styles.center}>
+                            <Text variant="hero" color={color}>{score}</Text>
+                            <Text variant="label" tone="muted">{grade}</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.label}>
+                        <Text variant="h2" color={color}>{scoreLabel(score)}</Text>
+                        <View style={styles.trendRow}>
+                            <Ionicons name={trendIcon} size={14} color={trendColor} />
+                            <Text variant="meta" color={trendColor}>{trendText}</Text>
+                        </View>
+                    </View>
+
+                    {breakdown && (
+                        <View style={styles.miniBreakdown}>
+                            {Object.values(breakdown).map((dim, i) => (
+                                <View
+                                    key={i}
+                                    style={[
+                                        styles.miniSegment,
+                                        { flex: dim.weight, backgroundColor: scoreColor(theme, dim.score) },
+                                    ]}
+                                />
+                            ))}
+                        </View>
+                    )}
+
+                    <Text variant="meta" tone="muted">Tap for details</Text>
+                </View>
+            </Card>
+
+            <Modal
+                visible={showBreakdown}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowBreakdown(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text variant="h2">Financial health breakdown</Text>
+                            <TouchableOpacity
+                                onPress={() => setShowBreakdown(false)}
+                                accessibilityRole="button"
+                                accessibilityLabel="Close"
+                            >
+                                <Ionicons name="close" size={24} color={theme.TEXT_PRIMARY} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.modalScoreRow}>
+                            <Text variant="hero" color={color}>{score}</Text>
+                            <Text variant="h2" tone="muted"> / 100 ({grade})</Text>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            {breakdown && Object.entries(breakdown).map(([key, dim]) => (
+                                <View key={key} style={styles.breakdownItem}>
+                                    <View style={styles.breakdownHeader}>
+                                        <Text variant="bodyMed">{dim.label}</Text>
+                                        <Text variant="num" color={scoreColor(theme, dim.score)}>
+                                            {dim.score}/100
+                                        </Text>
+                                    </View>
+                                    <BarTrack
+                                        value={dim.score}
+                                        max={100}
+                                        color={scoreColor(theme, dim.score)}
+                                    />
+                                    <Text variant="meta" tone="muted" style={styles.breakdownDetail}>
+                                        {dim.detail}
+                                    </Text>
+                                    <Text variant="meta" tone="disabled">Weight: {dim.weight}%</Text>
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+        </>
+    );
+};
 
 export default FinancialHealthScore;
