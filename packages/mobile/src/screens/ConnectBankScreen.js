@@ -1,97 +1,198 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    StatusBar,
-    Platform,
-    ScrollView,
-    Alert, // Keeping generic Alert as fallback if needed, but primarily using CustomAlert
-    ActivityIndicator,
-    TextInput,
-    Modal,
     FlatList,
     Linking,
+    Modal,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { create, open, dismissLink } from '../services/plaidLink';
-import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
-import { api } from '../services/api';
-import cache from '../services/cache';
+import { alpha, categoryColor, RADIUS, SPACING } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import { AuthLayout } from '../components/AuthChrome';
+import { BottomSheet, Button, Input, Text } from '../components/ui';
 import CustomAlert from '../components/CustomAlert';
+import useAlert from '../hooks/useAlert';
+import { create, open } from '../services/plaidLink';
+import { api, getApiTarget } from '../services/api';
+import cache from '../services/cache';
 
-// Canadian Banks Data
+/**
+ * Institutions carry a slot in the category ramp rather than a brand hex, so each
+ * theme resolves its own legible colour. A literal brand colour picked for the
+ * dark screen (the old `iconBg: '#3D3200'`) is invisible on the light one.
+ */
 const FEATURED_BANKS = [
-    {
-        id: 'rbc',
-        name: 'RBC Royal Bank',
-        subtitle: 'Instant Link',
-        icon: 'bank',
-        iconColor: '#FFD700',
-        iconBg: '#3D3200',
-    },
-    {
-        id: 'td',
-        name: 'TD Canada Trust',
-        subtitle: 'Instant Link',
-        icon: 'piggy-bank',
-        iconColor: '#4CAF50',
-        iconBg: '#1B3D1B',
-    },
-    {
-        id: 'cibc',
-        name: 'CIBC',
-        subtitle: 'Instant Link',
-        icon: 'credit-card',
-        iconColor: '#E53935',
-        iconBg: '#3D1B1B',
-    },
-    {
-        id: 'search',
-        name: 'Find my bank',
-        subtitle: 'Search list',
-        icon: 'magnify',
-        iconColor: '#94A3B8',
-        iconBg: '#1E293B',
-        isSearch: true,
-    },
+    { id: 'rbc', name: 'RBC Royal Bank', subtitle: 'Instant link', icon: 'bank', colorIndex: 2 },
+    { id: 'td', name: 'TD Canada Trust', subtitle: 'Instant link', icon: 'piggy-bank', colorIndex: 5 },
+    { id: 'cibc', name: 'CIBC', subtitle: 'Instant link', icon: 'credit-card', colorIndex: 6 },
+    { id: 'search', name: 'Find my bank', subtitle: 'Search list', icon: 'magnify', isSearch: true },
 ];
 
 // All available banks for search
 const ALL_BANKS = [
-    { id: 'rbc', name: 'RBC Royal Bank', plaidInstitutionId: 'ins_39' },
-    { id: 'td', name: 'TD Canada Trust', plaidInstitutionId: 'ins_40' },
-    { id: 'cibc', name: 'CIBC', plaidInstitutionId: 'ins_41' },
-    { id: 'bmo', name: 'BMO Bank of Montreal', plaidInstitutionId: 'ins_42' },
-    { id: 'scotiabank', name: 'Scotiabank', plaidInstitutionId: 'ins_43' },
-    { id: 'national', name: 'National Bank of Canada', plaidInstitutionId: 'ins_44' },
-    { id: 'desjardins', name: 'Desjardins', plaidInstitutionId: 'ins_45' },
-    { id: 'tangerine', name: 'Tangerine', plaidInstitutionId: 'ins_46' },
-    { id: 'simplii', name: 'Simplii Financial', plaidInstitutionId: 'ins_47' },
-    { id: 'eq', name: 'EQ Bank', plaidInstitutionId: 'ins_48' },
+    { id: 'rbc', name: 'RBC Royal Bank' },
+    { id: 'td', name: 'TD Canada Trust' },
+    { id: 'cibc', name: 'CIBC' },
+    { id: 'bmo', name: 'BMO Bank of Montreal' },
+    { id: 'scotiabank', name: 'Scotiabank' },
+    { id: 'national', name: 'National Bank of Canada' },
+    { id: 'desjardins', name: 'Desjardins' },
+    { id: 'tangerine', name: 'Tangerine' },
+    { id: 'simplii', name: 'Simplii Financial' },
+    { id: 'eq', name: 'EQ Bank' },
 ];
 
-const OAUTH_REDIRECT_URI = 'https://induswealth.onrender.com/plaid/oauth-redirect';
+/**
+ * The OAuth bounce has to return to the SAME backend that issued the link token.
+ * This was hardcoded to the production host, so a build pointed at staging would
+ * send the user through production's /plaid/oauth-redirect and back into the
+ * wrong environment.
+ *
+ * Every host this can resolve to must also be registered under Redirect URIs in
+ * the Plaid dashboard, alongside the backend's own PLAID_OAUTH_REDIRECT_URI.
+ */
+const oauthRedirectUri = () => `${getApiTarget().url}/plaid/oauth-redirect`;
+
+const makeStyles = (t) => StyleSheet.create({
+    progress: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+    },
+    progressDot: {
+        width: 24,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: t.SURFACE_SUNKEN,
+    },
+    progressDotActive: { backgroundColor: t.ACCENT },
+
+    title: { marginBottom: SPACING.SMALL + 4 },
+    subtitle: { marginBottom: SPACING.XL },
+
+    grid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+    },
+    bankCard: {
+        width: '48%',
+        backgroundColor: t.SURFACE,
+        borderRadius: RADIUS.LARGE,
+        borderWidth: 1,
+        borderColor: t.CARD_BORDER_WIDTH ? t.CARD_BORDER : 'transparent',
+        padding: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+        ...t.ELEVATION.CARD,
+    },
+    bankCardSelected: {
+        borderColor: t.ACCENT,
+        backgroundColor: t.ACCENT_DIM,
+    },
+    bankIcon: {
+        width: 46,
+        height: 46,
+        borderRadius: RADIUS.MEDIUM,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: SPACING.SMALL + 4,
+    },
+    bankName: { marginBottom: 2 },
+    selectedBadge: {
+        position: 'absolute',
+        top: SPACING.SMALL,
+        right: SPACING.SMALL,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: t.ACCENT,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    security: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: SPACING.SMALL,
+        backgroundColor: t.SUCCESS_DIM,
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingVertical: 10,
+        borderRadius: RADIUS.LARGE,
+        marginTop: SPACING.SMALL,
+        marginBottom: SPACING.LARGE,
+    },
+    poweredBy: {
+        textAlign: 'center',
+        marginTop: SPACING.MEDIUM,
+    },
+
+    sheetTitle: { marginBottom: SPACING.MEDIUM },
+    searchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.MEDIUM,
+        paddingVertical: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: t.HAIRLINE,
+    },
+    searchName: { flex: 1 },
+    searchEmpty: {
+        textAlign: 'center',
+        paddingVertical: SPACING.XL,
+    },
+
+    successOverlay: {
+        flex: 1,
+        backgroundColor: t.SCRIM,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: SPACING.LARGE,
+    },
+    successCard: {
+        width: '100%',
+        maxWidth: 340,
+        backgroundColor: t.SURFACE,
+        borderRadius: RADIUS.CARD,
+        borderWidth: t.CARD_BORDER_WIDTH,
+        borderColor: t.CARD_BORDER,
+        padding: SPACING.XL,
+        alignItems: 'center',
+        ...t.ELEVATION.SHEET,
+    },
+    successIcon: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: t.ACCENT,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: SPACING.LARGE,
+    },
+    successMessage: {
+        textAlign: 'center',
+        marginTop: SPACING.SMALL,
+        marginBottom: SPACING.LARGE,
+    },
+});
 
 const ConnectBankScreen = ({ navigation, route }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+    const { showAlert, alertProps } = useAlert();
+
     const [selectedBank, setSelectedBank] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [searchModalVisible, setSearchModalVisible] = useState(false);
+    const [searchVisible, setSearchVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [successModalVisible, setSuccessModalVisible] = useState(false);
+    const [successVisible, setSuccessVisible] = useState(false);
 
     // Store the link token so we can resume after an external-browser OAuth redirect
     const linkTokenRef = useRef(null);
-
-    // Custom Alert State
-    const [alertVisible, setAlertVisible] = useState(false);
-    const [alertConfig, setAlertConfig] = useState({
-        title: '',
-        message: '',
-        buttons: []
-    });
 
     // Detect if we're in onboarding flow or accessed from main app
     const isOnboarding = route?.params?.isOnboarding ?? false;
@@ -122,23 +223,13 @@ const ConnectBankScreen = ({ navigation, route }) => {
         return () => subscription.remove();
     }, []);
 
-    const filteredBanks = ALL_BANKS.filter(bank =>
+    const filteredBanks = ALL_BANKS.filter((bank) =>
         bank.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    // Helper to show custom alert
-    const showAlert = (title, message, buttons = []) => {
-        setAlertConfig({
-            title,
-            message,
-            buttons
-        });
-        setAlertVisible(true);
-    };
-
     const handleBankSelect = (bank) => {
         if (bank.isSearch) {
-            setSearchModalVisible(true);
+            setSearchVisible(true);
         } else {
             setSelectedBank(bank.id);
         }
@@ -146,7 +237,7 @@ const ConnectBankScreen = ({ navigation, route }) => {
 
     const handleSearchBankSelect = (bank) => {
         setSelectedBank(bank.id);
-        setSearchModalVisible(false);
+        setSearchVisible(false);
         setSearchQuery('');
     };
 
@@ -167,7 +258,7 @@ const ConnectBankScreen = ({ navigation, route }) => {
                     await cache.setCachedUser(cachedUser);
                 }
 
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise((resolve) => setTimeout(resolve, 2000));
 
                 if (isOnboarding) {
                     navigation.reset({
@@ -179,16 +270,16 @@ const ConnectBankScreen = ({ navigation, route }) => {
                                     routes: [
                                         {
                                             name: 'Insights',
-                                            params: { forceRefresh: true, fromBankConnection: true }
-                                        }
+                                            params: { forceRefresh: true, fromBankConnection: true },
+                                        },
                                     ],
-                                    index: 0
-                                }
-                            }
+                                    index: 0,
+                                },
+                            },
                         ],
                     });
                 } else {
-                    setSuccessModalVisible(true);
+                    setSuccessVisible(true);
                 }
             } else {
                 throw new Error(exchangeResponse.message || 'Failed to save bank connection');
@@ -252,7 +343,7 @@ const ConnectBankScreen = ({ navigation, route }) => {
                 // Go, which cannot load Plaid) surfaces as an alert instead of
                 // an unhandled rejection and an infinite spinner
                 await open({
-                    oauthRedirectUri: OAUTH_REDIRECT_URI,
+                    oauthRedirectUri: oauthRedirectUri(),
                     onSuccess: handlePlaidSuccess,
                     onExit: handlePlaidExit,
                 });
@@ -269,555 +360,184 @@ const ConnectBankScreen = ({ navigation, route }) => {
     };
 
     const handleSkip = () => {
-        if (isOnboarding) {
-            showAlert(
-                'Skip Bank Connection?',
-                'You can connect your bank later from the Profile settings.',
-                [
-                    {
-                        text: 'Cancel',
-                        style: 'cancel',
-                        onPress: () => setAlertVisible(false)
-                    },
-                    {
-                        text: 'Skip for Now',
-                        onPress: () => {
-                            setAlertVisible(false);
-                            navigation.reset({
-                                index: 0,
-                                routes: [{ name: 'Main' }],
-                            });
-                        },
-                    },
-                ]
-            );
-        } else {
+        if (!isOnboarding) {
             navigation.goBack();
+            return;
         }
+
+        showAlert(
+            'Skip bank connection?',
+            'You can connect your bank later from Profile settings.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Skip for now',
+                    onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Main' }] }),
+                },
+            ]
+        );
     };
 
     const renderBankCard = (bank) => {
         const isSelected = selectedBank === bank.id;
+        const hue = bank.colorIndex == null ? theme.TEXT_MUTED : categoryColor(theme, bank.colorIndex);
 
         return (
             <TouchableOpacity
                 key={bank.id}
-                style={[
-                    styles.bankCard,
-                    isSelected && styles.bankCardSelected,
-                ]}
+                style={[styles.bankCard, isSelected && styles.bankCardSelected]}
                 onPress={() => handleBankSelect(bank)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
             >
-                <View style={[styles.bankIconContainer, { backgroundColor: bank.iconBg }]}>
-                    <MaterialCommunityIcons
-                        name={bank.icon}
-                        size={28}
-                        color={bank.iconColor}
-                    />
+                <View style={[styles.bankIcon, { backgroundColor: alpha(hue, 0.14) }]}>
+                    <MaterialCommunityIcons name={bank.icon} size={26} color={hue} />
                 </View>
-                <Text style={styles.bankName}>{bank.name}</Text>
-                <Text style={styles.bankSubtitle}>{bank.subtitle}</Text>
-                {isSelected && (
+                <Text variant="bodyMed" style={styles.bankName} numberOfLines={1}>{bank.name}</Text>
+                <Text variant="meta" tone="muted">{bank.subtitle}</Text>
+
+                {isSelected ? (
                     <View style={styles.selectedBadge}>
-                        <Ionicons name="checkmark" size={12} color="#FFF" />
+                        <Ionicons name="checkmark" size={13} color={theme.TEXT_ON_ACCENT} />
                     </View>
-                )}
+                ) : null}
             </TouchableOpacity>
         );
     };
 
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-
-            {/* Background Gradient */}
-            <LinearGradient
-                colors={[COLORS.BACKGROUND, '#0F172A', '#1E293B']}
-                style={StyleSheet.absoluteFillObject}
-            />
-
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
+        <AuthLayout
+            onBack={() => navigation.goBack()}
+            title={isOnboarding ? undefined : 'Add account'}
+            middle={isOnboarding ? (
+                <View style={styles.progress}>
+                    <View style={[styles.progressDot, styles.progressDotActive]} />
+                    <View style={[styles.progressDot, styles.progressDotActive]} />
+                    <View style={[styles.progressDot, styles.progressDotActive]} />
+                </View>
+            ) : undefined}
+            right={isOnboarding ? (
+                <TouchableOpacity onPress={handleSkip} accessibilityRole="button" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text variant="label" tone="secondary">Skip</Text>
                 </TouchableOpacity>
-
-                {/* Progress Indicator - only show during onboarding */}
-                {isOnboarding ? (
-                    <View style={styles.progressContainer}>
-                        <View style={[styles.progressDot, styles.progressDotActive]} />
-                        <View style={[styles.progressDot, styles.progressDotActive]} />
-                        <View style={[styles.progressDot, styles.progressDotActive]} />
-                    </View>
-                ) : (
-                    <Text style={styles.headerTitle}>Add Account</Text>
-                )}
-
-                {/* Skip Button - only show during onboarding */}
-                {isOnboarding ? (
-                    <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-                        <Text style={styles.skipText}>Skip</Text>
-                    </TouchableOpacity>
-                ) : (
-                    <View style={{ width: 40 }} />
-                )}
-            </View>
-
-            <ScrollView contentContainerStyle={styles.content}>
-                {/* Title Section */}
-                <Text style={styles.title}>Connect your funding source</Text>
-                <Text style={styles.subtitle}>
-                    Select your primary banking institution to verify your identity and fund your{' '}
-                    <Text style={styles.brandText}>IndusWealth</Text> account instantly.
+            ) : undefined}
+        >
+            <ScrollView showsVerticalScrollIndicator={false}>
+                <Text variant="h1" style={styles.title}>Connect your bank</Text>
+                <Text variant="body" tone="secondary" style={styles.subtitle}>
+                    Select your primary banking institution to securely link your accounts
+                    to <Text variant="bodyMed" tone="accent">IndusWealth</Text>.
                 </Text>
 
-                {/* Bank Cards Grid */}
-                <View style={styles.bankGrid}>
+                <View style={styles.grid}>
                     {FEATURED_BANKS.map(renderBankCard)}
                 </View>
 
-                {/* Security Badge */}
-                <View style={styles.securityBadge}>
-                    <Ionicons name="lock-closed" size={14} color="#4CAF50" />
-                    <Text style={styles.securityText}>Bank-grade 256-bit Encryption</Text>
+                <View style={styles.security}>
+                    <Ionicons name="lock-closed" size={14} color={theme.SUCCESS} />
+                    <Text variant="label" tone="success">Bank-grade 256-bit encryption</Text>
                 </View>
 
-                {/* Continue Button */}
-                <TouchableOpacity
-                    style={[styles.buttonContainer, !selectedBank && styles.buttonDisabled]}
+                <Button
+                    title="Continue"
                     onPress={handleContinue}
-                    disabled={loading || !selectedBank}
-                >
-                    <LinearGradient
-                        colors={selectedBank ? ['#2196F3', '#1976D2'] : ['#334155', '#334155']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.button}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color="#FFF" />
-                        ) : (
-                            <Text style={styles.buttonText}>Continue</Text>
-                        )}
-                    </LinearGradient>
-                </TouchableOpacity>
+                    loading={loading}
+                    disabled={!selectedBank}
+                    block
+                />
 
-                {/* Powered By Footer */}
-                <Text style={styles.poweredBy}>POWERED BY PLAID</Text>
+                <Text variant="overline" tone="muted" style={styles.poweredBy}>Powered by Plaid</Text>
             </ScrollView>
 
-            {/* Search Modal */}
-            <Modal
-                visible={searchModalVisible}
-                animationType="slide"
-                transparent={true}
-                onRequestClose={() => setSearchModalVisible(false)}
+            <BottomSheet
+                visible={searchVisible}
+                onClose={() => {
+                    setSearchVisible(false);
+                    setSearchQuery('');
+                }}
+                scroll={false}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Find your bank</Text>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setSearchModalVisible(false);
-                                    setSearchQuery('');
-                                }}
-                            >
-                                <Ionicons name="close" size={24} color={COLORS.WHITE} />
-                            </TouchableOpacity>
+                <Text variant="h2" style={styles.sheetTitle}>Find your bank</Text>
+
+                <Input
+                    placeholder="Search banks…"
+                    icon="search-outline"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    onClear={() => setSearchQuery('')}
+                    autoFocus
+                />
+
+                <FlatList
+                    data={filteredBanks}
+                    keyExtractor={(item) => item.id}
+                    keyboardShouldPersistTaps="handled"
+                    renderItem={({ item }) => (
+                        <TouchableOpacity
+                            style={styles.searchRow}
+                            onPress={() => handleSearchBankSelect(item)}
+                            accessibilityRole="button"
+                        >
+                            <MaterialCommunityIcons name="bank" size={22} color={theme.TEXT_MUTED} />
+                            <Text variant="body" style={styles.searchName}>{item.name}</Text>
+                            {selectedBank === item.id ? (
+                                <Ionicons name="checkmark-circle" size={20} color={theme.SUCCESS} />
+                            ) : null}
+                        </TouchableOpacity>
+                    )}
+                    ListEmptyComponent={
+                        <Text variant="body" tone="muted" style={styles.searchEmpty}>No banks found</Text>
+                    }
+                />
+            </BottomSheet>
+
+            <CustomAlert {...alertProps} />
+
+            <Modal
+                visible={successVisible}
+                animationType="fade"
+                transparent
+                statusBarTranslucent
+                presentationStyle="overFullScreen"
+                onRequestClose={() => {
+                    setSuccessVisible(false);
+                    navigation.goBack();
+                }}
+            >
+                <StatusBar barStyle={theme.statusBarStyle} />
+                <View style={styles.successOverlay}>
+                    <View style={styles.successCard}>
+                        <View style={styles.successIcon}>
+                            <Ionicons name="checkmark" size={36} color={theme.TEXT_ON_ACCENT} />
                         </View>
 
-                        <View style={styles.searchInputContainer}>
-                            <Ionicons name="search" size={20} color="#64748B" />
-                            <TextInput
-                                style={styles.searchInput}
-                                placeholder="Search banks..."
-                                placeholderTextColor="#64748B"
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
-                                autoFocus
-                            />
-                        </View>
+                        <Text variant="h1">Connected</Text>
+                        <Text variant="body" tone="secondary" style={styles.successMessage}>
+                            Your bank account has been successfully linked to IndusWealth.
+                        </Text>
 
-                        <FlatList
-                            data={filteredBanks}
-                            keyExtractor={(item) => item.id}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={styles.searchBankItem}
-                                    onPress={() => handleSearchBankSelect(item)}
-                                >
-                                    <MaterialCommunityIcons
-                                        name="bank"
-                                        size={24}
-                                        color="#94A3B8"
-                                    />
-                                    <Text style={styles.searchBankName}>{item.name}</Text>
-                                    {selectedBank === item.id && (
-                                        <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-                                    )}
-                                </TouchableOpacity>
-                            )}
-                            ListEmptyComponent={
-                                <Text style={styles.emptyText}>No banks found</Text>
-                            }
+                        <Button
+                            title="Continue"
+                            block
+                            onPress={() => {
+                                setSuccessVisible(false);
+                                // Close this screen first, then jump to Insights — navigating
+                                // while the modal is still mounted leaves it over the tab.
+                                navigation.goBack();
+                                setTimeout(() => {
+                                    navigation.navigate('Insights', {
+                                        forceRefresh: true,
+                                        fromBankConnection: true,
+                                    });
+                                }, 100);
+                            }}
                         />
                     </View>
                 </View>
             </Modal>
-
-            {/* Custom Alert */}
-            <CustomAlert
-                visible={alertVisible}
-                title={alertConfig.title}
-                message={alertConfig.message}
-                buttons={alertConfig.buttons}
-                onRequestClose={() => setAlertVisible(false)}
-            />
-
-            {/* Success Modal */}
-            <Modal
-                visible={successModalVisible}
-                animationType="fade"
-                transparent={true}
-                onRequestClose={() => {
-                    setSuccessModalVisible(false);
-                    navigation.goBack();
-                }}
-            >
-                <View style={styles.successModalOverlay}>
-                    <View style={styles.successModalContent}>
-                        {/* Success Icon */}
-                        <View style={styles.successIconContainer}>
-                            <LinearGradient
-                                colors={['#D4AF37', '#C5A028']}
-                                style={styles.successIconGradient}
-                            >
-                                <Ionicons name="checkmark" size={40} color="#0A0A0A" />
-                            </LinearGradient>
-                        </View>
-
-                        {/* Success Text */}
-                        <Text style={styles.successTitle}>Connected!</Text>
-                        <Text style={styles.successMessage}>
-                            Your bank account has been successfully linked to IndusWealth.
-                        </Text>
-
-                        {/* Continue Button */}
-                        <TouchableOpacity
-                            style={styles.successButton}
-                            onPress={() => {
-                                setSuccessModalVisible(false);
-                                // First go back to close the modal, then navigate to Insights
-                                navigation.goBack();
-                                // Use setTimeout to ensure modal is closed before navigation
-                                setTimeout(() => {
-                                    navigation.navigate('Insights', {
-                                        forceRefresh: true,
-                                        fromBankConnection: true
-                                    });
-                                }, 100);
-                            }}
-                        >
-                            <LinearGradient
-                                colors={['#D4AF37', '#C5A028']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={styles.successButtonGradient}
-                            >
-                                <Text style={styles.successButtonText}>Continue</Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
-        </View>
+        </AuthLayout>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 50,
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingBottom: SPACING.MEDIUM,
-    },
-    backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    progressContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    progressDot: {
-        width: 24,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: '#334155',
-    },
-    progressDotActive: {
-        backgroundColor: '#D4AF37',
-    },
-    skipButton: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-    },
-    skipText: {
-        color: '#94A3B8',
-        fontSize: 14,
-        fontFamily: FONTS.MEDIUM,
-    },
-    headerTitle: {
-        color: COLORS.WHITE,
-        fontSize: 17,
-        fontFamily: FONTS.BOLD,
-    },
-    content: {
-        padding: SPACING.LARGE,
-        paddingTop: SPACING.MEDIUM,
-    },
-    title: {
-        fontSize: 28,
-        fontFamily: FONTS.BOLD,
-        color: COLORS.WHITE,
-        marginBottom: 12,
-    },
-    subtitle: {
-        fontSize: 15,
-        color: '#94A3B8',
-        lineHeight: 22,
-        marginBottom: 32,
-    },
-    brandText: {
-        color: '#D4AF37',
-        fontFamily: FONTS.BOLD,
-    },
-    bankGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        marginBottom: 24,
-    },
-    bankCard: {
-        width: '48%',
-        backgroundColor: '#1E293B',
-        borderRadius: BORDER_RADIUS.LARGE,
-        padding: SPACING.MEDIUM,
-        marginBottom: SPACING.MEDIUM,
-        borderWidth: 1,
-        borderColor: '#334155',
-    },
-    bankCardSelected: {
-        borderColor: '#D4AF37',
-        backgroundColor: 'rgba(212, 175, 55, 0.1)',
-    },
-    bankIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    bankName: {
-        fontSize: 14,
-        fontFamily: FONTS.BOLD,
-        color: COLORS.WHITE,
-        marginBottom: 4,
-    },
-    bankSubtitle: {
-        fontSize: 12,
-        color: '#64748B',
-    },
-    selectedBadge: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        backgroundColor: '#D4AF37',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    securityBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(76, 175, 80, 0.1)',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: BORDER_RADIUS.LARGE,
-        marginBottom: 24,
-    },
-    securityText: {
-        color: '#4CAF50',
-        fontSize: 13,
-        fontFamily: FONTS.MEDIUM,
-        marginLeft: 8,
-    },
-    buttonContainer: {
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        overflow: 'hidden',
-        marginBottom: 24,
-        shadowColor: '#2196F3',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
-        elevation: 6,
-    },
-    buttonDisabled: {
-        shadowOpacity: 0,
-        elevation: 0,
-    },
-    button: {
-        height: 54,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    buttonText: {
-        color: '#FFF',
-        fontSize: 16,
-        fontFamily: FONTS.BOLD,
-    },
-    poweredBy: {
-        textAlign: 'center',
-        color: '#64748B',
-        fontSize: 11,
-        letterSpacing: 1.5,
-        fontFamily: FONTS.MEDIUM,
-    },
-    // Modal styles
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        justifyContent: 'flex-end',
-    },
-    modalContent: {
-        backgroundColor: '#1E293B',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        maxHeight: '80%',
-        paddingBottom: 34,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: SPACING.LARGE,
-        borderBottomWidth: 1,
-        borderBottomColor: '#334155',
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontFamily: FONTS.BOLD,
-        color: COLORS.WHITE,
-    },
-    searchInputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#0F172A',
-        margin: SPACING.MEDIUM,
-        paddingHorizontal: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        borderWidth: 1,
-        borderColor: '#334155',
-    },
-    searchInput: {
-        flex: 1,
-        color: COLORS.WHITE,
-        fontSize: 16,
-        paddingVertical: 14,
-        marginLeft: 10,
-    },
-    searchBankItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: SPACING.LARGE,
-        borderBottomWidth: 1,
-        borderBottomColor: '#334155',
-    },
-    searchBankName: {
-        flex: 1,
-        color: COLORS.WHITE,
-        fontSize: 15,
-        marginLeft: 12,
-    },
-    emptyText: {
-        color: '#64748B',
-        textAlign: 'center',
-        paddingVertical: 32,
-        fontSize: 15,
-    },
-    // Success Modal Styles
-    successModalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: SPACING.LARGE,
-    },
-    successModalContent: {
-        backgroundColor: '#1E293B',
-        borderRadius: 24,
-        padding: 32,
-        alignItems: 'center',
-        width: '100%',
-        maxWidth: 340,
-        borderWidth: 1,
-        borderColor: 'rgba(212, 175, 55, 0.3)',
-    },
-    successIconContainer: {
-        marginBottom: 24,
-    },
-    successIconGradient: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    successTitle: {
-        fontSize: 28,
-        fontFamily: FONTS.BOLD,
-        color: COLORS.WHITE,
-        marginBottom: 12,
-    },
-    successMessage: {
-        fontSize: 15,
-        color: '#94A3B8',
-        textAlign: 'center',
-        lineHeight: 22,
-        marginBottom: 28,
-    },
-    successButton: {
-        width: '100%',
-        borderRadius: 12,
-        overflow: 'hidden',
-    },
-    successButtonGradient: {
-        paddingVertical: 16,
-        alignItems: 'center',
-    },
-    successButtonText: {
-        fontSize: 16,
-        fontFamily: FONTS.BOLD,
-        color: '#0A0A0A',
-    },
-});
 
 export default ConnectBankScreen;

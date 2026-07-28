@@ -9,10 +9,10 @@ import { THEMES, DEFAULT_THEME } from '../constants/tokens';
  * `mode` is what the user chose — 'system' | 'dark' | 'light' — and is persisted.
  * `resolved` is what that means right now once the OS preference is applied.
  *
- * Screens that have not been migrated yet still import the frozen COLORS object
- * from constants/theme.js, so they render Obsidian regardless of mode. That is
- * expected during the migration: a screen becomes theme-aware when it moves onto
- * useTheme(). See docs/superpowers/specs/2026-07-27-app-theme-revamp-design.md.
+ * Every screen now reads colour through useTheme()/useThemedStyles — the frozen
+ * COLORS palette this replaced is gone. A raw hex in a StyleSheet is a bug: it
+ * cannot follow the mode, and it is how the light theme first came out all-white.
+ * See docs/superpowers/specs/2026-07-27-app-theme-revamp-design.md.
  */
 
 const STORAGE_KEY = '@induswealth_theme_mode';

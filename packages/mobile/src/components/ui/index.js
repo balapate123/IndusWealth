@@ -14,7 +14,7 @@ export { default as Card } from './Card';
 export { default as BottomSheet } from './BottomSheet';
 export { default as Text } from './Text';
 export { default as Button } from './Button';
-export { default as Input } from './Input';
+export { default as Input, CODE_INPUT_STYLE } from './Input';
 export { default as SegmentedControl } from './SegmentedControl';
 export { default as ChangeBadge } from './ChangeBadge';
 export { default as ListRow } from './ListRow';

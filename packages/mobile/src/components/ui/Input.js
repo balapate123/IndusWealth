@@ -37,6 +37,16 @@ const makeStyles = (t) => StyleSheet.create({
     error: { marginTop: 5 },
 });
 
+/**
+ * Preset for one-time codes: large, centred, evenly tracked. Pass as `inputStyle`
+ * together with a taller `style` height.
+ */
+export const CODE_INPUT_STYLE = {
+    ...TYPE.H1,
+    textAlign: 'center',
+    letterSpacing: 8,
+};
+
 const Input = ({
     label,
     error,
@@ -46,6 +56,7 @@ const Input = ({
     onClear,
     value,
     style,
+    inputStyle,
     onFocus,
     onBlur,
     ...rest
@@ -63,7 +74,7 @@ const Input = ({
                 {icon ? <Ionicons name={icon} size={18} color={theme.TEXT_MUTED} /> : null}
 
                 <TextInput
-                    style={[styles.input, multiline && { textAlignVertical: 'top', height: '100%' }]}
+                    style={[styles.input, multiline && { textAlignVertical: 'top', height: '100%' }, inputStyle]}
                     placeholderTextColor={theme.TEXT_MUTED}
                     secureTextEntry={hidden}
                     multiline={multiline}
