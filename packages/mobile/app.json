@@ -6,7 +6,7 @@
     "scheme": "induswealth",
     "orientation": "portrait",
     "icon": "./assets/indus-icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/indus-icon.png",
