@@ -1,32 +1,57 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    FlatList,
-    TouchableOpacity,
-    ActivityIndicator,
-    RefreshControl,
-    Platform,
-    ScrollView,
-} from 'react-native';
+import { View, StyleSheet, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { RADIUS, SPACING, categoryColor } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import {
+    Screen,
+    ScreenHeader,
+    Text,
+    Chip,
+    ChipRow,
+    EmptyState,
+    LoadingState,
+} from '../components/ui';
 import api from '../services/api';
 import ArticleCard from '../components/ArticleCard';
 
-// Category configuration
+// Slots match ArticleCard's CATEGORY_SLOTS so a category is the same colour on
+// the filter chip and on the cards it filters to.
 const CATEGORY_TABS = [
-    { id: 'all', label: 'All', icon: 'grid-outline' },
-    { id: 'budgeting', label: 'Budgeting', icon: 'calculator-outline', color: '#3B82F6' },
-    { id: 'investing', label: 'Investing', icon: 'trending-up-outline', color: '#10B981' },
-    { id: 'debt', label: 'Debt', icon: 'card-outline', color: '#F59E0B' },
-    { id: 'taxes', label: 'Taxes', icon: 'receipt-outline', color: '#8B5CF6' },
-    { id: 'savings', label: 'Savings', icon: 'wallet-outline', color: '#06B6D4' },
-    { id: 'bookmarks', label: 'Saved', icon: 'bookmark', color: COLORS.GOLD },
+    { id: 'all', label: 'All', icon: 'grid-outline', slot: null },
+    { id: 'budgeting', label: 'Budgeting', icon: 'calculator-outline', slot: 2 },
+    { id: 'investing', label: 'Investing', icon: 'trending-up-outline', slot: 5 },
+    { id: 'debt', label: 'Debt', icon: 'card-outline', slot: 1 },
+    { id: 'taxes', label: 'Taxes', icon: 'receipt-outline', slot: 4 },
+    { id: 'savings', label: 'Savings', icon: 'wallet-outline', slot: 0 },
+    { id: 'bookmarks', label: 'Saved', icon: 'bookmark', slot: null },
 ];
 
+const makeStyles = (t) => StyleSheet.create({
+    listContent: {
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingBottom: 120,
+    },
+    loadingMore: {
+        paddingVertical: SPACING.MEDIUM,
+        alignItems: 'center',
+    },
+    disclaimer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 6,
+        marginTop: SPACING.MEDIUM,
+        padding: SPACING.MEDIUM - 4,
+        backgroundColor: t.SURFACE_SUNKEN,
+        borderRadius: RADIUS.SMALL,
+    },
+    centered: { flex: 1, justifyContent: 'center' },
+});
+
 const WealthAcademyScreen = ({ navigation }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     const [articles, setArticles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -44,12 +69,9 @@ const WealthAcademyScreen = ({ navigation }) => {
                 setLoading(true);
             }
 
-            let response;
-            if (category === 'bookmarks') {
-                response = await api.getArticleBookmarks(pageNum);
-            } else {
-                response = await api.getEducationalArticles(category === 'all' ? null : category, pageNum);
-            }
+            const response = category === 'bookmarks'
+                ? await api.getArticleBookmarks(pageNum)
+                : await api.getEducationalArticles(category === 'all' ? null : category, pageNum);
 
             if (response.success && response.data) {
                 const newArticles = response.data.articles || [];
@@ -58,7 +80,7 @@ const WealthAcademyScreen = ({ navigation }) => {
                 if (pageNum === 1) {
                     setArticles(newArticles);
                 } else {
-                    setArticles(prev => [...prev, ...newArticles]);
+                    setArticles((prev) => [...prev, ...newArticles]);
                 }
 
                 setHasMore(pagination && pagination.page < pagination.totalPages);
@@ -115,329 +137,117 @@ const WealthAcademyScreen = ({ navigation }) => {
                 await api.removeArticleBookmark(articleId);
             }
 
-            // Update local state
-            setArticles(prev =>
-                prev.map(article =>
-                    article.id === articleId
-                        ? { ...article, isBookmarked: shouldBookmark }
-                        : article
-                ).filter(article => {
-                    // If on bookmarks tab and unbookmarked, remove from list
-                    if (selectedCategory === 'bookmarks' && article.id === articleId && !shouldBookmark) {
-                        return false;
-                    }
-                    return true;
-                })
+            setArticles((prev) =>
+                prev
+                    .map((article) =>
+                        article.id === articleId ? { ...article, isBookmarked: shouldBookmark } : article
+                    )
+                    .filter((article) => {
+                        // If on bookmarks tab and unbookmarked, remove from list
+                        if (selectedCategory === 'bookmarks' && article.id === articleId && !shouldBookmark) {
+                            return false;
+                        }
+                        return true;
+                    })
             );
         } catch (err) {
             console.error('Failed to update bookmark:', err);
         }
     };
 
-    const renderCategoryTab = (category) => {
-        const isSelected = selectedCategory === category.id;
-
-        return (
-            <TouchableOpacity
-                key={category.id}
-                style={[
-                    styles.categoryTab,
-                    isSelected && styles.categoryTabSelected,
-                    isSelected && category.color && { borderColor: category.color }
-                ]}
-                onPress={() => handleCategoryChange(category.id)}
-                activeOpacity={0.7}
-            >
-                <Ionicons
-                    name={category.icon}
-                    size={16}
-                    color={isSelected ? (category.color || COLORS.GOLD) : COLORS.TEXT_SECONDARY}
-                />
-                <Text style={[
-                    styles.categoryTabText,
-                    isSelected && styles.categoryTabTextSelected,
-                    isSelected && category.color && { color: category.color }
-                ]}>
-                    {category.label}
-                </Text>
-            </TouchableOpacity>
-        );
-    };
-
-    const renderArticle = ({ item }) => (
-        <ArticleCard
-            article={item}
-            variant="vertical"
-            onPress={handleArticlePress}
-            onBookmark={handleBookmark}
-        />
+    const header = (
+        <>
+            <ScreenHeader title="Wealth Academy" onBack={() => navigation.goBack()} />
+            <ChipRow style={{ marginBottom: SPACING.MEDIUM }}>
+                {CATEGORY_TABS.map((tab) => (
+                    <Chip
+                        key={tab.id}
+                        label={tab.label}
+                        icon={tab.icon}
+                        color={tab.slot == null ? undefined : categoryColor(theme, tab.slot)}
+                        active={selectedCategory === tab.id}
+                        onPress={() => handleCategoryChange(tab.id)}
+                    />
+                ))}
+            </ChipRow>
+        </>
     );
-
-    const renderFooter = () => {
-        return (
-            <>
-                {loadingMore && (
-                    <View style={styles.loadingMore}>
-                        <ActivityIndicator size="small" color={COLORS.GOLD} />
-                    </View>
-                )}
-                <View style={styles.disclaimerBanner}>
-                    <Ionicons name="information-circle-outline" size={14} color="#888" />
-                    <Text style={styles.disclaimerText}>
-                        Articles are for educational purposes only and do not constitute financial, investment, legal, or tax advice. Consult a qualified professional before making financial decisions.
-                    </Text>
-                </View>
-            </>
-        );
-    };
-
-    const renderEmpty = () => {
-        if (loading) return null;
-
-        return (
-            <View style={styles.emptyContainer}>
-                <Ionicons
-                    name={selectedCategory === 'bookmarks' ? 'bookmark-outline' : 'book-outline'}
-                    size={64}
-                    color={COLORS.GOLD}
-                    style={{ opacity: 0.5 }}
-                />
-                <Text style={styles.emptyTitle}>
-                    {selectedCategory === 'bookmarks' ? 'No saved articles' : 'No articles found'}
-                </Text>
-                <Text style={styles.emptyText}>
-                    {selectedCategory === 'bookmarks'
-                        ? 'Save articles to read them later'
-                        : 'Check back soon for new content'}
-                </Text>
-            </View>
-        );
-    };
 
     if (error) {
         return (
-            <View style={styles.container}>
-                <View style={styles.header}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => navigation.goBack()}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Wealth Academy</Text>
-                    <View style={styles.headerSpacer} />
+            <Screen header={header}>
+                <View style={styles.centered}>
+                    <EmptyState
+                        icon="cloud-offline-outline"
+                        title="Couldn't load articles"
+                        message={error}
+                        actionLabel="Retry"
+                        onAction={() => loadArticles(selectedCategory, 1)}
+                    />
                 </View>
-                <View style={styles.errorContainer}>
-                    <Ionicons name="alert-circle-outline" size={64} color={COLORS.RED} />
-                    <Text style={styles.errorText}>{error}</Text>
-                    <TouchableOpacity
-                        style={styles.retryButton}
-                        onPress={() => loadArticles(selectedCategory, 1)}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={styles.retryButtonText}>Retry</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+            </Screen>
         );
     }
 
     return (
-        <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                    activeOpacity={0.7}
-                >
-                    <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Wealth Academy</Text>
-                <View style={styles.headerSpacer} />
-            </View>
-
-            {/* Category Tabs */}
-            <View style={styles.categoryContainer}>
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.categoryScroll}
-                >
-                    {CATEGORY_TABS.map(renderCategoryTab)}
-                </ScrollView>
-            </View>
-
-            {/* Articles List */}
+        <Screen header={header}>
             {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={COLORS.GOLD} />
-                    <Text style={styles.loadingText}>Loading articles...</Text>
-                </View>
+                <LoadingState message="Loading articles..." />
             ) : (
                 <FlatList
                     data={articles}
-                    renderItem={renderArticle}
+                    renderItem={({ item }) => (
+                        <ArticleCard
+                            article={item}
+                            variant="vertical"
+                            onPress={handleArticlePress}
+                            onBookmark={handleBookmark}
+                        />
+                    )}
                     keyExtractor={(item) => item.id.toString()}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
+                    onEndReached={handleLoadMore}
+                    onEndReachedThreshold={0.5}
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
                             onRefresh={handleRefresh}
-                            tintColor={COLORS.GOLD}
-                            colors={[COLORS.GOLD]}
+                            tintColor={theme.ACCENT}
+                            colors={[theme.ACCENT]}
+                            progressBackgroundColor={theme.SURFACE}
                         />
                     }
-                    onEndReached={handleLoadMore}
-                    onEndReachedThreshold={0.5}
-                    ListFooterComponent={renderFooter}
-                    ListEmptyComponent={renderEmpty}
+                    ListEmptyComponent={
+                        <EmptyState
+                            icon={selectedCategory === 'bookmarks' ? 'bookmark-outline' : 'book-outline'}
+                            title={selectedCategory === 'bookmarks' ? 'No saved articles' : 'No articles found'}
+                            message={selectedCategory === 'bookmarks'
+                                ? 'Save articles to read them later.'
+                                : 'Check back soon for new content.'}
+                        />
+                    }
+                    ListFooterComponent={
+                        <>
+                            {loadingMore && (
+                                <View style={styles.loadingMore}>
+                                    <ActivityIndicator size="small" color={theme.ACCENT} />
+                                </View>
+                            )}
+                            <View style={styles.disclaimer}>
+                                <Ionicons name="information-circle-outline" size={14} color={theme.TEXT_MUTED} />
+                                <Text variant="meta" tone="muted" style={{ flex: 1 }}>
+                                    Articles are for educational purposes only and do not constitute
+                                    financial, investment, legal, or tax advice. Consult a qualified
+                                    professional before making financial decisions.
+                                </Text>
+                            </View>
+                        </>
+                    }
                 />
             )}
-        </View>
+        </Screen>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: Platform.OS === 'ios' ? 60 : 40,
-        paddingHorizontal: SPACING.LARGE,
-        paddingBottom: SPACING.MEDIUM,
-    },
-    backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(201, 162, 39, 0.1)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: COLORS.WHITE,
-    },
-    headerSpacer: {
-        width: 40,
-    },
-    categoryContainer: {
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.CARD_BORDER,
-    },
-    categoryScroll: {
-        paddingHorizontal: SPACING.LARGE,
-        paddingVertical: SPACING.MEDIUM,
-        gap: SPACING.SMALL,
-    },
-    categoryTab: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingVertical: SPACING.SMALL,
-        borderRadius: BORDER_RADIUS.ROUND,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-        marginRight: SPACING.SMALL,
-        gap: SPACING.TINY,
-    },
-    categoryTabSelected: {
-        backgroundColor: 'rgba(201, 162, 39, 0.15)',
-        borderColor: COLORS.GOLD,
-    },
-    categoryTabText: {
-        fontSize: 13,
-        color: COLORS.TEXT_SECONDARY,
-        fontWeight: '500',
-    },
-    categoryTabTextSelected: {
-        color: COLORS.GOLD,
-        fontWeight: '600',
-    },
-    listContent: {
-        padding: SPACING.LARGE,
-        paddingBottom: 100,
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: SPACING.MEDIUM,
-    },
-    loadingText: {
-        fontSize: 16,
-        color: COLORS.WHITE,
-    },
-    loadingMore: {
-        paddingVertical: SPACING.LARGE,
-        alignItems: 'center',
-    },
-    disclaimerBanner: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        gap: 6,
-        margin: SPACING.LARGE,
-        padding: SPACING.SMALL,
-        backgroundColor: 'rgba(255,255,255,0.04)',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
-    },
-    disclaimerText: {
-        flex: 1,
-        fontSize: 11,
-        color: '#888',
-        lineHeight: 16,
-    },
-    errorContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.LARGE,
-        gap: SPACING.MEDIUM,
-    },
-    errorText: {
-        fontSize: 16,
-        color: COLORS.WHITE,
-        textAlign: 'center',
-    },
-    retryButton: {
-        backgroundColor: COLORS.GOLD,
-        paddingHorizontal: SPACING.LARGE,
-        paddingVertical: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        marginTop: SPACING.SMALL,
-    },
-    retryButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.BACKGROUND,
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: SPACING.XL * 2,
-        gap: SPACING.MEDIUM,
-    },
-    emptyTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: COLORS.WHITE,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: COLORS.TEXT_SECONDARY,
-        textAlign: 'center',
-        maxWidth: '80%',
-    },
-});
 
 export default WealthAcademyScreen;
