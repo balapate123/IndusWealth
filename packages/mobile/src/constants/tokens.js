@@ -123,6 +123,11 @@ const obsidian = {
     CARD_BORDER: 'transparent',
     CARD_BORDER_WIDTH: 0,
     SCRIM: 'rgba(0,0,0,0.75)',
+    // A chip sitting on top of arbitrary photography. Fixed in BOTH themes:
+    // the ground is always dark, so the text on it must always be light —
+    // using TEXT_PRIMARY here puts near-black text on a dark badge in Ledger.
+    OVERLAY_BG: 'rgba(0,0,0,0.62)',
+    TEXT_ON_OVERLAY: '#FFFFFF',
 
     // Text
     TEXT_PRIMARY: '#FFFFFF',
@@ -183,6 +188,8 @@ const ledger = {
     CARD_BORDER: 'rgba(23,21,15,0.10)',
     CARD_BORDER_WIDTH: 1,
     SCRIM: 'rgba(23,21,15,0.45)',
+    OVERLAY_BG: 'rgba(0,0,0,0.62)',
+    TEXT_ON_OVERLAY: '#FFFFFF',
 
     TEXT_PRIMARY: '#17150F',
     TEXT_SECONDARY: '#5F5B51',

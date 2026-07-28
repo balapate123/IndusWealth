@@ -584,7 +584,10 @@ const DebtAttackScreen = () => {
             />
 
             <Overline inset={false}>Debt type</Overline>
-            <ChipRow style={{ paddingHorizontal: 0, marginBottom: SPACING.MEDIUM }}>
+            <ChipRow
+                style={{ marginBottom: SPACING.MEDIUM }}
+                contentContainerStyle={{ paddingHorizontal: 0 }}
+            >
                 {DEBT_TYPES.map((type) => (
                     <Chip
                         key={type.key}

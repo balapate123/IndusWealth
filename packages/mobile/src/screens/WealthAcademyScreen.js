@@ -28,6 +28,9 @@ const CATEGORY_TABS = [
 ];
 
 const makeStyles = (t) => StyleSheet.create({
+    // Without flex:1 the list expands to its content height and squeezes the
+    // header's chip row above it.
+    list: { flex: 1 },
     listContent: {
         paddingHorizontal: SPACING.MEDIUM,
         paddingBottom: 120,
@@ -205,6 +208,7 @@ const WealthAcademyScreen = ({ navigation }) => {
                         />
                     )}
                     keyExtractor={(item) => item.id.toString()}
+                    style={styles.list}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
                     onEndReached={handleLoadMore}

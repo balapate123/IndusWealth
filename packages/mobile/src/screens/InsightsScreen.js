@@ -350,7 +350,7 @@ const InsightsScreen = ({ navigation, route }) => {
             <FinancialHealthScore healthScore={healthScore} />
 
             {insights.length > 0 && (
-                <ChipRow style={styles.tabs}>
+                <ChipRow style={{ marginBottom: SPACING.MEDIUM }} contentContainerStyle={styles.tabs}>
                     {TABS.map((tab) => {
                         const count = priorityCounts[tab.key];
                         return (

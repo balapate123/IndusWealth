@@ -23,9 +23,17 @@ const makeStyles = (t) => StyleSheet.create({
         borderColor: 'transparent',
         gap: 5,
     },
+    // A horizontal ScrollView still takes part in its parent's column layout,
+    // so beside a flex:1 list it gets shrunk and the chips are clipped in half.
+    // Pinning grow/shrink keeps the row at its natural height everywhere.
+    rowOuter: {
+        flexGrow: 0,
+        flexShrink: 0,
+    },
     row: {
         paddingHorizontal: SPACING.MEDIUM,
         gap: SPACING.SMALL,
+        alignItems: 'center',
     },
 });
 
@@ -56,13 +64,19 @@ export const Chip = ({ label, icon, active = false, color, onPress, style }) => 
     );
 };
 
-export const ChipRow = ({ children, style }) => {
+/**
+ * `style` lands on the ScrollView itself, which is where margins belong.
+ * Padding and gap belong to the content — override those via
+ * `contentContainerStyle`.
+ */
+export const ChipRow = ({ children, style, contentContainerStyle }) => {
     const styles = useThemedStyles(makeStyles);
     return (
         <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={[styles.row, style]}
+            style={[styles.rowOuter, style]}
+            contentContainerStyle={[styles.row, contentContainerStyle]}
         >
             {children}
         </ScrollView>

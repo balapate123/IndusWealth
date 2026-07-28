@@ -36,6 +36,9 @@ const makeStyles = (t) => StyleSheet.create({
         backgroundColor: t.SURFACE_SUNKEN,
         borderRadius: RADIUS.SMALL,
     },
+    // Without flex:1 the list expands to its content height and squeezes the
+    // header's chip row above it.
+    list: { flex: 1 },
     listContent: { paddingBottom: 120 },
     highlighted: {
         borderWidth: 2,
@@ -178,6 +181,7 @@ const ETFListScreen = ({ navigation, route }) => {
                     data={etfs}
                     keyExtractor={(item) => item.ticker}
                     renderItem={renderETFCard}
+                    style={styles.list}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={

@@ -56,12 +56,12 @@ const makeStyles = (t) => StyleSheet.create({
         paddingVertical: 4,
         borderRadius: 4,
     },
-    // Sits over an arbitrary photo, so it needs its own opaque ground rather
-    // than a translucent tint of the surface.
+    // Sits over an arbitrary photo, so it needs its own dark ground and light
+    // text in both themes — not the surface tint, and not TEXT_PRIMARY.
     readTimeBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: t.SCRIM,
+        backgroundColor: t.OVERLAY_BG,
         paddingHorizontal: 6,
         paddingVertical: 4,
         borderRadius: 4,
@@ -155,8 +155,10 @@ const ArticleCard = ({ article, variant = 'horizontal', onPress, onBookmark }) =
                         </Text>
                     </View>
                     <View style={styles.readTimeBadge}>
-                        <Ionicons name="time-outline" size={10} color={theme.TEXT_PRIMARY} />
-                        <Text variant="meta">{read_time_minutes || 5} min</Text>
+                        <Ionicons name="time-outline" size={10} color={theme.TEXT_ON_OVERLAY} />
+                        <Text variant="meta" color={theme.TEXT_ON_OVERLAY}>
+                            {read_time_minutes || 5} min
+                        </Text>
                     </View>
                 </View>
             </View>
