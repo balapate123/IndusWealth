@@ -130,6 +130,9 @@ const obsidian = {
     TEXT_MUTED: '#71717A',
     TEXT_DISABLED: '#52525B',
     TEXT_ON_ACCENT: '#000000',
+    // Text sitting ON a category colour. The two ramps sit on opposite sides of
+    // mid-lightness, so this flips between modes.
+    TEXT_ON_CATEGORY: '#000000',
 
     // Accent — the only gold in the app. Appears on interactive things only.
     ACCENT: GOLD,
@@ -186,6 +189,7 @@ const ledger = {
     TEXT_MUTED: '#8B867A',
     TEXT_DISABLED: '#AEA99B',
     TEXT_ON_ACCENT: '#1A1505',
+    TEXT_ON_CATEGORY: '#FFFFFF',
 
     // Gold survives as a fill, but as *text* on white it fails contrast, so links
     // and accent text use a darkened step.
