@@ -22,11 +22,15 @@ import {
 import { getCategoryMeta } from '../utils/categorization';
 import api from '../services/api';
 
+// `365` was labelled YTD, which it never was — the backend windows back that
+// many days from today, so in July it covered the previous August onward, not
+// January. Labelled for what it actually is.
 const TIME_PERIODS = [
     { label: '7D', value: 7 },
     { label: '30D', value: 30 },
     { label: '90D', value: 90 },
-    { label: 'YTD', value: 365 },
+    { label: '1Y', value: 365 },
+    { label: '2Y', value: 730 },
 ];
 
 const formatCurrency = (amount) => {
@@ -657,10 +661,19 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                 try {
                     await api.getTransactions('?refresh=true&limit=100');
                 } catch (syncErr) {
-                    console.warn(
-                        'Transaction sync skipped during refresh:',
-                        syncErr?.parsedError?.message || syncErr?.message
-                    );
+                    // Refusing a refresh inside the 10-minute cooldown is the
+                    // backend working as designed, not a failure. It was being
+                    // logged at warn level, which in a dev build looks exactly
+                    // like a crash — and because this is a device-side console
+                    // call it never reaches the server logs, so there was
+                    // nothing to reconcile it against.
+                    const code = syncErr?.responseData?.code;
+                    if (code !== 'REFRESH_COOLDOWN') {
+                        console.warn(
+                            'Transaction sync skipped during refresh:',
+                            code || syncErr?.parsedError?.message || syncErr?.message
+                        );
+                    }
                 }
             }
             const response = await api.getCategoryAnalytics(selectedPeriod);

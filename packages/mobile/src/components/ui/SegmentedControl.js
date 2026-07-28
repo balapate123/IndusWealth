@@ -5,7 +5,7 @@ import { useThemedStyles } from '../../theme/ThemeProvider';
 import Text from './Text';
 
 /**
- * The period toggle (7D / 30D / 90D / YTD) and anything shaped like it.
+ * The period toggle (7D / 30D / 90D / 1Y / 2Y) and anything shaped like it.
  * `options` is [{ label, value }]; comparison is by `value`.
  */
 

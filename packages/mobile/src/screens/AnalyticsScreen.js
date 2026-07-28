@@ -37,7 +37,10 @@ const TIME_PERIODS = [
     { label: '7D', value: 7 },
     { label: '30D', value: 30 },
     { label: '90D', value: 90 },
-    { label: 'YTD', value: 365 },
+    // Was labelled YTD, which it never was — the backend windows back this many
+    // days from today, not to January 1st.
+    { label: '1Y', value: 365 },
+    { label: '2Y', value: 730 },
 ];
 
 const MAX_BAR_SEGMENTS = 8;

@@ -22,10 +22,16 @@ import api from '../services/api';
 import cache from '../services/cache';
 import { categorizeTransaction } from '../utils/categorization';
 
+// Reaches as deep as Plaid is asked for at link time. Anything longer than the
+// history a given connection actually holds simply returns fewer rows.
+// `label` is what fits in the control; `full` is what reads in a sentence
+// ("in the last 30 days"). Five options make the long labels overflow.
 const RANGES = [
-    { value: 7, label: '7 days' },
-    { value: 30, label: '30 days' },
-    { value: 90, label: '90 days' },
+    { value: 7, label: '7d', full: '7 days' },
+    { value: 30, label: '30d', full: '30 days' },
+    { value: 90, label: '90d', full: '90 days' },
+    { value: 365, label: '1y', full: 'year' },
+    { value: 730, label: '2y', full: '2 years' },
 ];
 const DEFAULT_RANGE = 30;
 const PAGE_SIZE = 100;
@@ -312,7 +318,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
         ? accounts.find((a) => a.id === selectedTransaction.account_id)
         : null;
 
-    const rangeLabel = RANGES.find((r) => r.value === range)?.label ?? `${range} days`;
+    const rangeLabel = RANGES.find((r) => r.value === range)?.full ?? `${range} days`;
 
     const activeFlag = flagState.flags.find((f) => f.id === flagFilter);
     const totalsLabel = activeFlag

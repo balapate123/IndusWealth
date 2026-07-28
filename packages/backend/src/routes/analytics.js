@@ -10,6 +10,25 @@ const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse, getPlaidStatusF
 
 const logger = createLogger('ANALYTICS');
 
+/** Matches the deepest history Plaid is asked for at link time. */
+const MAX_PERIOD_DAYS = 730;
+const DEFAULT_PERIOD_DAYS = 30;
+
+/**
+ * Parse ?period= into a bounded day count.
+ *
+ * The upper bound is the point: `period` used to be a bare parseInt, and one of
+ * the consumers builds a day-by-day array by looping `periodDays` times. A
+ * request for period=99999999 therefore span a hundred million iterations and
+ * took the process with it. NaN fell through to an Invalid Date for the same
+ * reason.
+ */
+const clampPeriod = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed)) return DEFAULT_PERIOD_DAYS;
+    return Math.min(Math.max(parsed, 1), MAX_PERIOD_DAYS);
+};
+
 // Intent categories mapping
 const INTENT_CATEGORIES = {
     fixedNeeds: ['Payments', 'Fees & Charges', 'Transfers', 'Health & Pharmacy'],
@@ -179,7 +198,7 @@ const generateWealthNarrative = (accounts, netCashFlow, periodDays) => {
 // Returns analytics data for charts and insights
 router.get('/', authenticateToken, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
-    const period = req.query.period || '30';
+    const period = clampPeriod(req.query.period);
     logger.info('Fetching analytics', { ...ctx, period });
 
     try {
@@ -230,7 +249,7 @@ router.get('/', authenticateToken, async (req, res, next) => {
         ]);
 
         // Filter transactions by period
-        const periodDays = parseInt(period);
+        const periodDays = period;
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - periodDays);
 
@@ -422,7 +441,7 @@ router.get('/', authenticateToken, async (req, res, next) => {
         });
 
         successResponse(res, {
-            period: parseInt(period),
+            period,
             summary: {
                 liquidCash,
                 totalSpending,
@@ -920,7 +939,7 @@ const computeCategoryAnalytics = async (userId, periodDays) => {
 // merchants, day-of-week patterns, size distribution, and rule-based insights.
 router.get('/categories', authenticateToken, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
-    const periodDays = Math.max(parseInt(req.query.period) || 30, 1);
+    const periodDays = clampPeriod(req.query.period);
     logger.info('Fetching category analytics', { ...ctx, period: periodDays });
 
     try {
@@ -953,7 +972,7 @@ router.get('/categories', authenticateToken, async (req, res, next) => {
 // insights from /categories.
 router.get('/categories/insights', authenticateToken, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
-    const periodDays = Math.max(parseInt(req.query.period) || 30, 1);
+    const periodDays = clampPeriod(req.query.period);
     const forceRefresh = req.query.refresh === 'true';
     const cacheHours = parseInt(process.env.INSIGHTS_CACHE_HOURS) || 6;
     logger.info('Fetching AI category insights', { ...ctx, period: periodDays, forceRefresh });
