@@ -28,6 +28,14 @@ export const getApiTarget = () => ({
 let cachedToken = null;
 let cachedRefreshToken = null;
 
+/**
+ * Called when a 401 could not be recovered by refreshing. Registered by the
+ * navigator so an expired session returns to sign-in rather than leaving the
+ * user on a screen whose every request will now fail.
+ */
+let sessionExpiredHandler = null;
+export const setSessionExpiredHandler = (fn) => { sessionExpiredHandler = fn; };
+
 // Mutex to prevent concurrent refresh calls
 let refreshPromise = null;
 
@@ -289,9 +297,13 @@ const apiRequest = async (endpoint, options = {}, _isRetry = false) => {
                 return apiRequest(endpoint, options, true);
             }
 
-            // Refresh failed — clear tokens
+            // Refresh failed — clear tokens and hand control back to sign-in.
+            // Without this the tokens are gone but the user stays on an
+            // authenticated screen, where every subsequent request also 401s.
             await clearToken();
             await cache.clearUserCache();
+            global.CURRENT_USER_ID = undefined;
+            sessionExpiredHandler?.();
 
             const parsedError = parseApiError(new Error('Unauthorized'), responseData);
             const error = new Error(parsedError.message);

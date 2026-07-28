@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { setSessionExpiredHandler } from '../services/api';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
@@ -33,6 +34,9 @@ import cache from '../services/cache';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
+
+// Lets api.js send an expired session back to sign-in from outside React.
+const navigationRef = createNavigationContainerRef();
 
 const TabBarIcon = ({ focused, name }) => {
     const theme = useTheme();
@@ -181,6 +185,18 @@ const AppNavigator = () => {
         checkSession();
     }, []);
 
+    // A 401 that can't be refreshed means the tokens are already gone; send the
+    // user to sign-in rather than leaving them on a screen that can't load.
+    useEffect(() => {
+        setSessionExpiredHandler(() => {
+            setUser(null);
+            if (navigationRef.isReady()) {
+                navigationRef.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            }
+        });
+        return () => setSessionExpiredHandler(null);
+    }, []);
+
     if (isLoading) {
         return (
             <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -190,7 +206,7 @@ const AppNavigator = () => {
     }
 
     return (
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
             <Stack.Navigator
                 screenOptions={{
                     headerShown: false,
