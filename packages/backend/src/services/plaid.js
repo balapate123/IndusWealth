@@ -1,12 +1,39 @@
 const { Configuration, PlaidApi, PlaidEnvironments } = require('plaid');
 require('dotenv').config();
 
+/**
+ * Credentials are pasted into a dashboard by hand, so they arrive with stray
+ * whitespace, a trailing newline, or wrapping quotes more often than not.
+ * Clean them here: a value like `" "` is truthy, so it sails past a plain
+ * falsy check and Plaid answers with the far less helpful
+ * "client_id must be a properly formatted, non-empty string".
+ */
+const cleanCredential = (value) =>
+    (value || '').trim().replace(/^['"]|['"]$/g, '').trim();
+
+const PLAID_CLIENT_ID = cleanCredential(process.env.PLAID_CLIENT_ID);
+const PLAID_SECRET = cleanCredential(process.env.PLAID_SECRET);
+
+/** Throws with the offending variable named, rather than letting Plaid guess. */
+const assertPlaidCredentials = () => {
+    const missing = [];
+    if (!PLAID_CLIENT_ID) missing.push('PLAID_CLIENT_ID');
+    if (!PLAID_SECRET) missing.push('PLAID_SECRET');
+    if (missing.length) {
+        throw new Error(
+            `Plaid is not configured: ${missing.join(' and ')} ` +
+            `${missing.length > 1 ? 'are' : 'is'} missing or blank on this server ` +
+            `(PLAID_ENV=${process.env.PLAID_ENV || 'sandbox'}).`
+        );
+    }
+};
+
 const configuration = new Configuration({
     basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
     baseOptions: {
         headers: {
-            'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
-            'PLAID-SECRET': process.env.PLAID_SECRET,
+            'PLAID-CLIENT-ID': PLAID_CLIENT_ID,
+            'PLAID-SECRET': PLAID_SECRET,
         },
     },
 });
@@ -15,7 +42,7 @@ const client = new PlaidApi(configuration);
 
 class PlaidService {
     async createLinkToken(userId, platform = 'android') {
-        if (!process.env.PLAID_CLIENT_ID) throw new Error("Missing Plaid Keys");
+        assertPlaidCredentials();
         try {
             console.log('🔧 Creating link token for user:', userId, '| PLAID_ENV:', process.env.PLAID_ENV, '| platform:', platform);
 
@@ -67,7 +94,7 @@ class PlaidService {
      * @param {string} user* @param {string} accessToken - Existing Plaid access token that needs refresh
      */
     async createUpdateLinkToken(userId, accessToken) {
-        if (!process.env.PLAID_CLIENT_ID) throw new Error("Missing Plaid Keys");
+        assertPlaidCredentials();
         if (!accessToken) throw new Error("Access token required for update mode");
 
         try {
