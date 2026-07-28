@@ -1,17 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-    View,
-    StyleSheet,
-    TouchableOpacity,
-    ActivityIndicator,
-    Modal,
-    ScrollView,
-} from 'react-native';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { create, open } from '../services/plaidLink';
-import { RADIUS, SPACING, alpha, categoryColor } from '../constants/tokens';
+import { SPACING, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import {
     Screen,
@@ -20,13 +12,14 @@ import {
     Button,
     Input,
     ChangeBadge,
-    ListRow,
     Chip,
     ChipRow,
     Overline,
     EmptyState,
     LoadingState,
 } from '../components/ui';
+import TransactionRow from '../components/TransactionRow';
+import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import api from '../services/api';
 import cache from '../services/cache';
 import { categorizeTransaction } from '../utils/categorization';
@@ -164,33 +157,7 @@ const makeStyles = (t) => StyleSheet.create({
         marginTop: SPACING.MEDIUM,
     },
 
-    // Accounts
-    accountBadge: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-
     // Transaction rows
-    txLeading: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.SMALL,
-    },
-    accountStrip: {
-        width: 3,
-        height: 32,
-        borderRadius: 2,
-    },
-    txIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
     listCard: {
         paddingHorizontal: SPACING.MEDIUM - 2,
         paddingVertical: 0,
@@ -217,80 +184,11 @@ const makeStyles = (t) => StyleSheet.create({
         backgroundColor: t.HAIRLINE_STRONG,
     },
 
-    // Modal
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: t.SCRIM,
-        justifyContent: 'flex-end',
-    },
-    modalContent: {
-        backgroundColor: t.SURFACE,
-        borderTopLeftRadius: RADIUS.CARD,
-        borderTopRightRadius: RADIUS.CARD,
-        padding: SPACING.MEDIUM,
-        maxHeight: '88%',
-        ...t.ELEVATION.SHEET,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: SPACING.MEDIUM,
-    },
-    detailAmountRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: SPACING.MEDIUM,
-    },
-    detailBadge: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: RADIUS.SMALL,
-    },
-    detailRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: SPACING.MEDIUM,
-        paddingVertical: SPACING.SMALL + 2,
-        borderTopWidth: 1,
-        borderTopColor: t.HAIRLINE,
-    },
-    detailValue: {
-        flex: 1,
-        textAlign: 'right',
-    },
-    accountIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        gap: 6,
-        flex: 1,
-    },
-    accountDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-    },
-    notesSection: {
-        marginTop: SPACING.MEDIUM,
-    },
-    counter: {
-        textAlign: 'right',
-        marginTop: -SPACING.SMALL,
-    },
-    modalActions: {
-        flexDirection: 'row',
-        gap: SPACING.SMALL + 2,
-        marginTop: SPACING.MEDIUM,
-    },
 });
 
 const HomeScreen = ({ navigation }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
-    const insets = useSafeAreaInsets();
 
     const [transactions, setTransactions] = useState([]);
     const [accounts, setAccounts] = useState([]);
@@ -502,32 +400,16 @@ const HomeScreen = ({ navigation }) => {
         }
     };
 
-    const renderTransaction = (item, index) => {
-        const isIncome = item.amount > 0;
-        const tint = categoryColor(theme, item.categoryColorIndex);
-        const IconSet = item.categoryLibrary === 'FontAwesome5' ? FontAwesome5 : Ionicons;
-
-        return (
-            <ListRow
-                key={item.id}
-                divider={index > 0}
-                onPress={() => openTransactionDetails(item)}
-                leading={
-                    <View style={styles.txLeading}>
-                        <View style={[styles.accountStrip, { backgroundColor: getAccountColor(item.account_id) }]} />
-                        <View style={[styles.txIcon, { backgroundColor: alpha(tint, 0.16) }]}>
-                            <IconSet name={item.categoryIcon} size={19} color={tint} />
-                        </View>
-                    </View>
-                }
-                title={item.merchant}
-                subtitle={item.category}
-                value={`${isIncome ? '+' : '−'}${money(item.amount)}`}
-                valueTone={isIncome ? 'success' : 'primary'}
-                meta={item.time}
-            />
-        );
-    };
+    const renderTransaction = (item, index) => (
+        <TransactionRow
+            key={item.id}
+            transaction={item}
+            accountColor={getAccountColor(item.account_id)}
+            meta={item.time}
+            divider={index > 0}
+            onPress={() => openTransactionDetails(item)}
+        />
+    );
 
     const renderTransactionGroup = (title, items, showSeeAll = false) => {
         if (items.length === 0) return null;
@@ -583,7 +465,14 @@ const HomeScreen = ({ navigation }) => {
         </View>
     );
 
+    const selectedAccountName = (() => {
+        if (!selectedTransaction?.account_id) return null;
+        const account = accounts.find((a) => a.id === selectedTransaction.account_id);
+        return account ? (account.alias || account.name) : 'N/A';
+    })();
+
     return (
+        <>
         <Screen
             scroll
             header={header}
@@ -743,138 +632,20 @@ const HomeScreen = ({ navigation }) => {
                 </View>
             )}
 
-            {/* Transaction details */}
-            <Modal
-                visible={showTransactionModal}
-                transparent
-                animationType="slide"
-                // Without these the sheet stops short of the screen edges and the
-                // transaction list behind it stays visible below the buttons.
-                statusBarTranslucent
-                presentationStyle="overFullScreen"
-                onRequestClose={() => setShowTransactionModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={[
-                        styles.modalContent,
-                        // Fill the home-indicator / gesture area with the sheet's own
-                        // surface rather than leaving a gap onto the screen beneath.
-                        { paddingBottom: Math.max(insets.bottom, SPACING.MEDIUM) + SPACING.SMALL },
-                    ]}>
-                        <View style={styles.modalHeader}>
-                            <Text variant="h2">Transaction details</Text>
-                            <TouchableOpacity
-                                style={styles.iconButton}
-                                onPress={() => setShowTransactionModal(false)}
-                                accessibilityRole="button"
-                                accessibilityLabel="Close"
-                            >
-                                <Ionicons name="close" size={22} color={theme.TEXT_PRIMARY} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {selectedTransaction && (
-                            <ScrollView showsVerticalScrollIndicator={false}>
-                                <View style={styles.detailAmountRow}>
-                                    <Text variant="h1" tone={selectedTransaction.amount > 0 ? 'success' : 'primary'}>
-                                        {selectedTransaction.amount > 0 ? '+' : '−'}{money(selectedTransaction.amount)}
-                                    </Text>
-                                    <View style={[
-                                        styles.detailBadge,
-                                        { backgroundColor: selectedTransaction.amount > 0 ? theme.SUCCESS_DIM : theme.SURFACE_HIGH },
-                                    ]}>
-                                        <Text
-                                            variant="label"
-                                            tone={selectedTransaction.amount > 0 ? 'success' : 'secondary'}
-                                        >
-                                            {selectedTransaction.amount > 0 ? 'Income' : 'Expense'}
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.detailRow}>
-                                    <Text variant="body" tone="muted">Merchant</Text>
-                                    <Text variant="bodyMed" style={styles.detailValue} numberOfLines={2}>
-                                        {selectedTransaction.merchant}
-                                    </Text>
-                                </View>
-
-                                <View style={styles.detailRow}>
-                                    <Text variant="body" tone="muted">Category</Text>
-                                    <Text variant="bodyMed" style={styles.detailValue}>{selectedTransaction.category}</Text>
-                                </View>
-
-                                <View style={styles.detailRow}>
-                                    <Text variant="body" tone="muted">Date</Text>
-                                    <Text variant="bodyMed" style={styles.detailValue}>
-                                        {selectedTransaction.rawDate
-                                            ? new Date(`${selectedTransaction.rawDate}T12:00:00`).toLocaleDateString('en-US', {
-                                                year: 'numeric', month: 'long', day: 'numeric',
-                                            })
-                                            : 'N/A'}
-                                    </Text>
-                                </View>
-
-                                {selectedTransaction.account_id && (
-                                    <View style={styles.detailRow}>
-                                        <Text variant="body" tone="muted">Account</Text>
-                                        <View style={styles.accountIndicator}>
-                                            <View style={[
-                                                styles.accountDot,
-                                                { backgroundColor: getAccountColor(selectedTransaction.account_id) },
-                                            ]} />
-                                            <Text variant="bodyMed" numberOfLines={1}>
-                                                {(() => {
-                                                    const account = accounts.find((a) => a.id === selectedTransaction.account_id);
-                                                    return account ? (account.alias || account.name) : 'N/A';
-                                                })()}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                )}
-
-                                <View style={styles.detailRow}>
-                                    <Text variant="body" tone="muted">Transaction ID</Text>
-                                    <Text variant="meta" tone="muted" style={styles.detailValue} numberOfLines={1}>
-                                        {selectedTransaction.id}
-                                    </Text>
-                                </View>
-
-                                <View style={styles.notesSection}>
-                                    <Input
-                                        label="Notes"
-                                        placeholder="Add notes about this transaction..."
-                                        value={editNotes}
-                                        onChangeText={setEditNotes}
-                                        multiline
-                                        maxLength={500}
-                                        editable={!saving}
-                                    />
-                                    <Text variant="meta" tone="muted" style={styles.counter}>
-                                        {editNotes.length}/500
-                                    </Text>
-                                </View>
-                            </ScrollView>
-                        )}
-
-                        <View style={styles.modalActions}>
-                            <Button
-                                title="Done"
-                                variant="secondary"
-                                onPress={() => setShowTransactionModal(false)}
-                                style={{ flex: 1 }}
-                            />
-                            <Button
-                                title="Save"
-                                onPress={handleSaveNotes}
-                                loading={saving}
-                                style={{ flex: 1 }}
-                            />
-                        </View>
-                    </View>
-                </View>
-            </Modal>
         </Screen>
+
+        <TransactionDetailSheet
+            visible={showTransactionModal}
+            transaction={selectedTransaction}
+            accountName={selectedAccountName}
+            accountColor={selectedTransaction ? getAccountColor(selectedTransaction.account_id) : null}
+            notes={editNotes}
+            onChangeNotes={setEditNotes}
+            saving={saving}
+            onSave={handleSaveNotes}
+            onClose={() => setShowTransactionModal(false)}
+        />
+        </>
     );
 };
 

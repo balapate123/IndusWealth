@@ -43,6 +43,8 @@ const Input = ({
     icon,
     secureTextEntry = false,
     multiline = false,
+    onClear,
+    value,
     style,
     onFocus,
     onBlur,
@@ -65,10 +67,22 @@ const Input = ({
                     placeholderTextColor={theme.TEXT_MUTED}
                     secureTextEntry={hidden}
                     multiline={multiline}
+                    value={value}
                     onFocus={(e) => { setFocused(true); onFocus?.(e); }}
                     onBlur={(e) => { setFocused(false); onBlur?.(e); }}
                     {...rest}
                 />
+
+                {onClear && value ? (
+                    <TouchableOpacity
+                        onPress={onClear}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Clear"
+                    >
+                        <Ionicons name="close-circle" size={18} color={theme.TEXT_MUTED} />
+                    </TouchableOpacity>
+                ) : null}
 
                 {secureTextEntry ? (
                     <TouchableOpacity
