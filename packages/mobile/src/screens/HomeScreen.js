@@ -8,6 +8,7 @@ import {
     ScrollView,
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { create, open } from '../services/plaidLink';
 import { RADIUS, SPACING, alpha, categoryColor } from '../constants/tokens';
@@ -227,7 +228,6 @@ const makeStyles = (t) => StyleSheet.create({
         borderTopLeftRadius: RADIUS.CARD,
         borderTopRightRadius: RADIUS.CARD,
         padding: SPACING.MEDIUM,
-        paddingBottom: SPACING.XL,
         maxHeight: '88%',
         ...t.ELEVATION.SHEET,
     },
@@ -290,6 +290,7 @@ const makeStyles = (t) => StyleSheet.create({
 const HomeScreen = ({ navigation }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
+    const insets = useSafeAreaInsets();
 
     const [transactions, setTransactions] = useState([]);
     const [accounts, setAccounts] = useState([]);
@@ -747,10 +748,19 @@ const HomeScreen = ({ navigation }) => {
                 visible={showTransactionModal}
                 transparent
                 animationType="slide"
+                // Without these the sheet stops short of the screen edges and the
+                // transaction list behind it stays visible below the buttons.
+                statusBarTranslucent
+                presentationStyle="overFullScreen"
                 onRequestClose={() => setShowTransactionModal(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                    <View style={[
+                        styles.modalContent,
+                        // Fill the home-indicator / gesture area with the sheet's own
+                        // surface rather than leaving a gap onto the screen beneath.
+                        { paddingBottom: Math.max(insets.bottom, SPACING.MEDIUM) + SPACING.SMALL },
+                    ]}>
                         <View style={styles.modalHeader}>
                             <Text variant="h2">Transaction details</Text>
                             <TouchableOpacity

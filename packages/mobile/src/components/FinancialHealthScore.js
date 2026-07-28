@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { RADIUS, SPACING } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
@@ -101,6 +102,7 @@ const makeStyles = (t) => StyleSheet.create({
 const FinancialHealthScore = ({ healthScore }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
+    const insets = useSafeAreaInsets();
     const [showBreakdown, setShowBreakdown] = useState(false);
 
     if (!healthScore) return null;
@@ -183,10 +185,15 @@ const FinancialHealthScore = ({ healthScore }) => {
                 visible={showBreakdown}
                 transparent
                 animationType="slide"
+                statusBarTranslucent
+                presentationStyle="overFullScreen"
                 onRequestClose={() => setShowBreakdown(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                    <View style={[
+                        styles.modalContent,
+                        { paddingBottom: Math.max(insets.bottom, SPACING.MEDIUM) + SPACING.SMALL },
+                    ]}>
                         <View style={styles.modalHeader}>
                             <Text variant="h2">Financial health breakdown</Text>
                             <TouchableOpacity

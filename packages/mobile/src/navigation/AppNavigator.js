@@ -53,7 +53,12 @@ const TabBarIcon = ({ focused, name }) => {
                 size={22}
                 color={focused ? theme.TEXT_ON_ACCENT : theme.TEXT_MUTED}
             />
-            <UIText variant="meta" tone={focused ? 'onAccent' : 'muted'} style={styles.tabLabel}>
+            <UIText
+                variant="meta"
+                tone={focused ? 'onAccent' : 'muted'}
+                style={styles.tabLabel}
+                numberOfLines={1}
+            >
                 {name}
             </UIText>
         </View>
@@ -300,19 +305,27 @@ const makeStyles = (t) => StyleSheet.create({
     tabItem: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingHorizontal: 10,
+        paddingHorizontal: 8,
         paddingVertical: 6,
         borderRadius: RADIUS.LARGE + 4,
         flexDirection: 'column',
         minHeight: 48,
     },
+    // Horizontal padding must match tabItem exactly. Widening it on activation
+    // squeezed the longest label ("Insights") onto a second line the moment it
+    // was tapped. The fill alone carries the active state; only the vertical
+    // padding grows, which can't reflow text.
     tabItemActive: {
         backgroundColor: t.ACCENT,
-        paddingHorizontal: 14,
         paddingVertical: 8,
     },
+    // 10px rather than the 11px meta default: "Insights" is the longest label and
+    // at 11px it only cleared its slot by ~3pt, which a 360pt-wide phone doesn't
+    // have. Tab labels are the one place a sub-scale size is warranted.
     tabLabel: {
         marginTop: 2,
+        fontSize: 10,
+        lineHeight: 13,
     },
     container: {
         flex: 1,
