@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { RADIUS, SPACING } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import { Text, Button } from './ui';
 import { ERROR_CODES } from '../services/api';
 
 /**
@@ -13,181 +15,95 @@ import { ERROR_CODES } from '../services/api';
  * @param {Function} props.onReconnectBank - Callback for Plaid reconnection
  * @param {Function} props.onDismiss - Callback to dismiss the error
  */
+
+const makeStyles = () => StyleSheet.create({
+    container: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.MEDIUM,
+        padding: SPACING.MEDIUM,
+        borderRadius: RADIUS.MEDIUM,
+        marginHorizontal: SPACING.MEDIUM,
+        marginVertical: SPACING.SMALL,
+    },
+    body: { flex: 1 },
+    hint: { marginTop: 2 },
+    requestId: {
+        marginTop: 4,
+        fontFamily: 'monospace',
+    },
+    actions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+    },
+});
+
+// Each error class maps to one reserved semantic role. Reconnection is the app
+// asking for something rather than reporting a failure, so it reads as accent
+// rather than danger.
+const roleFor = (theme, code) => {
+    switch (code) {
+        case ERROR_CODES.PLAID_REAUTH:
+            return { bg: theme.ACCENT_DIM, fg: theme.ACCENT, icon: 'key-outline' };
+        case ERROR_CODES.VALIDATION:
+            return { bg: theme.WARNING_DIM, fg: theme.WARNING, icon: 'warning-outline' };
+        case ERROR_CODES.NETWORK_ERROR:
+            return { bg: theme.DANGER_DIM, fg: theme.DANGER, icon: 'cloud-offline' };
+        case ERROR_CODES.AUTH_EXPIRED:
+            return { bg: theme.DANGER_DIM, fg: theme.DANGER, icon: 'lock-closed' };
+        default:
+            return { bg: theme.DANGER_DIM, fg: theme.DANGER, icon: 'alert-circle' };
+    }
+};
+
 const ErrorMessage = ({ error, onRetry, onReconnectBank, onDismiss }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     if (!error) return null;
 
-    const getIcon = () => {
-        switch (error.code) {
-            case ERROR_CODES.NETWORK_ERROR:
-                return 'cloud-offline';
-            case ERROR_CODES.PLAID_REAUTH:
-                return 'key-outline';
-            case ERROR_CODES.AUTH_EXPIRED:
-                return 'lock-closed';
-            case ERROR_CODES.VALIDATION:
-                return 'warning-outline';
-            default:
-                return 'alert-circle';
-        }
-    };
-
-    const getBackgroundColor = () => {
-        switch (error.code) {
-            case ERROR_CODES.PLAID_REAUTH:
-                return 'rgba(201, 162, 39, 0.1)'; // Gold tint
-            case ERROR_CODES.VALIDATION:
-                return 'rgba(255, 193, 7, 0.1)'; // Warning yellow
-            default:
-                return 'rgba(244, 67, 54, 0.1)'; // Error red
-        }
-    };
-
-    const getBorderColor = () => {
-        switch (error.code) {
-            case ERROR_CODES.PLAID_REAUTH:
-                return 'rgba(201, 162, 39, 0.3)';
-            case ERROR_CODES.VALIDATION:
-                return 'rgba(255, 193, 7, 0.3)';
-            default:
-                return 'rgba(244, 67, 54, 0.2)';
-        }
-    };
-
-    const getIconColor = () => {
-        switch (error.code) {
-            case ERROR_CODES.PLAID_REAUTH:
-                return COLORS.GOLD;
-            case ERROR_CODES.VALIDATION:
-                return '#FFC107';
-            default:
-                return COLORS.RED;
-        }
-    };
+    const role = roleFor(theme, error.code);
 
     const renderAction = () => {
         if (error.code === ERROR_CODES.PLAID_REAUTH && onReconnectBank) {
-            return (
-                <TouchableOpacity
-                    style={styles.primaryButton}
-                    onPress={onReconnectBank}
-                    activeOpacity={0.7}
-                >
-                    <Text style={styles.primaryButtonText}>Reconnect</Text>
-                </TouchableOpacity>
-            );
+            return <Button title="Reconnect" size="sm" onPress={onReconnectBank} />;
         }
-
         if (error.recoverable && onRetry) {
-            return (
-                <TouchableOpacity
-                    style={styles.retryButton}
-                    onPress={onRetry}
-                    activeOpacity={0.7}
-                >
-                    <Ionicons name="refresh" size={14} color={COLORS.WHITE} />
-                    <Text style={styles.retryText}>Retry</Text>
-                </TouchableOpacity>
-            );
+            return <Button title="Retry" size="sm" variant="secondary" icon="refresh" onPress={onRetry} />;
         }
-
         return null;
     };
 
     return (
-        <View style={[
-            styles.container,
-            { backgroundColor: getBackgroundColor(), borderColor: getBorderColor() }
-        ]}>
-            <View style={styles.iconContainer}>
-                <Ionicons name={getIcon()} size={24} color={getIconColor()} />
-            </View>
-            <View style={styles.textContainer}>
-                <Text style={styles.message}>{error.message}</Text>
+        <View style={[styles.container, { backgroundColor: role.bg }]}>
+            <Ionicons name={role.icon} size={24} color={role.fg} />
+
+            <View style={styles.body}>
+                <Text variant="bodyMed">{error.message}</Text>
                 {error.action && (
-                    <Text style={styles.actionHint}>{error.action}</Text>
+                    <Text variant="meta" tone="secondary" style={styles.hint}>{error.action}</Text>
                 )}
                 {error.requestId && (
-                    <Text style={styles.requestId}>ID: {error.requestId}</Text>
+                    <Text variant="meta" tone="muted" style={styles.requestId}>ID: {error.requestId}</Text>
                 )}
             </View>
-            <View style={styles.actionContainer}>
+
+            <View style={styles.actions}>
                 {renderAction()}
                 {onDismiss && (
                     <TouchableOpacity
-                        style={styles.dismissButton}
                         onPress={onDismiss}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Dismiss"
                     >
-                        <Ionicons name="close" size={18} color={COLORS.TEXT_SECONDARY} />
+                        <Ionicons name="close" size={18} color={theme.TEXT_MUTED} />
                     </TouchableOpacity>
                 )}
             </View>
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        marginHorizontal: SPACING.MEDIUM,
-        marginVertical: SPACING.SMALL,
-        borderWidth: 1,
-    },
-    iconContainer: {
-        marginRight: SPACING.MEDIUM,
-    },
-    textContainer: {
-        flex: 1,
-    },
-    message: {
-        color: COLORS.WHITE,
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    actionHint: {
-        color: COLORS.TEXT_SECONDARY,
-        fontSize: 12,
-        marginTop: 2,
-    },
-    requestId: {
-        color: COLORS.TEXT_MUTED,
-        fontSize: 10,
-        marginTop: 4,
-        fontFamily: 'monospace',
-    },
-    actionContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    primaryButton: {
-        backgroundColor: COLORS.GOLD,
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingVertical: SPACING.SMALL,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-    },
-    primaryButtonText: {
-        color: COLORS.BACKGROUND,
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    retryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.SMALL,
-        paddingVertical: SPACING.TINY,
-    },
-    retryText: {
-        color: COLORS.WHITE,
-        fontSize: 12,
-        marginLeft: 4,
-    },
-    dismissButton: {
-        marginLeft: SPACING.SMALL,
-        padding: SPACING.TINY,
-    },
-});
 
 export default ErrorMessage;

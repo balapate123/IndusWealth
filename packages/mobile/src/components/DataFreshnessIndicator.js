@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { RADIUS, SPACING } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import { Text } from './ui';
 
 /**
  * DataFreshnessIndicator - Shows data freshness status to user
@@ -12,38 +14,61 @@ import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
  * @param {boolean} props.refreshing - Whether refresh is in progress
  * @param {boolean} props.compact - Use compact mode for inline display
  */
+
+const makeStyles = (t) => StyleSheet.create({
+    container: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: t.SURFACE,
+        borderWidth: t.CARD_BORDER_WIDTH,
+        borderColor: t.CARD_BORDER,
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingVertical: SPACING.SMALL,
+        borderRadius: RADIUS.MEDIUM,
+        marginHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.SMALL,
+    },
+    left: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+    },
+    compact: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+});
+
 const DataFreshnessIndicator = ({
     dataFreshness,
     onRefresh,
     refreshing = false,
     compact = false,
 }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     if (!dataFreshness) return null;
 
-    const getStatusColor = () => {
-        if (dataFreshness.plaidStatus === 'login_required') return COLORS.RED;
-        if (dataFreshness.source === 'PLAID_API') return COLORS.GREEN;
-        if (dataFreshness.isCached) return COLORS.TEXT_SECONDARY;
-        return COLORS.TEXT_SECONDARY;
+    // Freshness is a status reading, so it uses the reserved semantic colours
+    // and always ships with an icon and words beside it.
+    const statusColor = () => {
+        if (dataFreshness.plaidStatus === 'login_required') return theme.DANGER;
+        if (dataFreshness.source === 'PLAID_API') return theme.SUCCESS;
+        return theme.TEXT_MUTED;
     };
 
-    const getStatusText = () => {
-        if (dataFreshness.plaidStatus === 'login_required') {
-            return 'Bank reconnection needed';
-        }
-        if (dataFreshness.dataAge) {
-            return `Updated ${dataFreshness.dataAge}`;
-        }
-        if (dataFreshness.source === 'PLAID_API') {
-            return 'Just synced';
-        }
-        if (dataFreshness.source === 'EMPTY') {
-            return 'No data';
-        }
+    const statusText = () => {
+        if (dataFreshness.plaidStatus === 'login_required') return 'Bank reconnection needed';
+        if (dataFreshness.dataAge) return `Updated ${dataFreshness.dataAge}`;
+        if (dataFreshness.source === 'PLAID_API') return 'Just synced';
+        if (dataFreshness.source === 'EMPTY') return 'No data';
         return 'From cache';
     };
 
-    const getIcon = () => {
+    const icon = () => {
         if (dataFreshness.plaidStatus === 'login_required') return 'alert-circle';
         if (dataFreshness.source === 'PLAID_API') return 'cloud-done';
         if (dataFreshness.source === 'EMPTY') return 'cloud-offline-outline';
@@ -52,11 +77,9 @@ const DataFreshnessIndicator = ({
 
     if (compact) {
         return (
-            <View style={styles.compactContainer}>
-                <Ionicons name={getIcon()} size={12} color={getStatusColor()} />
-                <Text style={[styles.compactText, { color: getStatusColor() }]}>
-                    {getStatusText()}
-                </Text>
+            <View style={styles.compact}>
+                <Ionicons name={icon()} size={12} color={statusColor()} />
+                <Text variant="meta" color={statusColor()}>{statusText()}</Text>
             </View>
         );
     }
@@ -68,55 +91,21 @@ const DataFreshnessIndicator = ({
             disabled={refreshing || !onRefresh}
             activeOpacity={0.7}
         >
-            <View style={styles.leftSection}>
+            <View style={styles.left}>
                 {refreshing ? (
-                    <ActivityIndicator size="small" color={COLORS.GOLD} />
+                    <ActivityIndicator size="small" color={theme.ACCENT} />
                 ) : (
-                    <Ionicons name={getIcon()} size={16} color={getStatusColor()} />
+                    <Ionicons name={icon()} size={16} color={statusColor()} />
                 )}
-                <Text style={[styles.statusText, { color: getStatusColor() }]}>
-                    {refreshing ? 'Syncing...' : getStatusText()}
+                <Text variant="meta" color={refreshing ? theme.TEXT_SECONDARY : statusColor()}>
+                    {refreshing ? 'Syncing...' : statusText()}
                 </Text>
             </View>
             {onRefresh && !refreshing && (
-                <Ionicons
-                    name="refresh-outline"
-                    size={16}
-                    color={COLORS.GOLD}
-                />
+                <Ionicons name="refresh-outline" size={16} color={theme.ACCENT} />
             )}
         </TouchableOpacity>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: COLORS.CARD_BG,
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingVertical: SPACING.SMALL,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        marginHorizontal: SPACING.MEDIUM,
-        marginBottom: SPACING.SMALL,
-    },
-    leftSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    statusText: {
-        fontSize: 12,
-        marginLeft: SPACING.SMALL,
-    },
-    compactContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    compactText: {
-        fontSize: 11,
-        marginLeft: 4,
-    },
-});
 
 export default DataFreshnessIndicator;

@@ -1,14 +1,9 @@
 import React from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    StatusBar,
-    TouchableOpacity,
-} from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, FONTS } from '../constants/theme';
+import { SPACING } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import { Screen, ScreenHeader, Card, Text } from '../components/ui';
 
 const PRIVACY_POLICY_SECTIONS = [
     {
@@ -90,125 +85,69 @@ const LegalDocScreen = ({ navigation, route }) => {
     const title = isPrivacy ? 'Privacy Policy' : 'Terms of Service';
     const sections = isPrivacy ? PRIVACY_POLICY_SECTIONS : TERMS_OF_SERVICE_SECTIONS;
 
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={COLORS.WHITE} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>{title}</Text>
-                <View style={{ width: 34 }} />
+        <Screen
+            scroll
+            header={<ScreenHeader title={title} onBack={() => navigation.goBack()} />}
+            contentContainerStyle={styles.content}
+        >
+            <View style={styles.docHeader}>
+                <Ionicons
+                    name={isPrivacy ? 'shield-checkmark' : 'document-text'}
+                    size={40}
+                    color={theme.ACCENT}
+                />
+                <Text variant="h1" tone="accent" style={styles.docTitle}>IndusWealth</Text>
+                <Text variant="title">{title}</Text>
+                <Text variant="meta" tone="muted" style={styles.docVersion}>
+                    Version 1.0 — Effective March 2026
+                </Text>
             </View>
 
-            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-                <View style={styles.docHeader}>
-                    <Ionicons
-                        name={isPrivacy ? 'shield-checkmark' : 'document-text'}
-                        size={40}
-                        color={COLORS.GOLD}
-                    />
-                    <Text style={styles.docTitle}>IndusWealth</Text>
-                    <Text style={styles.docSubtitle}>{title}</Text>
-                    <Text style={styles.docVersion}>Version 1.0 — Effective March 2026</Text>
-                </View>
+            {sections.map((section, index) => (
+                <Card key={index}>
+                    <Text variant="title" tone="accent" style={styles.sectionTitle}>{section.title}</Text>
+                    <Text variant="body" tone="secondary" style={styles.sectionBody}>{section.content}</Text>
+                </Card>
+            ))}
 
-                {sections.map((section, index) => (
-                    <View key={index} style={styles.section}>
-                        <Text style={styles.sectionTitle}>{section.title}</Text>
-                        <Text style={styles.sectionContent}>{section.content}</Text>
-                    </View>
-                ))}
-
-                <View style={styles.footer}>
-                    <Text style={styles.footerText}>
-                        {isPrivacy
-                            ? 'IndusWealth is committed to protecting your privacy in accordance with Canadian law.'
-                            : 'By using IndusWealth, you acknowledge that you have read and agree to these Terms.'}
-                    </Text>
-                </View>
-
-                <View style={{ height: 120 }} />
-            </ScrollView>
-        </View>
+            <View style={styles.footer}>
+                <Text variant="meta" tone="muted" style={styles.footerText}>
+                    {isPrivacy
+                        ? 'IndusWealth is committed to protecting your privacy in accordance with Canadian law.'
+                        : 'By using IndusWealth, you acknowledge that you have read and agree to these Terms.'}
+                </Text>
+            </View>
+        </Screen>
     );
 };
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
-        paddingTop: StatusBar.currentHeight || 50,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.MEDIUM,
-        marginBottom: 10,
-    },
-    backButton: {
-        padding: 5,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontFamily: FONTS.BOLD,
-        color: COLORS.WHITE,
-    },
-    content: {
-        paddingHorizontal: SPACING.MEDIUM,
-    },
+const makeStyles = (t) => StyleSheet.create({
+    content: { paddingBottom: 120 },
     docHeader: {
         alignItems: 'center',
-        paddingVertical: 24,
+        paddingVertical: SPACING.LARGE,
+        marginHorizontal: SPACING.MEDIUM,
         borderBottomWidth: 1,
-        borderBottomColor: COLORS.CARD_BORDER,
-        marginBottom: 24,
+        borderBottomColor: t.HAIRLINE,
+        marginBottom: SPACING.LARGE,
     },
-    docTitle: {
-        fontSize: 22,
-        fontFamily: FONTS.BOLD,
-        color: COLORS.GOLD,
-        marginTop: 12,
-    },
-    docSubtitle: {
-        fontSize: 16,
-        fontFamily: FONTS.MEDIUM,
-        color: COLORS.WHITE,
-        marginTop: 4,
-    },
-    docVersion: {
-        fontSize: 12,
-        color: COLORS.TEXT_SECONDARY,
-        marginTop: 8,
-    },
-    section: {
-        marginBottom: 24,
-        backgroundColor: COLORS.CARD_BG,
-        borderRadius: 16,
-        padding: SPACING.MEDIUM,
-        borderWidth: 1,
-        borderColor: COLORS.CARD_BORDER,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontFamily: FONTS.BOLD,
-        color: COLORS.GOLD,
-        marginBottom: 12,
-    },
-    sectionContent: {
-        fontSize: 14,
-        color: COLORS.TEXT_SECONDARY,
-        lineHeight: 22,
-    },
+    docTitle: { marginTop: 12 },
+    docVersion: { marginTop: SPACING.SMALL },
+    sectionTitle: { marginBottom: 12 },
+    // Legal prose needs looser leading than the 20px body default.
+    sectionBody: { lineHeight: 22 },
     footer: {
         alignItems: 'center',
-        paddingVertical: 24,
+        paddingVertical: SPACING.LARGE,
+        marginHorizontal: SPACING.MEDIUM,
         borderTopWidth: 1,
-        borderTopColor: COLORS.CARD_BORDER,
+        borderTopColor: t.HAIRLINE,
     },
     footerText: {
-        fontSize: 12,
-        color: COLORS.TEXT_MUTED,
         textAlign: 'center',
         fontStyle: 'italic',
     },

@@ -1,19 +1,63 @@
 import React, { useState, useRef } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    ActivityIndicator,
-    Share,
-    Platform,
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Share, Platform, StatusBar } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { SPACING } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import { Text, EmptyState, LoadingState } from '../components/ui';
 import api from '../services/api';
 
+const makeStyles = (t) => StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: t.BG,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + SPACING.SMALL : 60,
+        paddingHorizontal: SPACING.MEDIUM,
+        paddingBottom: SPACING.MEDIUM,
+        borderBottomWidth: 1,
+        borderBottomColor: t.HAIRLINE,
+    },
+    headerButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    titleContainer: {
+        flex: 1,
+        paddingHorizontal: SPACING.SMALL,
+    },
+    title: { textAlign: 'center' },
+    headerActions: { flexDirection: 'row', alignItems: 'center' },
+    // Articles are third-party pages authored for a white ground; forcing the
+    // app surface behind them would show through as a mismatched band.
+    webview: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+    },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: t.BG,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    errorContainer: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+});
+
 const ArticleWebViewScreen = ({ navigation, route }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     const { url, title, articleId } = route.params;
     const webViewRef = useRef(null);
 
@@ -36,7 +80,7 @@ const ArticleWebViewScreen = ({ navigation, route }) => {
             await Share.share({
                 message: `Check out this article: ${title}\n${currentUrl}`,
                 url: currentUrl,
-                title: title,
+                title,
             });
         } catch (err) {
             console.error('Failed to share:', err);
@@ -64,40 +108,27 @@ const ArticleWebViewScreen = ({ navigation, route }) => {
         webViewRef.current?.reload();
     };
 
-    const handleNavigationStateChange = (navState) => {
-        setCanGoBack(navState.canGoBack);
-        setCurrentUrl(navState.url);
-    };
-
-    const handleLoadEnd = () => {
-        setLoading(false);
-    };
-
-    const handleError = () => {
-        setLoading(false);
-        setError(true);
-    };
-
     return (
         <View style={styles.container}>
-            {/* Header */}
+            <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.BG} />
+
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.headerButton}
                     onPress={handleGoBack}
                     activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={canGoBack ? 'Back' : 'Close'}
                 >
                     <Ionicons
                         name={canGoBack ? 'arrow-back' : 'close'}
                         size={24}
-                        color={COLORS.WHITE}
+                        color={theme.TEXT_PRIMARY}
                     />
                 </TouchableOpacity>
 
                 <View style={styles.titleContainer}>
-                    <Text style={styles.title} numberOfLines={1}>
-                        {title}
-                    </Text>
+                    <Text variant="title" style={styles.title} numberOfLines={1}>{title}</Text>
                 </View>
 
                 <View style={styles.headerActions}>
@@ -106,11 +137,13 @@ const ArticleWebViewScreen = ({ navigation, route }) => {
                             style={styles.headerButton}
                             onPress={handleBookmark}
                             activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityLabel={isBookmarked ? 'Remove bookmark' : 'Bookmark article'}
                         >
                             <Ionicons
                                 name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
                                 size={22}
-                                color={isBookmarked ? COLORS.GOLD : COLORS.WHITE}
+                                color={isBookmarked ? theme.ACCENT : theme.TEXT_SECONDARY}
                             />
                         </TouchableOpacity>
                     )}
@@ -119,155 +152,55 @@ const ArticleWebViewScreen = ({ navigation, route }) => {
                         style={styles.headerButton}
                         onPress={handleShare}
                         activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel="Share article"
                     >
-                        <Ionicons
-                            name="share-outline"
-                            size={22}
-                            color={COLORS.WHITE}
-                        />
+                        <Ionicons name="share-outline" size={22} color={theme.TEXT_SECONDARY} />
                     </TouchableOpacity>
                 </View>
             </View>
 
-            {/* Loading Indicator */}
-            {loading && (
+            {loading && !error && (
                 <View style={styles.loadingOverlay}>
-                    <ActivityIndicator size="large" color={COLORS.GOLD} />
-                    <Text style={styles.loadingText}>Loading article...</Text>
+                    <LoadingState message="Loading article..." />
                 </View>
             )}
 
-            {/* Error State */}
             {error ? (
                 <View style={styles.errorContainer}>
-                    <Ionicons name="cloud-offline-outline" size={64} color={COLORS.RED} />
-                    <Text style={styles.errorTitle}>Unable to load article</Text>
-                    <Text style={styles.errorText}>
-                        Please check your internet connection and try again
-                    </Text>
-                    <TouchableOpacity
-                        style={styles.retryButton}
-                        onPress={handleReload}
-                        activeOpacity={0.8}
-                    >
-                        <Ionicons name="refresh" size={18} color={COLORS.BACKGROUND} />
-                        <Text style={styles.retryButtonText}>Retry</Text>
-                    </TouchableOpacity>
+                    <EmptyState
+                        icon="cloud-offline-outline"
+                        title="Unable to load article"
+                        message="Check your internet connection and try again."
+                        actionLabel="Retry"
+                        onAction={handleReload}
+                    />
                 </View>
             ) : (
                 <WebView
                     ref={webViewRef}
                     source={{ uri: url }}
                     style={styles.webview}
-                    onLoadEnd={handleLoadEnd}
-                    onError={handleError}
-                    onNavigationStateChange={handleNavigationStateChange}
-                    startInLoadingState={true}
+                    onLoadEnd={() => setLoading(false)}
+                    onError={() => { setLoading(false); setError(true); }}
+                    onNavigationStateChange={(navState) => {
+                        setCanGoBack(navState.canGoBack);
+                        setCurrentUrl(navState.url);
+                    }}
+                    startInLoadingState
                     renderLoading={() => null}
-                    javaScriptEnabled={true}
-                    domStorageEnabled={true}
-                    allowsInlineMediaPlayback={true}
+                    javaScriptEnabled
+                    domStorageEnabled
+                    allowsInlineMediaPlayback
                     mediaPlaybackRequiresUserAction={false}
-                    scalesPageToFit={true}
-                    showsVerticalScrollIndicator={true}
+                    scalesPageToFit
+                    showsVerticalScrollIndicator
                     showsHorizontalScrollIndicator={false}
                     originWhitelist={['https://*', 'http://*']}
-                    onShouldStartLoadWithRequest={(request) => {
-                        // Allow navigation within the same domain or common external links
-                        return true;
-                    }}
                 />
             )}
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.BACKGROUND,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: Platform.OS === 'ios' ? 60 : 40,
-        paddingHorizontal: SPACING.MEDIUM,
-        paddingBottom: SPACING.MEDIUM,
-        backgroundColor: COLORS.BACKGROUND,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.CARD_BORDER,
-    },
-    headerButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    titleContainer: {
-        flex: 1,
-        paddingHorizontal: SPACING.SMALL,
-    },
-    title: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.WHITE,
-        textAlign: 'center',
-    },
-    headerActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    webview: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
-    },
-    loadingOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: COLORS.BACKGROUND,
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 10,
-        gap: SPACING.MEDIUM,
-    },
-    loadingText: {
-        fontSize: 16,
-        color: COLORS.WHITE,
-    },
-    errorContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.LARGE,
-        gap: SPACING.MEDIUM,
-    },
-    errorTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: COLORS.WHITE,
-    },
-    errorText: {
-        fontSize: 14,
-        color: COLORS.TEXT_SECONDARY,
-        textAlign: 'center',
-        maxWidth: '80%',
-    },
-    retryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.GOLD,
-        paddingHorizontal: SPACING.LARGE,
-        paddingVertical: SPACING.MEDIUM,
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        marginTop: SPACING.SMALL,
-        gap: SPACING.SMALL,
-    },
-    retryButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.BACKGROUND,
-    },
-});
 
 export default ArticleWebViewScreen;
