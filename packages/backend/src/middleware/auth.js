@@ -169,6 +169,15 @@ const authenticateToken = async (req, res, next) => {
             throw new AuthError('User no longer exists', 'USER_NOT_FOUND');
         }
 
+        // Refusing unverified accounts at the login door only stops new sessions.
+        // Signup used to hand out tokens before any code was entered, so accounts
+        // created then still hold valid ones — this is what actually ends them.
+        // The user record is already loaded above, so it costs no extra query.
+        if (!user.email_verified) {
+            logger.warn('Request rejected - email not verified', { ...ctx, userId: decoded.userId });
+            throw new AuthError('Please verify your email address to continue.', 'EMAIL_NOT_VERIFIED');
+        }
+
         // Attach user info to request
         req.user = {
             id: decoded.userId,

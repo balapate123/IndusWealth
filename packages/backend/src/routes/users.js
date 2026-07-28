@@ -74,22 +74,16 @@ router.post('/signup', async (req, res, next) => {
         emailService.sendVerificationEmail(email, name || 'User', verificationCode)
             .catch(err => logger.error('Failed to send verification email', { ...ctx, error: err }));
 
-        // Generate tokens
-        const accessToken = generateAccessToken(user);
-        const { token: refreshToken, hash: refreshHash, familyId } = generateRefreshToken();
+        logger.info('User created successfully — awaiting email verification', { ...ctx, userId: user.id, email });
 
-        // Store refresh token
-        const refreshExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-        await db.storeRefreshToken(refreshHash, user.id, familyId, refreshExpiry, req.ip);
-
-        logger.info('User created successfully', { ...ctx, userId: user.id, email });
-
+        // Deliberately no tokens. Signing up used to return a full session, which
+        // made the verification screen advisory: backing out of it landed in the
+        // app, and the code was never required. A session is minted in exactly
+        // one place for a new account now — POST /users/verify-email.
         res.status(201).json({
             success: true,
-            message: 'Account created successfully. Please verify your email.',
-            token: accessToken, // backward compat
-            accessToken,
-            refreshToken,
+            message: 'Account created. Check your email for a verification code.',
+            requiresVerification: true,
             user: {
                 id: user.id,
                 email: user.email,
@@ -145,6 +139,21 @@ router.post('/login', async (req, res, next) => {
             await recordFailedAttempt(email, req.ip, req.headers['user-agent'], 'INVALID_PASSWORD');
             logger.warn('Login failed - invalid password', { ...ctx, email });
             throw new AuthError('Invalid email or password', 'INVALID_CREDENTIALS');
+        }
+
+        // Block unverified accounts before any session is issued. Checked after
+        // the password so this never tells an attacker whether an address is
+        // registered, and before 2FA because an unverified account cannot have
+        // reached the screen that enrols it.
+        if (!user.email_verified) {
+            logger.warn('Login blocked - email not verified', { ...ctx, userId: user.id, email });
+            return res.json({
+                success: false,
+                code: 'EMAIL_NOT_VERIFIED',
+                message: 'Please verify your email address to continue.',
+                email: user.email,
+                requestId: req.requestId,
+            });
         }
 
         // Check 2FA if enabled
@@ -508,14 +517,23 @@ router.post('/verify-email', async (req, res, next) => {
 
     try {
         const { code } = req.body;
-        if (!code) {
-            throw new ValidationError('Verification code is required', { field: 'code' });
+        const email = req.body.email?.toLowerCase()?.trim();
+
+        if (!email || !code) {
+            throw new ValidationError('Email and verification code are required', {
+                fields: ['email', 'code']
+            });
         }
 
         const codeHash = crypto.createHash('sha256').update(code.toString().trim()).digest('hex');
-        const result = await db.verifyEmail(codeHash);
+        const result = await db.verifyEmail(codeHash, email);
 
         if (!result) {
+            // Guessing is bounded by authLimiter (5 per 15 min per IP). Note this
+            // deliberately does NOT call recordFailedAttempt: that counter is keyed
+            // on the address, so wrong codes would let anyone lock a victim out of
+            // their own login.
+            logger.warn('Email verification failed - bad or expired code', { ...ctx, email });
             throw new AuthError('Invalid or expired verification code', 'INVALID_TOKEN');
         }
 
@@ -523,9 +541,30 @@ router.post('/verify-email', async (req, res, next) => {
         emailService.sendWelcomeEmail(result.email, result.name)
             .catch(err => logger.error('Failed to send welcome email', { ...ctx, error: err }));
 
+        // The one place a newly created account is given a session. Signup no
+        // longer issues tokens, so reaching the app requires the emailed code.
+        const accessToken = generateAccessToken(result);
+        const { token: refreshToken, hash: refreshHash, familyId } = generateRefreshToken();
+        const refreshExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+        await db.storeRefreshToken(refreshHash, result.id, familyId, refreshExpiry, req.ip);
+
         logger.info('Email verified successfully', { ...ctx, userId: result.id });
 
-        successResponse(res, { message: 'Email verified successfully' });
+        res.json({
+            success: true,
+            message: 'Email verified successfully',
+            token: accessToken, // backward compat
+            accessToken,
+            refreshToken,
+            user: {
+                id: result.id,
+                email: result.email,
+                name: result.name,
+                hasPlaidLinked: !!result.plaid_access_token,
+                emailVerified: true,
+            },
+            requestId: req.requestId
+        });
     } catch (error) {
         logger.error('Email verification failed', { ...ctx, error });
         next(error);
@@ -533,37 +572,45 @@ router.post('/verify-email', async (req, res, next) => {
 });
 
 // POST /users/resend-verification
-// Resend email verification code (requires auth)
-router.post('/resend-verification', authenticateToken, async (req, res, next) => {
-    const ctx = { requestId: req.requestId, userId: req.user.id };
-    logger.info('Resend verification email requested', ctx);
+// Resend email verification code (public, rate-limited)
+//
+// Public by necessity: signup no longer returns a session and login refuses one
+// until the address is verified, so anyone who needs a fresh code has no token
+// to present. Guarded the same way forgot-password is — authLimiter plus a
+// response that reveals nothing about whether the account exists.
+router.post('/resend-verification', async (req, res, next) => {
+    const ctx = { requestId: req.requestId };
+    const email = req.body.email?.toLowerCase()?.trim();
+    logger.info('Resend verification email requested', { ...ctx, email });
 
     try {
-        const user = await db.getUserById(req.user.id);
-
-        if (!user) {
-            throw new NotFoundError('User');
+        if (!email) {
+            throw new ValidationError('Email is required', { field: 'email' });
         }
 
-        if (user.email_verified) {
-            throw new ValidationError('Email is already verified');
+        const user = await db.getUserByEmail(email);
+
+        // Send only to a real, still-unverified account; answer identically
+        // either way so this cannot be used to enumerate addresses or to spam
+        // someone who has already verified.
+        if (user && !user.email_verified) {
+            const verificationCode = generateSixDigitCode();
+            const codeHash = crypto.createHash('sha256').update(verificationCode).digest('hex');
+            const codeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+            await db.setEmailVerificationToken(user.id, codeHash, codeExpiry);
+
+            if (!process.env.RESEND_API_KEY) {
+                logger.info(`🔑 DEV MODE — Verification code for ${user.email}: ${verificationCode}`, ctx);
+            }
+            emailService.sendVerificationEmail(user.email, user.name, verificationCode)
+                .catch(err => logger.error('Failed to send verification email', { ...ctx, error: err }));
         }
 
-        // Generate new code
-        const verificationCode = generateSixDigitCode();
-        const codeHash = crypto.createHash('sha256').update(verificationCode).digest('hex');
-        const codeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-        await db.setEmailVerificationToken(user.id, codeHash, codeExpiry);
+        logger.info('Resend verification response sent (anti-enumeration)', ctx);
 
-        // Send verification email
-        if (!process.env.RESEND_API_KEY) {
-            logger.info(`🔑 DEV MODE — Verification code for ${user.email}: ${verificationCode}`, ctx);
-        }
-        await emailService.sendVerificationEmail(user.email, user.name, verificationCode);
-
-        logger.info('Verification email resent', ctx);
-
-        successResponse(res, { message: 'Verification email sent' });
+        successResponse(res, {
+            message: 'If that account still needs verifying, a new code has been sent.'
+        });
     } catch (error) {
         logger.error('Failed to resend verification email', { ...ctx, error });
         next(error);

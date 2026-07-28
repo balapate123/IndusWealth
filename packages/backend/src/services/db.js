@@ -650,12 +650,22 @@ const setEmailVerificationToken = async (userId, tokenHash, expiresAt) => {
     );
 };
 
-const verifyEmail = async (tokenHash) => {
+/**
+ * Consume an email verification code.
+ *
+ * Scoped to the address the code was sent to. Without that, a six-digit code
+ * matched against every pending signup at once, so a guess only had to collide
+ * with *someone's* code — and verification now mints a session, which would
+ * make that an account takeover.
+ */
+const verifyEmail = async (tokenHash, email) => {
     const result = await pool.query(
         `UPDATE users SET email_verified = true, email_verification_token = NULL, email_verification_expires = NULL, updated_at = NOW()
-         WHERE email_verification_token = $1 AND email_verification_expires > NOW()
-         RETURNING id, email, name`,
-        [tokenHash]
+         WHERE email_verification_token = $1
+           AND email_verification_expires > NOW()
+           AND LOWER(email) = LOWER($2)
+         RETURNING id, email, name, plaid_access_token`,
+        [tokenHash, email]
     );
     return result.rows[0] || null;
 };

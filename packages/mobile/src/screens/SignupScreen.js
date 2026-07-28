@@ -9,7 +9,6 @@ import CustomAlert from '../components/CustomAlert';
 import PasswordStrength from '../components/PasswordStrength';
 import useAlert from '../hooks/useAlert';
 import { api } from '../services/api';
-import cache from '../services/cache';
 import { identify, track, EVENTS } from '../services/analytics';
 
 const makeStyles = (t) => StyleSheet.create({
@@ -85,16 +84,19 @@ const SignupScreen = ({ navigation }) => {
                 identify(response.user.id.toString());
                 track(EVENTS.SIGNUP);
 
-                // Auto login after signup
-                await cache.setCachedUser(response.user);
-
-                // Set global user ID
-                global.CURRENT_USER_ID = response.user.id;
-
-                // Navigate to email verification
-                navigation.navigate('EmailVerification', {
+                // No session is cached here on purpose. The account exists but
+                // has no tokens until the emailed code is confirmed, so writing
+                // a cached user now would put the app in a signed-in state that
+                // the server would not honour.
+                //
+                // replace, not navigate: leaving this screen on the stack meant
+                // backing out of verification landed on a filled-in signup form,
+                // and backing out again walked into the app. Now the only way
+                // back is to sign in.
+                navigation.replace('EmailVerification', {
                     email: email,
                     name: name,
+                    codeJustSent: true,
                 });
             } else {
                 showAlert('Signup Failed', response.message || 'Could not create account');

@@ -365,8 +365,9 @@ export const api = {
                 body: JSON.stringify(body),
             });
 
-            // Handle 2FA required response
-            if (response.code === '2FA_REQUIRED') {
+            // Not-yet-final outcomes: the caller decides where to go next, and
+            // neither carries tokens to save.
+            if (response.code === '2FA_REQUIRED' || response.code === 'EMAIL_NOT_VERIFIED') {
                 return response;
             }
 
@@ -379,20 +380,14 @@ export const api = {
             return response;
         },
 
-        signup: async (name, email, password) => {
-            const response = await apiRequest('/users/signup', {
-                method: 'POST',
-                body: JSON.stringify({ name, email, password }),
-            });
-
-            // Save tokens on successful signup
-            if (response.success) {
-                await saveAuthTokens(response);
-                global.CURRENT_USER_ID = response.user.id;
-            }
-
-            return response;
-        },
+        // Creates the account only. The server issues no session until the
+        // emailed code is confirmed, so there is deliberately nothing to save
+        // here — storing a user now is what used to let signup walk straight
+        // into the app past the verification screen.
+        signup: (name, email, password) => apiRequest('/users/signup', {
+            method: 'POST',
+            body: JSON.stringify({ name, email, password }),
+        }),
 
         me: () => apiRequest('/users/me'),
 
@@ -438,13 +433,27 @@ export const api = {
             body: JSON.stringify({ password }),
         }),
 
-        verifyEmail: (code) => apiRequest('/users/verify-email', {
-            method: 'POST',
-            body: JSON.stringify({ code }),
-        }),
+        // The only place a new account receives a session, so this is where its
+        // tokens get stored. The code is scoped to the address it was sent to.
+        verifyEmail: async (email, code) => {
+            const response = await apiRequest('/users/verify-email', {
+                method: 'POST',
+                body: JSON.stringify({ email, code }),
+            });
 
-        resendVerification: () => apiRequest('/users/resend-verification', {
+            if (response.success) {
+                await saveAuthTokens(response);
+                global.CURRENT_USER_ID = response.user.id;
+            }
+
+            return response;
+        },
+
+        // Public: a user who cannot log in until they verify has no token to
+        // send. Answers identically whether or not the account exists.
+        resendVerification: (email) => apiRequest('/users/resend-verification', {
             method: 'POST',
+            body: JSON.stringify({ email }),
         }),
 
         forgotPassword: (email) => apiRequest('/users/forgot-password', {

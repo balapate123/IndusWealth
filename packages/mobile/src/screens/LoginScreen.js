@@ -71,6 +71,16 @@ const LoginScreen = ({ navigation }) => {
                 return;
             }
 
+            // The password was right but the address was never confirmed. The
+            // server issued no session; send them to finish the step they left,
+            // rather than showing an error they cannot act on.
+            if (response.code === 'EMAIL_NOT_VERIFIED') {
+                navigation.navigate('EmailVerification', {
+                    email: response.email || email,
+                });
+                return;
+            }
+
             if (response.success) {
                 console.log('Login success');
 

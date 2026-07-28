@@ -7,7 +7,8 @@ import { Button, Card, Input, Text, CODE_INPUT_STYLE } from '../components/ui';
 import CustomAlert from '../components/CustomAlert';
 import useAlert from '../hooks/useAlert';
 import { api } from '../services/api';
-import { track, EVENTS } from '../services/analytics';
+import cache from '../services/cache';
+import { identify, track, EVENTS } from '../services/analytics';
 
 const COOLDOWN_SECONDS = 60;
 
@@ -25,16 +26,18 @@ const EmailVerificationScreen = ({ navigation, route }) => {
     const styles = useThemedStyles(makeStyles);
     const { showAlert, alertProps } = useAlert();
 
-    const { email } = route.params;
+    // codeJustSent is set when arriving straight from signup, where the server
+    // has only just sent one. Arriving from a blocked sign-in, whatever code
+    // they have may be long expired, so don't make them wait to ask for another.
+    const { email, codeJustSent = false } = route.params;
     const [code, setCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [resendCooldown, setResendCooldown] = useState(0);
     const [resending, setResending] = useState(false);
     const intervalRef = useRef(null);
 
-    // Start cooldown timer on mount
     useEffect(() => {
-        startCooldown();
+        if (codeJustSent) startCooldown();
         return () => {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
@@ -67,10 +70,17 @@ const EmailVerificationScreen = ({ navigation, route }) => {
 
         setLoading(true);
         try {
-            const response = await api.auth.verifyEmail(code);
+            const response = await api.auth.verifyEmail(email, code);
 
             if (response.success) {
+                identify(response.user.id.toString());
                 track(EVENTS.EMAIL_VERIFIED);
+
+                // Verification is what mints the session, so this is the first
+                // point at which the app may consider itself signed in.
+                await cache.setCachedUser(response.user);
+                global.CURRENT_USER_ID = response.user.id;
+
                 showAlert(
                     'Email verified',
                     'Your email has been verified successfully.',
@@ -95,7 +105,7 @@ const EmailVerificationScreen = ({ navigation, route }) => {
 
         setResending(true);
         try {
-            const response = await api.auth.resendVerification();
+            const response = await api.auth.resendVerification(email);
 
             if (response.success) {
                 showAlert('Code sent', 'A new verification code has been sent to your email.');
