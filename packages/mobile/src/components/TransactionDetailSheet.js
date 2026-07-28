@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { RADIUS, SPACING } from '../constants/tokens';
+import { RADIUS, SPACING, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
-import { BottomSheet, Text, Button, Input, SectionTitle } from './ui';
+import { BottomSheet, Text, Button, Input, SectionTitle, Chip } from './ui';
 import { money } from './TransactionRow';
 
 /**
@@ -40,6 +40,15 @@ const makeStyles = (t) => StyleSheet.create({
         flex: 1,
     },
     dot: { width: 8, height: 8, borderRadius: 4 },
+    flags: {
+        marginTop: SPACING.MEDIUM,
+        gap: SPACING.SMALL,
+    },
+    flagWrap: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: SPACING.SMALL,
+    },
     notes: { marginTop: SPACING.MEDIUM },
     counter: { textAlign: 'right', marginTop: -SPACING.SMALL },
     actions: {
@@ -67,6 +76,11 @@ const TransactionDetailSheet = ({
     accountColor,
     notes,
     onChangeNotes,
+    // Omit `flags` and the sheet simply has no flag section — the screens that
+    // have not been wired for it still show notes exactly as before.
+    flags,
+    selectedFlagIds,
+    onToggleFlag,
     saving = false,
     onSave,
     onClose,
@@ -133,6 +147,30 @@ const TransactionDetailSheet = ({
                             {transaction.id}
                         </Text>
                     </View>
+
+                    {flags?.length ? (
+                        <View style={styles.flags}>
+                            <Text variant="label" tone="secondary">Flags</Text>
+                            {/* Wraps rather than scrolls: in a sheet a hidden
+                                horizontal overflow reads as "that's all of
+                                them", and a user can't tag what they can't see. */}
+                            <View style={styles.flagWrap}>
+                                {flags.map((flag) => {
+                                    const active = selectedFlagIds?.includes(flag.id);
+                                    return (
+                                        <Chip
+                                            key={flag.id}
+                                            label={flag.name}
+                                            icon={flag.icon}
+                                            active={active}
+                                            color={active ? categoryColor(theme, flag.color_index) : undefined}
+                                            onPress={() => onToggleFlag?.(flag.id)}
+                                        />
+                                    );
+                                })}
+                            </View>
+                        </View>
+                    ) : null}
 
                     <View style={styles.notes}>
                         <Input

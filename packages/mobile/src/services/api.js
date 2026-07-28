@@ -500,6 +500,36 @@ export const api = {
             body: JSON.stringify({ notes }),
         }),
 
+    // Flags — the user's own groupings ("Home", "Trip"), distinct from the
+    // Plaid/AI category. GET /flags also publishes the icon allowlist and ramp
+    // size the server will accept, so the picker never drifts from it.
+    getFlags: () => apiRequest('/flags'),
+
+    createFlag: ({ name, colorIndex, icon }) =>
+        apiRequest('/flags', {
+            method: 'POST',
+            body: JSON.stringify({ name, colorIndex, icon }),
+        }),
+
+    updateFlag: (flagId, fields) =>
+        apiRequest(`/flags/${flagId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(fields),
+        }),
+
+    deleteFlag: (flagId) =>
+        apiRequest(`/flags/${flagId}`, { method: 'DELETE' }),
+
+    /** Attach/detach many transactions at once: { add: [id], remove: [id] }. */
+    setFlagTransactions: (flagId, diff) =>
+        apiRequest(`/flags/${flagId}/transactions`, {
+            method: 'POST',
+            body: JSON.stringify(diff),
+        }),
+
+    getFlagAnalytics: (flagId, days) =>
+        apiRequest(`/flags/${flagId}/analytics${days ? `?days=${days}` : ''}`),
+
     // Watchdog - Recurring Expenses
     getWatchdogAnalysis: (forceRefresh = false) =>
         apiRequest(`/watchdog${forceRefresh ? '?force_refresh=true' : ''}`),

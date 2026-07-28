@@ -10,9 +10,13 @@ import {
     SegmentedControl,
     EmptyState,
     LoadingState,
+    Chip,
+    ChipRow,
 } from '../components/ui';
 import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
+import TotalsSummary from '../components/TotalsSummary';
+import useTransactionFlags from '../hooks/useTransactionFlags';
 import api from '../services/api';
 import cache from '../services/cache';
 import { categorizeTransaction } from '../utils/categorization';
@@ -33,13 +37,18 @@ const formatDate = (dateStr) => {
     });
 };
 
-const buildQuery = ({ days, offset, search, forceRefresh }) => {
+/** null = every transaction; 'none' = only the ones carrying no flag. */
+const ALL_FLAGS = null;
+const UNFLAGGED = 'none';
+
+const buildQuery = ({ days, offset, search, flagFilter, forceRefresh }) => {
     const parts = [
         `days=${days}`,
         `limit=${PAGE_SIZE}`,
         `offset=${offset}`,
     ];
     if (search) parts.push(`search=${encodeURIComponent(search)}`);
+    if (flagFilter !== ALL_FLAGS) parts.push(`flag_id=${encodeURIComponent(flagFilter)}`);
     if (forceRefresh) parts.push('refresh=true');
     return `?${parts.join('&')}`;
 };
@@ -51,6 +60,8 @@ const makeStyles = () => StyleSheet.create({
     },
     range: { marginBottom: SPACING.SMALL + 2 },
     search: { marginBottom: 0 },
+    flagRow: { marginTop: SPACING.SMALL + 2 },
+    totals: { marginTop: SPACING.SMALL + 2, marginBottom: SPACING.SMALL },
     list: { flex: 1 },
     // A dedicated full-screen list reads better as flat rows separated by
     // hairlines than as one card per row. Home groups its five recent
@@ -75,9 +86,14 @@ const AllTransactionsScreen = ({ navigation }) => {
     const [total, setTotal] = useState(0);
     const [hasMore, setHasMore] = useState(false);
 
+    const [totals, setTotals] = useState(null);
+
     const [range, setRange] = useState(DEFAULT_RANGE);
+    const [flagFilter, setFlagFilter] = useState(ALL_FLAGS);
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
+
+    const flagState = useTransactionFlags();
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -111,9 +127,21 @@ const AllTransactionsScreen = ({ navigation }) => {
                 formattedDate: formatDate(tx.date),
                 account_id: tx.account_id,
                 notes: tx.notes || '',
+                flags: tx.flags || [],
             };
         });
     };
+
+    /**
+     * Whether a row still belongs in the list under the active flag filter.
+     * Used after a tag change to drop a row that no longer qualifies, rather
+     * than leaving it visible under a filter it no longer matches.
+     */
+    const matchesFlagFilter = useCallback((tx) => {
+        if (flagFilter === ALL_FLAGS) return true;
+        if (flagFilter === UNFLAGGED) return !tx.flags?.length;
+        return !!tx.flags?.some((f) => f.id === flagFilter);
+    }, [flagFilter]);
 
     // Debounce typing so each keystroke is not a round trip.
     useEffect(() => {
@@ -125,13 +153,14 @@ const AllTransactionsScreen = ({ navigation }) => {
     const loadFirstPage = useCallback(async (forceRefresh = false) => {
         try {
             const response = await api.getTransactions(
-                buildQuery({ days: range, offset: 0, search: debouncedSearch, forceRefresh })
+                buildQuery({ days: range, offset: 0, search: debouncedSearch, flagFilter, forceRefresh })
             );
 
             if (response?.success) {
                 setTransactions(formatTransactionsData(response.data));
                 setTotal(response.pagination?.total ?? response.data?.length ?? 0);
                 setHasMore(!!response.pagination?.hasMore);
+                setTotals(response.totals ?? null);
             }
         } catch (err) {
             console.error('Error fetching transactions:', err);
@@ -140,7 +169,7 @@ const AllTransactionsScreen = ({ navigation }) => {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [range, debouncedSearch]);
+    }, [range, debouncedSearch, flagFilter]);
 
     /** Append the next page. Offset is the number of rows already held. */
     const loadMore = useCallback(async () => {
@@ -150,7 +179,7 @@ const AllTransactionsScreen = ({ navigation }) => {
 
         try {
             const response = await api.getTransactions(
-                buildQuery({ days: range, offset: transactions.length, search: debouncedSearch })
+                buildQuery({ days: range, offset: transactions.length, search: debouncedSearch, flagFilter })
             );
 
             if (response?.success) {
@@ -171,7 +200,7 @@ const AllTransactionsScreen = ({ navigation }) => {
             loadingMoreRef.current = false;
             setLoadingMore(false);
         }
-    }, [hasMore, range, debouncedSearch, transactions.length]);
+    }, [hasMore, range, debouncedSearch, flagFilter, transactions.length]);
 
     // Changing the range or the search starts a new list.
     useEffect(() => {
@@ -234,24 +263,38 @@ const AllTransactionsScreen = ({ navigation }) => {
     const openTransactionDetails = (item) => {
         setSelectedTransaction(item);
         setEditNotes(item.notes || '');
+        flagState.openFor(item);
         setShowTransactionModal(true);
     };
 
-    const handleSaveNotes = async () => {
+    const handleSaveDetails = async () => {
         if (!selectedTransaction) return;
 
         try {
             setSaving(true);
-            await api.updateTransactionNotes(selectedTransaction.id, editNotes.trim());
+            const notes = editNotes.trim();
+            const [, nextFlags] = await Promise.all([
+                api.updateTransactionNotes(selectedTransaction.id, notes),
+                flagState.save(selectedTransaction.id),
+            ]);
 
-            setTransactions((prev) => prev.map((tx) =>
-                tx.id === selectedTransaction.id ? { ...tx, notes: editNotes.trim() } : tx
-            ));
-            setSelectedTransaction((prev) => ({ ...prev, notes: editNotes.trim() }));
+            const updated = { ...selectedTransaction, notes, flags: nextFlags };
 
+            // Removing the very flag being filtered on leaves a row that no
+            // longer belongs in the list — and the totals behind it move too, so
+            // reload rather than patch. Any other edit cannot change membership,
+            // and patching in place keeps the scroll position.
+            if (!matchesFlagFilter(updated)) {
+                setShowTransactionModal(false);
+                loadFirstPage(false);
+                return;
+            }
+
+            setTransactions((prev) => prev.map((tx) => (tx.id === updated.id ? updated : tx)));
+            setSelectedTransaction(updated);
             setShowTransactionModal(false);
         } catch (error) {
-            console.error('Error saving notes:', error);
+            console.error('Error saving transaction details:', error);
         } finally {
             setSaving(false);
         }
@@ -262,6 +305,13 @@ const AllTransactionsScreen = ({ navigation }) => {
         : null;
 
     const rangeLabel = RANGES.find((r) => r.value === range)?.label ?? `${range} days`;
+
+    const activeFlag = flagState.flags.find((f) => f.id === flagFilter);
+    const totalsLabel = activeFlag
+        ? `${activeFlag.name} · last ${rangeLabel}`
+        : flagFilter === UNFLAGGED
+            ? `Unflagged · last ${rangeLabel}`
+            : `Last ${rangeLabel}`;
 
     const header = (
         <>
@@ -295,6 +345,41 @@ const AllTransactionsScreen = ({ navigation }) => {
                     style={styles.search}
                 />
             </View>
+
+            {/* Outside `controls`: ChipRow carries its own horizontal padding,
+                and nesting it inside would indent the chips twice. */}
+            {flagState.flags.length ? (
+                <ChipRow style={styles.flagRow}>
+                    <Chip
+                        label="All"
+                        active={flagFilter === ALL_FLAGS}
+                        onPress={() => setFlagFilter(ALL_FLAGS)}
+                    />
+                    {flagState.flags.map((flag) => {
+                        const active = flagFilter === flag.id;
+                        return (
+                            <Chip
+                                key={flag.id}
+                                label={flag.name}
+                                icon={flag.icon}
+                                active={active}
+                                color={active ? categoryColor(theme, flag.color_index) : undefined}
+                                // Tapping the active chip clears it, so there is
+                                // always a way back without hunting for "All".
+                                onPress={() => setFlagFilter(active ? ALL_FLAGS : flag.id)}
+                            />
+                        );
+                    })}
+                    <Chip
+                        label="Unflagged"
+                        icon="ellipse-outline"
+                        active={flagFilter === UNFLAGGED}
+                        onPress={() => setFlagFilter(flagFilter === UNFLAGGED ? ALL_FLAGS : UNFLAGGED)}
+                    />
+                </ChipRow>
+            ) : null}
+
+            <TotalsSummary totals={totals} label={totalsLabel} style={styles.totals} />
         </>
     );
 
@@ -348,11 +433,15 @@ const AllTransactionsScreen = ({ navigation }) => {
                         }
                         ListEmptyComponent={
                             <EmptyState
-                                icon={debouncedSearch ? 'search-outline' : 'receipt-outline'}
-                                title={debouncedSearch ? 'No matches' : 'No transactions'}
+                                icon={debouncedSearch ? 'search-outline' : flagFilter !== ALL_FLAGS ? 'pricetag-outline' : 'receipt-outline'}
+                                title={debouncedSearch ? 'No matches' : flagFilter !== ALL_FLAGS ? 'Nothing flagged' : 'No transactions'}
                                 message={debouncedSearch
                                     ? `Nothing matched "${debouncedSearch}" in the last ${rangeLabel}.`
-                                    : `Nothing in the last ${rangeLabel}. Try a longer range, or pull down to sync.`}
+                                    : activeFlag
+                                        ? `Nothing is flagged "${activeFlag.name}" in the last ${rangeLabel}. Open a transaction to flag it.`
+                                        : flagFilter === UNFLAGGED
+                                            ? `Everything in the last ${rangeLabel} carries a flag.`
+                                            : `Nothing in the last ${rangeLabel}. Try a longer range, or pull down to sync.`}
                             />
                         }
                     />
@@ -366,8 +455,11 @@ const AllTransactionsScreen = ({ navigation }) => {
                 accountColor={selectedTransaction ? getAccountColor(selectedTransaction.account_id) : null}
                 notes={editNotes}
                 onChangeNotes={setEditNotes}
+                flags={flagState.flags}
+                selectedFlagIds={flagState.selected}
+                onToggleFlag={flagState.toggle}
                 saving={saving}
-                onSave={handleSaveNotes}
+                onSave={handleSaveDetails}
                 onClose={() => setShowTransactionModal(false)}
             />
         </>

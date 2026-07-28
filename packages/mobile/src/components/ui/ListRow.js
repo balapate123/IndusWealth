@@ -32,6 +32,16 @@ const makeStyles = (t) => StyleSheet.create({
     },
     body: { flex: 1, minWidth: 0 },
     subtitle: { marginTop: 1 },
+    // The subtitle line becomes a row when an accessory rides along with it.
+    // The text shrinks so a long merchant name truncates rather than pushing
+    // the accessory off the edge.
+    subtitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 1,
+    },
+    subtitleText: { flexShrink: 1 },
     right: { alignItems: 'flex-end' },
     meta: { marginTop: 1 },
 });
@@ -42,6 +52,7 @@ const ListRow = ({
     leading,
     title,
     subtitle,
+    subtitleAccessory,
     value,
     valueTone = 'primary',
     valueColor,
@@ -66,7 +77,16 @@ const ListRow = ({
 
             <View style={styles.body}>
                 <Text variant="body" numberOfLines={1}>{title}</Text>
-                {subtitle ? <Text variant="meta" tone="muted" style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
+                {subtitleAccessory ? (
+                    <View style={styles.subtitleRow}>
+                        {subtitle ? (
+                            <Text variant="meta" tone="muted" style={styles.subtitleText} numberOfLines={1}>{subtitle}</Text>
+                        ) : null}
+                        {subtitleAccessory}
+                    </View>
+                ) : subtitle ? (
+                    <Text variant="meta" tone="muted" style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
+                ) : null}
             </View>
 
             {value != null || meta ? (

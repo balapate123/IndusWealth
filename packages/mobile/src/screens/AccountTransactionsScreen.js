@@ -14,6 +14,7 @@ import {
 } from '../components/ui';
 import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
+import useTransactionFlags from '../hooks/useTransactionFlags';
 import api from '../services/api';
 import { categorizeTransaction } from '../utils/categorization';
 
@@ -73,6 +74,8 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
     const [editNotes, setEditNotes] = useState('');
     const [saving, setSaving] = useState(false);
 
+    const flagState = useTransactionFlags();
+
     const fetchTransactions = useCallback(async () => {
         try {
             const data = await api.getAccountTransactions(account.id);
@@ -91,6 +94,7 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                         date: tx.date,
                         formattedDate: formatDate(tx.date),
                         notes: tx.notes || '',
+                        flags: tx.flags || [],
                     };
                 });
                 setTransactions(formattedTransactions);
@@ -140,24 +144,28 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
     const openTransactionDetails = (item) => {
         setSelectedTransaction(item);
         setEditNotes(item.notes || '');
+        flagState.openFor(item);
         setShowTransactionModal(true);
     };
 
-    const handleSaveNotes = async () => {
+    const handleSaveDetails = async () => {
         if (!selectedTransaction) return;
 
         try {
             setSaving(true);
-            await api.updateTransactionNotes(selectedTransaction.id, editNotes.trim());
+            const notes = editNotes.trim();
+            const [, nextFlags] = await Promise.all([
+                api.updateTransactionNotes(selectedTransaction.id, notes),
+                flagState.save(selectedTransaction.id),
+            ]);
 
-            setTransactions((prev) => prev.map((tx) =>
-                tx.id === selectedTransaction.id ? { ...tx, notes: editNotes.trim() } : tx
-            ));
-            setSelectedTransaction((prev) => ({ ...prev, notes: editNotes.trim() }));
+            const updated = { ...selectedTransaction, notes, flags: nextFlags };
+            setTransactions((prev) => prev.map((tx) => (tx.id === updated.id ? updated : tx)));
+            setSelectedTransaction(updated);
 
             setShowTransactionModal(false);
         } catch (error) {
-            console.error('Error saving notes:', error);
+            console.error('Error saving transaction details:', error);
         } finally {
             setSaving(false);
         }
@@ -262,8 +270,11 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                 accountName={account.alias || account.name}
                 notes={editNotes}
                 onChangeNotes={setEditNotes}
+                flags={flagState.flags}
+                selectedFlagIds={flagState.selected}
+                onToggleFlag={flagState.toggle}
                 saving={saving}
-                onSave={handleSaveNotes}
+                onSave={handleSaveDetails}
                 onClose={() => setShowTransactionModal(false)}
             />
         </>

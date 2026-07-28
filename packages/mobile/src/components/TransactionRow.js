@@ -4,6 +4,7 @@ import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { SPACING, alpha, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import { ListRow } from './ui';
+import FlagDots from './FlagDots';
 
 /**
  * One transaction. Shared by Home, All Transactions and Account Transactions,
@@ -70,6 +71,9 @@ const TransactionRow = ({
             }
             title={transaction.merchant}
             subtitle={subtitle !== undefined ? subtitle : transaction.category}
+            subtitleAccessory={
+                transaction.flags?.length ? <FlagDots flags={transaction.flags} /> : null
+            }
             value={`${isIncome ? '+' : '−'}${money(transaction.amount)}`}
             valueTone={isIncome ? 'success' : 'primary'}
             meta={meta}
