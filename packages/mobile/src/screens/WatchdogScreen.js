@@ -116,7 +116,7 @@ const makeStyles = (t) => StyleSheet.create({
     },
 });
 
-const WatchdogScreen = () => {
+const WatchdogScreen = ({ navigation }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
 
@@ -286,7 +286,12 @@ const WatchdogScreen = () => {
         <>
             <Screen
                 scroll
-                header={<ScreenHeader title="Watchdog" />}
+                header={
+                    <ScreenHeader
+                        title="Watchdog"
+                        onBack={navigation?.canGoBack?.() ? () => navigation.goBack() : undefined}
+                    />
+                }
                 refreshing={refreshing}
                 onRefresh={onRefresh}
                 contentContainerStyle={styles.scrollContent}

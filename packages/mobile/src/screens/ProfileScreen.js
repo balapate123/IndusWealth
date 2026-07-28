@@ -650,7 +650,7 @@ const ProfileScreen = ({ navigation }) => {
                     <MenuItem first icon="home" label="Home" subtitle="Accounts & transactions overview" onPress={() => navigation.navigate('Main', { screen: 'Home' })} />
                     <MenuItem icon="bulb" label="AI Insights" subtitle="Personalized financial insights" onPress={() => navigation.navigate('Main', { screen: 'Insights' })} />
                     <MenuItem icon="trending-down" label="Debt optimizer" subtitle="Debt attack calculator & plans" onPress={() => navigation.navigate('Main', { screen: 'Wealth' })} />
-                    <MenuItem icon="eye" label="Watchdog" subtitle="Recurring expense tracker" onPress={() => navigation.navigate('Main', { screen: 'Guard' })} />
+                    <MenuItem icon="eye" label="Watchdog" subtitle="Recurring expense tracker" onPress={() => navigation.navigate('Watchdog')} />
                     <MenuItem icon="bar-chart" label="Analytics" subtitle="Spending trends & charts" onPress={() => navigation.navigate('Analytics')} />
                     <MenuItem icon="list" label="All transactions" subtitle="Full transaction history" onPress={() => navigation.navigate('AllTransactions')} />
                     <MenuItem icon="wallet" label="All accounts" subtitle="View all linked accounts" onPress={() => navigation.navigate('AllAccounts')} />

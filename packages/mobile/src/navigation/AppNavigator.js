@@ -42,7 +42,7 @@ const TabBarIcon = ({ focused, name }) => {
         'Home': 'home-outline',
         'Insights': 'bulb-outline',
         'Wealth': 'bar-chart-outline',
-        'Guard': 'shield-checkmark-outline',
+        'Analytics': 'stats-chart-outline',
         'Profile': 'person-outline',
     };
 
@@ -101,11 +101,19 @@ const TabNavigator = () => {
                     tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="Wealth" />,
                 }}
             />
+            {/* Watchdog used to live here. It is still reachable from Profile →
+                Quick access as a stack screen; the tab slot now goes to the
+                category analytics, which is the screen people actually use. */}
+            {/* Route name deliberately differs from the label: a root stack screen
+                is already called "Analytics" (the basic spending view), and Home
+                and Profile navigate to it by that name. A tab sharing the name
+                would capture those links, because navigate() resolves to the
+                nearest navigator that has the route. */}
             <Tab.Screen
-                name="Guard"
-                component={WatchdogScreen}
+                name="AnalyticsTab"
+                component={AdvancedAnalyticsScreen}
                 options={{
-                    tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="Guard" />,
+                    tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="Analytics" />,
                 }}
             />
             <Tab.Screen
@@ -272,6 +280,13 @@ const AppNavigator = () => {
                 <Stack.Screen
                     name="Appearance"
                     component={AppearanceScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="Watchdog"
+                    component={WatchdogScreen}
                     options={{
                         presentation: 'card',
                     }}
