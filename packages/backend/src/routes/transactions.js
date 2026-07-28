@@ -1,19 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const plaidService = require('../services/plaid');
 const watchdogService = require('../services/watchdog');
 const db = require('../services/db');
+const { syncTransactions } = require('../services/transactionSync');
 const { authenticateToken } = require('../middleware/auth');
 const { categorizeTransaction, getCategoryBreakdown, batchCategorizeWithAI } = require('../services/categorization');
 const { createLogger } = require('../services/logger');
-const { PlaidError } = require('../errors/AppError');
-const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse, getPlaidStatusFromError } = require('../utils/responseHelper');
+const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse } = require('../utils/responseHelper');
 
 const logger = createLogger('TRANSACTIONS');
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;   // one page; scroll further with offset
-const MAX_DAYS = 365;
+// Matches the history Plaid is asked for at link time; a lower cap here would
+// make the deeper history unreachable through the API that serves the app.
+const MAX_DAYS = 730;
 
 /** Parse a query param as a bounded integer, falling back when absent or junk. */
 const clampInt = (value, fallback, min, max) => {
@@ -80,60 +81,12 @@ router.get('/', authenticateToken, async (req, res, next) => {
             // Get user's Plaid access token from the authenticated user
             const accessToken = req.user.plaidAccessToken || process.env.PLAID_ACCESS_TOKEN_OVERRIDE;
 
-            if (accessToken) {
-                try {
-                    // Fetch from Plaid
-                    const plaidTransactions = await plaidService.getTransactions(accessToken, forceRefresh);
-
-                    // Also fetch accounts for the account_id mapping
-                    try {
-                        const plaidAccounts = await plaidService.getAccounts(accessToken);
-                        await db.upsertAccounts(userId, plaidAccounts);
-                        logger.debug('Synced accounts from Plaid', { ...ctx, accountCount: plaidAccounts.length });
-                    } catch (accErr) {
-                        logger.warn('Could not fetch accounts', { ...ctx, error: accErr });
-                    }
-
-                    // Store in database
-                    await db.upsertTransactions(userId, plaidTransactions);
-
-                    // Update sync time
-                    await db.updateSyncTime(userId, 'last_transaction_sync');
-
-                    // Invalidate watchdog cache so next GET /watchdog re-analyzes
-                    await watchdogService.invalidateCache(userId);
-
-                    // Stamp the last manual refresh time for cooldown enforcement
-                    if (forceRefresh) {
-                        await db.updateSyncTime(userId, 'last_plaid_refresh');
-                    }
-
-                    logger.info('Synced transactions from Plaid', {
-                        ...ctx,
-                        count: plaidTransactions.length,
-                        dataSource: DATA_SOURCES.PLAID_API
-                    });
-                    dataSource = DATA_SOURCES.PLAID_API;
-                    plaidStatus = PLAID_STATUS.SUCCESS;
-                } catch (plaidError) {
-                    // Determine Plaid error status
-                    plaidStatus = getPlaidStatusFromError(plaidError);
-                    const errorCode = plaidError.response?.data?.error_code;
-
-                    if (errorCode === 'ITEM_LOGIN_REQUIRED') {
-                        logger.warn('User needs to re-authenticate via Plaid Link update mode', { ...ctx, errorCode });
-                    } else {
-                        logger.warn('Plaid sync failed, falling back to database cache', {
-                            ...ctx,
-                            errorCode,
-                            error: plaidError
-                        });
-                    }
-                }
-            } else {
-                logger.info('No Plaid access token available', ctx);
-                plaidStatus = PLAID_STATUS.NO_TOKEN;
-            }
+            // Shared with the Plaid webhook, which syncs the same way when Plaid
+            // reports new data. Never throws — a Plaid failure comes back as a
+            // status and we carry on serving what is already stored.
+            const result = await syncTransactions(userId, accessToken, { forceRefresh, ctx });
+            plaidStatus = result.plaidStatus;
+            if (result.ok) dataSource = DATA_SOURCES.PLAID_API;
         } else {
             logger.debug('Cache is fresh, serving from database', ctx);
             plaidStatus = PLAID_STATUS.CACHED;

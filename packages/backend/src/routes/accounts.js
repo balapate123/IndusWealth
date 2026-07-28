@@ -7,6 +7,58 @@ const { DATA_SOURCES, createMeta, successResponse } = require('../utils/response
 
 const logger = createLogger('ACCOUNTS');
 
+/** Number, or null — so "no data" survives to the client instead of becoming 0. */
+const num = (value) => (value === null || value === undefined ? null : parseFloat(value));
+
+/**
+ * Accounts where the balance is money owed against a limit rather than money
+ * held. Plaid files revolving credit under two different types: credit cards are
+ * `credit`, while a line of credit is `loan`/`line of credit`.
+ */
+const isRevolvingCredit = (account) =>
+    account.type === 'credit' || account.subtype === 'line of credit';
+
+/**
+ * Shape one account for the app, including the three balances Plaid reports.
+ *
+ * `available_balance` used to be dropped here and the credit limit was never
+ * stored at all, so a credit card could only ever show what was owed — never
+ * how much room was left on it.
+ */
+const formatAccount = (acc) => {
+    const current = num(acc.current_balance) ?? 0;
+    const available = num(acc.available_balance);
+    const limit = num(acc.credit_limit);
+    const credit = isRevolvingCredit(acc);
+
+    // Prefer limit − available for the used figure: it is what the bank itself
+    // is asserting, and it stays right when a card is overpaid and `current`
+    // goes negative.
+    const used = credit
+        ? (limit != null && available != null ? limit - available : current)
+        : null;
+
+    return {
+        id: acc.plaid_account_id,
+        name: acc.name,
+        alias: acc.alias,
+        officialName: acc.official_name,
+        type: acc.type,
+        subtype: acc.subtype,
+        mask: acc.mask,
+        balance: current,
+        available,
+        limit,
+        currency: acc.iso_currency_code || 'CAD',
+        isCredit: credit,
+        used,
+        // 0–1, only when the bank told us a limit. Left null rather than
+        // guessed: a made-up utilisation is worse than none.
+        utilization: credit && limit > 0 && used != null ? used / limit : null,
+        bank: acc.name.split(' ')[0], // Extract bank name from account name
+    };
+};
+
 // GET /accounts
 // Returns linked accounts with balances from database cache
 // Requires authentication
@@ -105,17 +157,7 @@ router.get('/', authenticateToken, async (req, res, next) => {
         // Format accounts for frontend
         const formattedAccounts = [
             { id: 'all', name: 'All Accounts', type: 'aggregate', balance: liquidCash },
-            ...accounts.map(acc => ({
-                id: acc.plaid_account_id,
-                name: acc.name,
-                alias: acc.alias,
-                officialName: acc.official_name,
-                type: acc.type,
-                subtype: acc.subtype,
-                mask: acc.mask,
-                balance: parseFloat(acc.current_balance || 0),
-                bank: acc.name.split(' ')[0], // Extract bank name from account name
-            }))
+            ...accounts.map(formatAccount)
         ];
 
         const meta = await createMeta(userId, DATA_SOURCES.DATABASE, {

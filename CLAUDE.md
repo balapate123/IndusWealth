@@ -38,6 +38,7 @@
 | | `src/services/insight_data.js` | Insight aggregation |
 | | `src/services/logger.js` | Logging utility |
 | | `src/services/flags.js` | Flag constants: icon allowlist, ramp size, starter set |
+| | `src/services/transactionSync.js` | Plaid→DB sync, shared by `GET /transactions` and the webhook (per-item in-flight guard) |
 | | `src/services/flinks.js` | Flinks integration (alt to Plaid) |
 | Middleware | `src/middleware/auth.js` | JWT + refresh token auth (`authenticateToken`) |
 | | `src/middleware/validators.js` | express-validator input validation |
@@ -105,7 +106,7 @@ User-defined groupings ("Home", "Trip to Montreal"), **distinct from `category`*
 - **Backend**: Node.js, Express 5, PostgreSQL 15 (pg), JWT (jsonwebtoken), bcryptjs, helmet, express-rate-limit, express-validator, otplib (TOTP), qrcode
 - **Mobile**: React Native 0.81.5, Expo ~54, React 19, React Navigation v6 (stack + bottom-tabs), AsyncStorage, react-native-plaid-link-sdk, react-native-svg, expo-linear-gradient
 - **AI**: Google Generative AI (Gemini) — aggregated summaries only, no PII sent. Default model `gemini-3.5-flash` everywhere (the 2.0 family was retired 2026-06-01 and returns 404; never use `gemini-2.0-*`). Env overrides: `GEMINI_MODEL` (Insights tab), `GEMINI_CATEGORIZATION_MODEL`, `GEMINI_CATEGORY_INSIGHTS_MODEL`
-- **Plaid**: products `transactions` only (`liabilities` pending dashboard approval — re-add when granted), country_codes `CA` only. Production OAuth: Android link tokens use `android_package_name` (`com.induswealth.app`, must be registered in the Plaid dashboard); iOS/web use `redirect_uri`. The app sends `platform` in the `create_link_token` body
+- **Plaid**: products `transactions` only (`liabilities` pending dashboard approval — re-add when granted), country_codes `CA` only. **History depth**: `transactions.days_requested` is sent at link time (730); Plaid's default is 90 and the value is **fixed for the Item's life**, so existing connections keep their old depth until reconnected. After linking, Plaid fires `INITIAL_UPDATE` (~30 days ready) then `HISTORICAL_UPDATE` (full backfill) — `routes/plaidWebhook.js` syncs on both, which is what stops a new account being stuck at ~30 days for 24h. Still on `/transactions/get`; `SYNC_UPDATES_AVAILABLE` is handled in advance of any move to `/transactions/sync`. Production OAuth: Android link tokens use `android_package_name` (`com.induswealth.app`, must be registered in the Plaid dashboard); iOS/web use `redirect_uri`. The app sends `platform` in the `create_link_token` body
 - **Email**: Resend — pattern-first templates in `services/email.js`; no `RESEND_API_KEY` = dev mode (codes logged to server console only)
 - **Deployment**: Render.com (backend), EAS (mobile builds), Docker Compose (local DB)
 
@@ -147,6 +148,9 @@ FROM_EMAIL=IndusWealth <hello@induswealth.app>   # from-domain must be verified 
 GEMINI_MODEL=      # optional; default gemini-3.5-flash (2.0 family is retired — 404s)
 GEMINI_CATEGORIZATION_MODEL=       # optional; default gemini-3.5-flash
 GEMINI_CATEGORY_INSIGHTS_MODEL=    # optional; default gemini-3.5-flash
+PLAID_DAYS_REQUESTED=              # optional; default 730 (max 730). Set at Item creation and FIXED for that Item's life — raising it does nothing for already-linked accounts, they must be reconnected
+PLAID_SYNC_WINDOW_DAYS=            # optional; default 730, clamped to PLAID_DAYS_REQUESTED
+PLAID_MAX_SYNC_TRANSACTIONS=       # optional; default 20000 — backstop on the pagination loop
 PLAID_ANDROID_PACKAGE_NAME=        # optional; default com.induswealth.app
 PLAID_OAUTH_REDIRECT_URI=          # optional; default https://induswealth.onrender.com/plaid/oauth-redirect (iOS/web only)
 ENCRYPTION_KEY=    # 64 hex chars (32 bytes) for AES-256-GCM

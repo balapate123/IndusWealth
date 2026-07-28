@@ -108,6 +108,23 @@ const getUserById = async (userId) => {
     return user;
 };
 
+/**
+ * Look a user up by their Plaid item id. Webhooks identify the Item, not the
+ * user, so this is how an inbound webhook finds whose data to sync.
+ */
+const getUserByPlaidItemId = async (itemId) => {
+    const result = await pool.query(
+        `SELECT id, email, name, plaid_access_token, plaid_item_id, email_verified
+         FROM users WHERE plaid_item_id = $1`,
+        [itemId]
+    );
+    const user = result.rows[0];
+    if (user && user.plaid_access_token) {
+        user.plaid_access_token = decrypt(user.plaid_access_token);
+    }
+    return user;
+};
+
 const updateUserPlaidToken = async (userId, accessToken, itemId) => {
     const encryptedToken = encrypt(accessToken);
     await pool.query(
@@ -167,24 +184,30 @@ const upsertAccounts = async (userId, accounts) => {
     let idx = 1;
 
     for (const account of accounts) {
-        values.push(`($${idx},$${idx+1},$${idx+2},$${idx+3},$${idx+4},$${idx+5},$${idx+6},$${idx+7},$${idx+8},$${idx+9})`);
+        values.push(`($${idx},$${idx+1},$${idx+2},$${idx+3},$${idx+4},$${idx+5},$${idx+6},$${idx+7},$${idx+8},$${idx+9},$${idx+10})`);
         params.push(
             userId, account.account_id, account.name, account.official_name,
             account.type, account.subtype, account.mask,
             account.balances?.current, account.balances?.available,
+            // Null on depository accounts; on credit it is the credit limit,
+            // which is what "how much of the card have I used" is measured against.
+            account.balances?.limit ?? null,
             account.balances?.iso_currency_code || 'CAD'
         );
-        idx += 10;
+        idx += 11;
     }
 
     await pool.query(
-        `INSERT INTO accounts (user_id, plaid_account_id, name, official_name, type, subtype, mask, current_balance, available_balance, iso_currency_code)
+        `INSERT INTO accounts (user_id, plaid_account_id, name, official_name, type, subtype, mask, current_balance, available_balance, credit_limit, iso_currency_code)
          VALUES ${values.join(',')}
          ON CONFLICT (user_id, plaid_account_id)
          DO UPDATE SET
             name = EXCLUDED.name,
             current_balance = EXCLUDED.current_balance,
             available_balance = EXCLUDED.available_balance,
+            -- A limit Plaid omits on one poll must not wipe the one we hold.
+            credit_limit = COALESCE(EXCLUDED.credit_limit, accounts.credit_limit),
+            iso_currency_code = EXCLUDED.iso_currency_code,
             updated_at = NOW()`,
         params
     );
@@ -193,7 +216,7 @@ const upsertAccounts = async (userId, accounts) => {
 const getAccounts = async (userId) => {
     const result = await pool.query(
         `SELECT id, plaid_account_id, name, alias, official_name, type, subtype, mask,
-                current_balance, available_balance, iso_currency_code, updated_at
+                current_balance, available_balance, credit_limit, iso_currency_code, updated_at
          FROM accounts WHERE user_id = $1 ORDER BY name`,
         [userId]
     );
@@ -305,6 +328,25 @@ const upsertTransactions = async (userId, transactions) => {
             params
         );
     }
+};
+
+/**
+ * Delete transactions Plaid has retracted, addressed by Item rather than by
+ * user because that is what the webhook carries. Joining through users scopes
+ * the delete to the Item's owner, so an id cannot reach anyone else's rows.
+ */
+const deleteTransactionsByPlaidIds = async (itemId, plaidTransactionIds) => {
+    if (!itemId || !plaidTransactionIds?.length) return 0;
+
+    const result = await pool.query(
+        `DELETE FROM transactions t
+         USING users u
+         WHERE t.user_id = u.id
+           AND u.plaid_item_id = $1
+           AND t.plaid_transaction_id = ANY($2::varchar[])`,
+        [itemId, plaidTransactionIds]
+    );
+    return result.rowCount;
 };
 
 const getTransactions = async (userId, limit = 100) => {
@@ -1061,6 +1103,7 @@ module.exports = {
     createUser,
     getUserByEmail,
     getUserById,
+    getUserByPlaidItemId,
     updateUserPlaidToken,
     // Sync operations
     getLastSyncTime,
@@ -1082,6 +1125,7 @@ module.exports = {
     sumTransactions,
     getTransactionsByAccount,
     updateTransactionNotes,
+    deleteTransactionsByPlaidIds,
     // Flag operations
     getFlags,
     getFlagById,

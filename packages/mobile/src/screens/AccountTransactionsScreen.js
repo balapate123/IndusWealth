@@ -14,6 +14,7 @@ import {
 } from '../components/ui';
 import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
+import AccountBalanceCard from '../components/AccountBalanceCard';
 import useTransactionFlags from '../hooks/useTransactionFlags';
 import api from '../services/api';
 import { categorizeTransaction } from '../utils/categorization';
@@ -63,7 +64,10 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
 
-    const { account } = route.params;
+    // The account arrives as a snapshot from whichever screen linked here, which
+    // may itself have painted from cache. Kept in state so it can be refreshed
+    // against the server — an older cached copy also predates the credit fields.
+    const [account, setAccount] = useState(route.params.account);
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -115,14 +119,28 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
         }
     }, [account.id]);
 
+    /** Pull this account's balances again, so the header is not a stale snapshot. */
+    const refreshAccount = useCallback(async () => {
+        try {
+            const data = await api.getAccounts();
+            if (!data?.success) return;
+            const fresh = (data.accounts || []).find((a) => a.id === account.id);
+            if (fresh) setAccount((prev) => ({ ...prev, ...fresh }));
+        } catch (err) {
+            console.error('Error refreshing account:', err);
+        }
+    }, [account.id]);
+
     useEffect(() => {
         fetchTransactions();
-    }, [fetchTransactions]);
+        refreshAccount();
+    }, [fetchTransactions, refreshAccount]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         fetchTransactions();
-    }, [fetchTransactions]);
+        refreshAccount();
+    }, [fetchTransactions, refreshAccount]);
 
     const filteredTransactions = useMemo(() => {
         let result = [...transactions];
@@ -186,6 +204,8 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                 onBack={() => navigation.goBack()}
                 right={account.mask ? <Text variant="meta" tone="muted">••{account.mask}</Text> : null}
             />
+
+            <AccountBalanceCard account={account} />
 
             <Card>
                 <View style={styles.summaryRow}>

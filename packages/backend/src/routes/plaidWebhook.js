@@ -4,9 +4,22 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const plaidService = require('../services/plaid');
 const db = require('../services/db');
+const { syncByItemId } = require('../services/transactionSync');
 const { createLogger } = require('../services/logger');
 
 const logger = createLogger('PLAID_WEBHOOK');
+
+/**
+ * TRANSACTIONS webhook codes that mean "there is new data, go and get it".
+ * We call /transactions/get, so the relevant ones are the *_UPDATE family;
+ * SYNC_UPDATES_AVAILABLE is included for a future move to /transactions/sync.
+ */
+const SYNC_TRIGGERING_CODES = new Set([
+    'INITIAL_UPDATE',
+    'HISTORICAL_UPDATE',
+    'DEFAULT_UPDATE',
+    'SYNC_UPDATES_AVAILABLE',
+]);
 
 // JWK public key cache — refreshed every 5 minutes
 const jwkCache = new Map();
@@ -71,10 +84,31 @@ router.post('/', async (req, res) => {
     try {
         switch (webhook_type) {
             case 'TRANSACTIONS': {
-                if (webhook_code === 'SYNC_UPDATES_AVAILABLE') {
-                    // New transactions are available for sync.
-                    // In production, trigger a background sync job here.
-                    logger.info('New transactions available for sync', { item_id });
+                // HISTORICAL_UPDATE is the one that matters most. Plaid fires
+                // INITIAL_UPDATE within seconds with only the last 30 days
+                // ready, then HISTORICAL_UPDATE once the full backfill lands.
+                // Without acting on it, a freshly linked account was stuck
+                // showing about a month until the 24-hour cache expired.
+                //
+                // SYNC_UPDATES_AVAILABLE belongs to /transactions/sync, which we
+                // do not use yet; it is handled anyway so the day we migrate,
+                // syncing does not silently stop.
+                if (SYNC_TRIGGERING_CODES.has(webhook_code)) {
+                    logger.info('Transactions available — syncing', { item_id, webhook_code });
+                    const result = await syncByItemId(item_id, { webhook_code });
+                    if (result) {
+                        logger.info('Webhook sync finished', {
+                            item_id, webhook_code, count: result.count, plaidStatus: result.plaidStatus,
+                        });
+                    }
+                } else if (webhook_code === 'TRANSACTIONS_REMOVED') {
+                    // Plaid deletes transactions that turned out not to exist.
+                    // We hold our own copies, so they must go too.
+                    const removed = req.body.removed_transactions || [];
+                    if (removed.length) {
+                        const deleted = await db.deleteTransactionsByPlaidIds(item_id, removed);
+                        logger.info('Removed transactions Plaid retracted', { item_id, requested: removed.length, deleted });
+                    }
                 }
                 break;
             }

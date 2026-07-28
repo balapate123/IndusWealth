@@ -14,12 +14,33 @@ const cleanCredential = (value) =>
 const PLAID_CLIENT_ID = cleanCredential(process.env.PLAID_CLIENT_ID);
 const PLAID_SECRET = cleanCredential(process.env.PLAID_SECRET);
 
-/** How far back a sync pulls. Must cover the widest range the app offers. */
-const SYNC_WINDOW_DAYS = 90;
+/**
+ * How much history to ask Plaid for when an Item is created. Plaid's default is
+ * 90 days and its maximum is 730, and the value is fixed for the life of the
+ * Item — raising it later does nothing for accounts already linked, which have
+ * to be disconnected and reconnected to get more.
+ */
+const DAYS_REQUESTED = Math.min(
+    Number.parseInt(process.env.PLAID_DAYS_REQUESTED, 10) || 730,
+    730
+);
+
+/**
+ * How far back a sync pulls. Must cover the widest range the app offers, and
+ * there is no point exceeding what was requested at link time.
+ */
+const SYNC_WINDOW_DAYS = Math.min(
+    Number.parseInt(process.env.PLAID_SYNC_WINDOW_DAYS, 10) || 730,
+    DAYS_REQUESTED
+);
 /** Plaid's per-call maximum. */
 const PLAID_PAGE_SIZE = 500;
-/** Backstop so a pathological account cannot loop for thousands of pages. */
-const MAX_SYNC_TRANSACTIONS = 5000;
+/**
+ * Backstop so a pathological account cannot loop for thousands of pages. Raised
+ * alongside the window: two years across several accounts passes 5,000 for an
+ * active user, and hitting the cap silently truncates their oldest history.
+ */
+const MAX_SYNC_TRANSACTIONS = Number.parseInt(process.env.PLAID_MAX_SYNC_TRANSACTIONS, 10) || 20000;
 
 /** Throws with the offending variable named, rather than letting Plaid guess. */
 const assertPlaidCredentials = () => {
@@ -61,6 +82,10 @@ class PlaidService {
                 // https://dashboard.plaid.com/overview/request-products — debt routes
                 // already degrade gracefully when liabilities data is unavailable.
                 products: ['transactions'],
+                // Without this Plaid grants the Item only 90 days of history,
+                // permanently — the cap is set when the Item is created, not
+                // when we ask for transactions.
+                transactions: { days_requested: DAYS_REQUESTED },
                 country_codes: ['CA'],
                 language: 'en',
                 webhook: process.env.PLAID_WEBHOOK_URL ||
@@ -186,7 +211,7 @@ class PlaidService {
                 }
             }
 
-            // Covers the widest range the app offers (90 days). Fetching only 30
+            // Covers the widest range the app offers. Fetching a short window
             // meant the longer filters had nothing to show beyond whatever older
             // rows earlier syncs happened to leave behind.
             // extend endDate to tomorrow to ensure we capture all transactions from "today"

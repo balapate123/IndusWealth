@@ -31,10 +31,13 @@ import { categorizeTransaction } from '../utils/categorization';
  * silently dropped from the flag by saving a narrow view.
  */
 
+// Reaches as far back as Plaid is asked for at link time (2 years), so an
+// older transaction can still be flagged.
 const RANGES = [
-    { value: 30, label: '30 days' },
-    { value: 90, label: '90 days' },
-    { value: 365, label: '1 year' },
+    { value: 30, label: '30d' },
+    { value: 90, label: '90d' },
+    { value: 365, label: '1y' },
+    { value: 730, label: '2y' },
 ];
 const DEFAULT_RANGE = 90;
 const PAGE_SIZE = 100;
