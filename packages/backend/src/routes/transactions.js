@@ -42,6 +42,11 @@ router.get('/', authenticateToken, async (req, res, next) => {
         const offset = clampInt(req.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
         const days = clampInt(req.query.days, null, 1, MAX_DAYS);
         const search = (req.query.search || '').trim() || null;
+        // 'none' is the untagged set — "what have I not sorted yet" — and is the
+        // one non-numeric value the filter accepts.
+        const flagId = req.query.flag_id === 'none'
+            ? 'none'
+            : clampInt(req.query.flag_id, null, 1, Number.MAX_SAFE_INTEGER);
 
         // Enforce 10-minute cooldown on manual Plaid refresh to limit Transactions Refresh API cost ($0.12/call)
         if (forceRefresh) {
@@ -137,14 +142,18 @@ router.get('/', authenticateToken, async (req, res, next) => {
         // One page of the filtered set, plus the total behind it so the client
         // knows whether to keep scrolling. Both run through the same filter, so
         // they cannot disagree about what matches.
-        const filter = { accountId, days, search };
-        const [page, total] = await Promise.all([
+        // Totals run through the same filter as the page, over every matching
+        // row rather than the hundred on screen — summing the page on the device
+        // would quietly report a fraction of what the user filtered to.
+        const filter = { accountId, days, search, flagId };
+        const [page, total, totals] = await Promise.all([
             db.getTransactionsPage(userId, { ...filter, limit, offset }),
             db.countTransactions(userId, filter),
+            db.sumTransactions(userId, filter),
         ]);
         transactions = page;
 
-        logger.debug('Transaction page', { ...ctx, accountId, days, search: !!search, limit, offset, count: transactions.length, total });
+        logger.debug('Transaction page', { ...ctx, accountId, days, flagId, search: !!search, limit, offset, count: transactions.length, total });
 
         // Already ordered by date DESC, id DESC in SQL — re-sorting here would
         // only shuffle same-day rows out of the order the paging relies on.
@@ -228,7 +237,11 @@ router.get('/', authenticateToken, async (req, res, next) => {
                 offset,
                 hasMore: offset + categorizedTransactions.length < total,
                 days,
+                flagId,
             },
+            // Money across the whole filtered set, not this page. `net` is spent
+            // minus refunded, which is the number a shared-expense flag is for.
+            totals,
             plaid_status: plaidStatus
         }, meta);
     } catch (error) {

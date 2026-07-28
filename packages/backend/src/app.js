@@ -141,6 +141,7 @@ app.use('/users/resend-verification', authLimiter);
 
 // API Routes
 app.use('/transactions', transactionsRoutes);
+app.use('/flags', require('./routes/flags'));
 app.use('/plaid/webhook', require('./routes/plaidWebhook')); // must be before /plaid
 app.use('/plaid', require('./routes/plaid'));
 app.use('/debt', require('./routes/debt'));

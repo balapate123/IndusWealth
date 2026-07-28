@@ -326,7 +326,16 @@ const TRANSACTION_COLUMNS = `
     t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name,
     t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending,
     t.iso_currency_code, t.notes,
-    a.name as account_name, a.plaid_account_id as account_id`;
+    a.name as account_name, a.plaid_account_id as account_id,
+    COALESCE((
+        SELECT json_agg(json_build_object(
+                   'id', f.id, 'name', f.name,
+                   'color_index', f.color_index, 'icon', f.icon
+               ) ORDER BY f.name)
+        FROM transaction_flag_links fl
+        JOIN transaction_flags f ON f.id = fl.flag_id
+        WHERE fl.transaction_id = t.id
+    ), '[]'::json) AS flags`;
 
 /**
  * Shared WHERE clause for the paged transaction list, so the page query and the
@@ -335,13 +344,28 @@ const TRANSACTION_COLUMNS = `
  *
  * `days` counts back inclusive of today: 7 means today plus the six days before.
  */
-const buildTransactionFilter = (userId, { accountId, days, search } = {}) => {
+const buildTransactionFilter = (userId, { accountId, days, search, flagId } = {}) => {
     const clauses = ['t.user_id = $1'];
     const params = [userId];
 
     if (accountId && accountId !== 'all') {
         params.push(accountId);
         clauses.push(`a.plaid_account_id = $${params.length}`);
+    }
+
+    // EXISTS rather than a join: a join against the link table would multiply
+    // rows for a transaction carrying several flags, inflating both the page and
+    // the count. 'none' selects the untagged ones — "what have I not sorted yet".
+    if (flagId === 'none') {
+        clauses.push(`NOT EXISTS (
+            SELECT 1 FROM transaction_flag_links fl WHERE fl.transaction_id = t.id
+        )`);
+    } else if (flagId) {
+        params.push(flagId);
+        clauses.push(`EXISTS (
+            SELECT 1 FROM transaction_flag_links fl
+            WHERE fl.transaction_id = t.id AND fl.flag_id = $${params.length}
+        )`);
     }
 
     if (days) {
@@ -398,6 +422,33 @@ const countTransactions = async (userId, options = {}) => {
     return result.rows[0]?.total || 0;
 };
 
+/**
+ * Money totals across everything the filter matches — NOT just the page.
+ *
+ * Plaid's sign convention: a positive amount is money leaving the account. So
+ * outflow and inflow are split on the sign, and `net` is simply SUM(amount),
+ * i.e. spent minus reimbursed. The netting is the point for a shared-expense
+ * flag: a roommate paying you back lands as an inflow and should cancel part of
+ * what you fronted, otherwise the flag reports what you spent gross and nobody
+ * can act on it.
+ */
+const sumTransactions = async (userId, options = {}) => {
+    const { where, params } = buildTransactionFilter(userId, options);
+
+    const result = await pool.query(
+        `SELECT
+            COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END), 0)::float AS outflow,
+            COALESCE(SUM(CASE WHEN t.amount < 0 THEN -t.amount ELSE 0 END), 0)::float AS inflow,
+            COALESCE(SUM(t.amount), 0)::float AS net,
+            COUNT(*)::int AS count
+         FROM transactions t
+         LEFT JOIN accounts a ON t.account_id = a.id
+         WHERE ${where}`,
+        params
+    );
+    return result.rows[0] || { outflow: 0, inflow: 0, net: 0, count: 0 };
+};
+
 // Get transactions for a specific account
 const getTransactionsByAccount = async (userId, accountId, limit = 100) => {
     const result = await pool.query(
@@ -424,6 +475,237 @@ const updateTransactionNotes = async (userId, plaidTransactionId, notes) => {
         [notes, userId, plaidTransactionId]
     );
     return result.rows[0];
+};
+
+// ============ FLAG OPERATIONS ============
+//
+// Conflict handling is uniform across create and update: a duplicate name raises
+// Postgres 23505 on the (user_id, LOWER(name)) unique index and propagates to
+// the route, which turns it into a 409. A null return always means "no such flag
+// for this user" and never means "name taken".
+
+/** Every flag, with the count and money totals of what is currently attached. */
+const getFlags = async (userId) => {
+    const result = await pool.query(
+        `SELECT f.id, f.name, f.color_index, f.icon,
+                COUNT(l.transaction_id)::int AS transaction_count,
+                COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END), 0)::float AS outflow,
+                COALESCE(SUM(CASE WHEN t.amount < 0 THEN -t.amount ELSE 0 END), 0)::float AS inflow,
+                COALESCE(SUM(t.amount), 0)::float AS net
+         FROM transaction_flags f
+         LEFT JOIN transaction_flag_links l ON l.flag_id = f.id
+         LEFT JOIN transactions t ON t.id = l.transaction_id
+         WHERE f.user_id = $1
+         GROUP BY f.id
+         ORDER BY LOWER(f.name)`,
+        [userId]
+    );
+    return result.rows;
+};
+
+const getFlagById = async (userId, flagId) => {
+    const result = await pool.query(
+        `SELECT id, name, color_index, icon FROM transaction_flags
+         WHERE user_id = $1 AND id = $2`,
+        [userId, flagId]
+    );
+    return result.rows[0] || null;
+};
+
+/**
+ * Create the starter set once. Returns true if this call is what created them.
+ *
+ * The UPDATE ... WHERE flags_seeded_at IS NULL is the lock: if two first-loads
+ * race, one of them updates a row and the other updates none and bails, so the
+ * defaults cannot be inserted twice. Stamping also means a user who deletes
+ * every flag is not handed the defaults back on their next load.
+ */
+const seedDefaultFlags = async (userId, defaults) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const claimed = await client.query(
+            `UPDATE users SET flags_seeded_at = NOW()
+             WHERE id = $1 AND flags_seeded_at IS NULL
+             RETURNING id`,
+            [userId]
+        );
+        if (!claimed.rows.length) {
+            await client.query('ROLLBACK');
+            return false;
+        }
+
+        for (const flag of defaults) {
+            await client.query(
+                `INSERT INTO transaction_flags (user_id, name, color_index, icon)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT DO NOTHING`,
+                [userId, flag.name, flag.colorIndex, flag.icon]
+            );
+        }
+
+        await client.query('COMMIT');
+        return true;
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+};
+
+const createFlag = async (userId, { name, colorIndex, icon }) => {
+    const result = await pool.query(
+        `INSERT INTO transaction_flags (user_id, name, color_index, icon)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, name, color_index, icon`,
+        [userId, name, colorIndex, icon]
+    );
+    return result.rows[0];
+};
+
+const updateFlag = async (userId, flagId, { name, colorIndex, icon }) => {
+    const params = [userId, flagId];
+    const sets = [];
+    const set = (column, value) => {
+        params.push(value);
+        sets.push(`${column} = $${params.length}`);
+    };
+
+    if (name !== undefined) set('name', name);
+    if (colorIndex !== undefined) set('color_index', colorIndex);
+    if (icon !== undefined) set('icon', icon);
+    if (!sets.length) return getFlagById(userId, flagId);
+
+    sets.push('updated_at = NOW()');
+
+    const result = await pool.query(
+        `UPDATE transaction_flags SET ${sets.join(', ')}
+         WHERE user_id = $1 AND id = $2
+         RETURNING id, name, color_index, icon`,
+        params
+    );
+    return result.rows[0] || null;
+};
+
+const deleteFlag = async (userId, flagId) => {
+    const result = await pool.query(
+        `DELETE FROM transaction_flags WHERE user_id = $1 AND id = $2 RETURNING id`,
+        [userId, flagId]
+    );
+    return result.rowCount > 0;
+};
+
+/**
+ * Attach/detach transactions in one round trip, addressed by the Plaid id the
+ * client holds. Returns null if the flag is not this user's.
+ *
+ * `t.user_id = $2` inside the INSERT ... SELECT is the authorisation: an id
+ * belonging to someone else simply selects no row, so a crafted request tags
+ * nothing rather than tagging a stranger's transaction.
+ */
+const setFlagAssignments = async (userId, flagId, { add = [], remove = [] } = {}) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const owned = await client.query(
+            `SELECT id FROM transaction_flags WHERE id = $1 AND user_id = $2`,
+            [flagId, userId]
+        );
+        if (!owned.rows.length) {
+            await client.query('ROLLBACK');
+            return null;
+        }
+
+        let added = 0;
+        let removed = 0;
+
+        if (add.length) {
+            const result = await client.query(
+                `INSERT INTO transaction_flag_links (flag_id, transaction_id)
+                 SELECT $1, t.id FROM transactions t
+                 WHERE t.user_id = $2 AND t.plaid_transaction_id = ANY($3::varchar[])
+                 ON CONFLICT DO NOTHING`,
+                [flagId, userId, add]
+            );
+            added = result.rowCount;
+        }
+
+        if (remove.length) {
+            const result = await client.query(
+                `DELETE FROM transaction_flag_links l
+                 USING transactions t
+                 WHERE l.flag_id = $1
+                   AND l.transaction_id = t.id
+                   AND t.user_id = $2
+                   AND t.plaid_transaction_id = ANY($3::varchar[])`,
+                [flagId, userId, remove]
+            );
+            removed = result.rowCount;
+        }
+
+        await client.query('COMMIT');
+        return { added, removed };
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+};
+
+/**
+ * The breakdowns behind a single flag. Runs through the same
+ * buildTransactionFilter as the list, so what the analytics count and what the
+ * list shows can never diverge.
+ */
+const getFlagAnalytics = async (userId, options = {}) => {
+    const { where, params } = buildTransactionFilter(userId, options);
+    const from = `FROM transactions t
+         LEFT JOIN accounts a ON t.account_id = a.id
+         WHERE ${where}`;
+
+    // Breakdowns rank outflows only. Letting a refund into "top merchants" would
+    // rank a merchant who paid you back next to ones you actually paid.
+    const spent = `${from} AND t.amount > 0`;
+
+    const [totals, monthly, merchants, categories, accounts] = await Promise.all([
+        sumTransactions(userId, options),
+        pool.query(
+            `SELECT TO_CHAR(t.date, 'YYYY-MM') AS month,
+                    COALESCE(SUM(t.amount), 0)::float AS net
+             ${from} GROUP BY 1 ORDER BY 1`,
+            params
+        ),
+        pool.query(
+            `SELECT COALESCE(NULLIF(t.merchant_name, ''), t.name) AS merchant,
+                    SUM(t.amount)::float AS amount, COUNT(*)::int AS count
+             ${spent} GROUP BY 1 ORDER BY 2 DESC LIMIT 5`,
+            params
+        ),
+        pool.query(
+            `SELECT COALESCE(t.category[1], 'Other') AS category,
+                    SUM(t.amount)::float AS amount, COUNT(*)::int AS count
+             ${spent} GROUP BY 1 ORDER BY 2 DESC LIMIT 6`,
+            params
+        ),
+        pool.query(
+            `SELECT COALESCE(a.name, 'Unknown') AS account,
+                    SUM(t.amount)::float AS amount, COUNT(*)::int AS count
+             ${spent} GROUP BY 1 ORDER BY 2 DESC`,
+            params
+        ),
+    ]);
+
+    return {
+        totals,
+        monthly: monthly.rows,
+        top_merchants: merchants.rows,
+        categories: categories.rows,
+        accounts: accounts.rows,
+    };
 };
 
 // Get spending by category for analytics
@@ -797,8 +1079,18 @@ module.exports = {
     getTransactions,
     getTransactionsPage,
     countTransactions,
+    sumTransactions,
     getTransactionsByAccount,
     updateTransactionNotes,
+    // Flag operations
+    getFlags,
+    getFlagById,
+    seedDefaultFlags,
+    createFlag,
+    updateFlag,
+    deleteFlag,
+    setFlagAssignments,
+    getFlagAnalytics,
     // Analytics operations
     getCategorySpending,
     getDailySpending,

@@ -1,4 +1,5 @@
 const { body, validationResult } = require('express-validator');
+const { FLAG_ICONS, FLAG_RAMP_SIZE } = require('../services/flags');
 
 /**
  * Middleware to check validation results and return errors.
@@ -161,8 +162,80 @@ const validateWatchdogAction = [
     handleValidationErrors,
 ];
 
+/**
+ * Validation chains for transaction flags.
+ *
+ * Names are trimmed and length-capped but deliberately NOT .escape()d: the only
+ * consumer is React Native, which renders text as text, and escaping would turn
+ * a flag called "Bob's place" into "Bob&#x27;s place" on the device.
+ *
+ * The icon is checked against the allowlist the picker offers rather than a
+ * shape regex. A well-formed name that is not a real Ionicon passes a regex and
+ * then renders as an invisible glyph, which is a bug you only find by looking.
+ */
+const flagName = (chain) => chain
+    .trim()
+    .isLength({ min: 1, max: 40 }).withMessage('Flag name must be 1-40 characters');
+
+const flagColorIndex = (chain) => chain
+    .isInt({ min: 0, max: FLAG_RAMP_SIZE - 1 })
+    .withMessage(`colorIndex must be between 0 and ${FLAG_RAMP_SIZE - 1}`)
+    .toInt();
+
+const flagIcon = (chain) => chain
+    .isIn(FLAG_ICONS).withMessage('icon must be one of the supported flag icons');
+
+const validateFlagCreate = [
+    flagName(body('name').notEmpty().withMessage('Flag name is required')),
+    flagColorIndex(body('colorIndex').optional()),
+    flagIcon(body('icon').optional()),
+    handleValidationErrors,
+];
+
+const validateFlagUpdate = [
+    flagName(body('name').optional()),
+    flagColorIndex(body('colorIndex').optional()),
+    flagIcon(body('icon').optional()),
+    body().custom((value) => {
+        if (!['name', 'colorIndex', 'icon'].some((key) => value?.[key] !== undefined)) {
+            throw new Error('Provide at least one of: name, colorIndex, icon');
+        }
+        return true;
+    }),
+    handleValidationErrors,
+];
+
+/** Bulk attach/detach. Bounded so one request cannot be an unbounded write. */
+const MAX_FLAG_ASSIGNMENTS = 1000;
+
+const assignmentList = (chain) => chain
+    .optional()
+    .isArray({ max: MAX_FLAG_ASSIGNMENTS })
+    .withMessage(`Send at most ${MAX_FLAG_ASSIGNMENTS} transaction ids at a time`)
+    .custom((ids) => {
+        if (!ids.every((id) => typeof id === 'string' && id.length > 0 && id.length <= 255)) {
+            throw new Error('Transaction ids must be non-empty strings');
+        }
+        return true;
+    });
+
+const validateFlagAssignment = [
+    assignmentList(body('add')),
+    assignmentList(body('remove')),
+    body().custom((value) => {
+        if (!value?.add?.length && !value?.remove?.length) {
+            throw new Error('Provide at least one transaction id in add or remove');
+        }
+        return true;
+    }),
+    handleValidationErrors,
+];
+
 module.exports = {
     handleValidationErrors,
+    validateFlagCreate,
+    validateFlagUpdate,
+    validateFlagAssignment,
     validateLogin,
     validateSignup,
     validateProfileUpdate,

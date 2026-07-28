@@ -32,4 +32,5 @@ module.exports = [
     'add_watchdog_tables.sql',
     'add_category_insights.sql',
     'add_transaction_paging_index.sql',
+    'add_transaction_flags.sql',
 ];
