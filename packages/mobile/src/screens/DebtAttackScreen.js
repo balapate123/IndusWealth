@@ -133,6 +133,8 @@ const makeStyles = (t) => StyleSheet.create({
     slider: { width: '100%', height: 40, marginTop: SPACING.SMALL },
     sliderLabels: { flexDirection: 'row', justifyContent: 'space-between' },
 
+    headlineNote: { marginTop: SPACING.TINY },
+
     // Payoff chart
     chartContainer: { marginTop: SPACING.SMALL },
     chartAxis: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -515,29 +517,38 @@ const DebtAttackScreen = () => {
     };
 
     const getStrategyData = () => {
-        if (!analysis?.strategies) {
-            return { debtFreeDate: 'N/A', monthsSooner: 0, interestSaved: 0 };
-        }
+        const empty = { debtFreeDate: null, neverPaysOff: false, monthsSooner: null, interestSaved: null };
+        if (!analysis?.strategies) return empty;
 
         const strategyData = strategy === 'snowball'
             ? analysis.strategies.snowball
             : analysis.strategies.avalanche;
 
-        const payoffDate = strategyData?.payoff_date
-            ? new Date(`${strategyData.payoff_date}-01`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-            : 'N/A';
-
+        // A run that never clears reports null for its date, months and interest.
+        // Keep those null all the way to the screen: coercing them to 0 or 'N/A'
+        // is what let a debt growing faster than it is paid print a debt-free
+        // date fifty years out as though it were a plan.
         const interestSavedKey = strategy === 'snowball' ? 'interest_saved_snowball' : 'interest_saved_avalanche';
         const monthsSavedKey = strategy === 'snowball' ? 'months_saved_snowball' : 'months_saved_avalanche';
 
         return {
-            debtFreeDate: payoffDate,
-            monthsSooner: analysis.savings?.[monthsSavedKey] || 0,
-            interestSaved: analysis.savings?.[interestSavedKey] || 0,
+            debtFreeDate: strategyData?.payoff_date
+                ? new Date(`${strategyData.payoff_date}-01`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                : null,
+            neverPaysOff: strategyData?.paid_off === false,
+            minimumNeverPaysOff: analysis.strategies.status_quo?.paid_off === false,
+            monthsSooner: analysis.savings?.[monthsSavedKey] ?? null,
+            interestSaved: analysis.savings?.[interestSavedKey] ?? null,
         };
     };
 
-    const { debtFreeDate, monthsSooner, interestSaved } = getStrategyData();
+    const {
+        debtFreeDate,
+        neverPaysOff,
+        minimumNeverPaysOff,
+        monthsSooner,
+        interestSaved,
+    } = getStrategyData();
     const totalMinPayment = analysis?.total_min_payment || 0;
     const totalPayment = totalMinPayment + extraPayment;
 
@@ -752,26 +763,51 @@ const DebtAttackScreen = () => {
                 {/* Headline result */}
                 <Card>
                     <View style={styles.labelRow}>
-                        <Ionicons name="calendar" size={14} color={theme.SUCCESS} />
+                        <Ionicons
+                            name={neverPaysOff ? 'alert-circle' : 'calendar'}
+                            size={14}
+                            color={neverPaysOff ? theme.WARNING : theme.SUCCESS}
+                        />
                         <Text variant="overline" tone="muted">Debt-free date</Text>
                     </View>
-                    <Text variant="hero">{debtFreeDate}</Text>
-                    {monthsSooner > 0 && (
-                        <View style={styles.soonerBadge}>
-                            <Ionicons name="trending-down" size={13} color={theme.SUCCESS} />
-                            <Text variant="meta" tone="success">{monthsSooner} months sooner</Text>
-                        </View>
+
+                    {neverPaysOff ? (
+                        <>
+                            <Text variant="h1" tone="warning">Not on track</Text>
+                            <Text variant="meta" tone="secondary" style={styles.headlineNote}>
+                                At this payment the interest is growing the balance faster than the
+                                payment reduces it, so there is no payoff date to give.
+                            </Text>
+                        </>
+                    ) : (
+                        <>
+                            <Text variant="hero">{debtFreeDate || '—'}</Text>
+                            {monthsSooner > 0 && (
+                                <View style={styles.soonerBadge}>
+                                    <Ionicons name="trending-down" size={13} color={theme.SUCCESS} />
+                                    <Text variant="meta" tone="success">{monthsSooner} months sooner</Text>
+                                </View>
+                            )}
+                        </>
                     )}
 
                     <View style={styles.divider} />
 
                     <Text variant="overline" tone="muted">Interest saved</Text>
-                    <View style={styles.interestRow}>
-                        <Text variant="hero" tone="success">${interestSaved.toLocaleString()}</Text>
-                        <View style={styles.trophy}>
-                            <MaterialCommunityIcons name="trophy" size={26} color={theme.ACCENT} />
+                    {interestSaved === null ? (
+                        <Text variant="meta" tone="secondary" style={styles.headlineNote}>
+                            {minimumNeverPaysOff
+                                ? 'Minimum payments never clear this debt, so there is no baseline to measure a saving against.'
+                                : 'Available once this plan reaches a payoff date.'}
+                        </Text>
+                    ) : (
+                        <View style={styles.interestRow}>
+                            <Text variant="hero" tone="success">${interestSaved.toLocaleString()}</Text>
+                            <View style={styles.trophy}>
+                                <MaterialCommunityIcons name="trophy" size={26} color={theme.ACCENT} />
+                            </View>
                         </View>
-                    </View>
+                    )}
 
                     {calculating && (
                         <View style={styles.calculatingOverlay}>

@@ -69,13 +69,26 @@ class DebtCalculator {
                 avalanche: avalanche,
                 snowball: snowball
             },
+            // A saving is the difference between two payoffs. If either run never
+            // reaches one there is no difference to state, so these are null
+            // rather than a subtraction against a capped 600-month simulation —
+            // which is how "saves $4 billion, 560 months sooner" got on screen.
             savings: {
-                interest_saved_avalanche: Math.round(statusQuo.total_interest - avalanche.total_interest),
-                months_saved_avalanche: statusQuo.months_to_payoff - avalanche.months_to_payoff,
-                interest_saved_snowball: Math.round(statusQuo.total_interest - snowball.total_interest),
-                months_saved_snowball: statusQuo.months_to_payoff - snowball.months_to_payoff
+                interest_saved_avalanche: this._saved(statusQuo, avalanche, 'total_interest'),
+                months_saved_avalanche: this._saved(statusQuo, avalanche, 'months_to_payoff'),
+                interest_saved_snowball: this._saved(statusQuo, snowball, 'total_interest'),
+                months_saved_snowball: this._saved(statusQuo, snowball, 'months_to_payoff')
             }
         };
+    }
+
+    /**
+     * What `improved` saves against `baseline` on a field, or null when either
+     * run never pays off and the comparison therefore has no answer.
+     */
+    _saved(baseline, improved, field) {
+        if (!baseline.paid_off || !improved.paid_off) return null;
+        return Math.round(baseline[field] - improved[field]);
     }
 
     /**
@@ -240,18 +253,23 @@ class DebtCalculator {
             }
         }
 
+        // The loop stops at 600 months whether or not the debt is gone. When it
+        // was still there, nothing about "payoff" is real: the date is 50 years
+        // out and the interest is whatever half a century of compounding on a
+        // growing balance came to. Reporting null says "no payoff" once, instead
+        // of handing the UI numbers it would print as fact.
+        const paidOff = months < 600;
+
         const today = new Date();
         today.setMonth(today.getMonth() + months);
 
         return {
-            total_interest: Math.round(totalInterest),
-            months_to_payoff: months,
-            payoff_date: today.toISOString().slice(0, 7), // YYYY-MM
+            total_interest: paidOff ? Math.round(totalInterest) : null,
+            months_to_payoff: paidOff ? months : null,
+            payoff_date: paidOff ? today.toISOString().slice(0, 7) : null, // YYYY-MM
             payoff_order: payoffOrder,
             balance_schedule: this._downsample(schedule),
-            // The loop stops at 600 months whether or not the debt is gone. Say
-            // so, rather than letting a truncated curve read as a payoff.
-            paid_off: months < 600
+            paid_off: paidOff
         };
     }
 
