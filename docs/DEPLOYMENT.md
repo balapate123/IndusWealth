@@ -13,7 +13,7 @@ real deploy + real Plaid **before** they reach production users on the Play Stor
 | Backend URL | https://induswealth.onrender.com | https://induswealth-staging.onrender.com |
 | Database | prod Postgres | **separate** staging Postgres (`induswealth-staging-db`) |
 | Plaid | production | production (real connections) |
-| Mobile EAS profile | `production` (AAB → Play) | `preview` (internal APK) |
+| Mobile EAS profile | `production` (AAB → Play) | `preview` (internal APK) and `development` (dev client) |
 | Auto-deploy trigger | push to `feature/web-export-fix` | push to `dev` |
 | Region / build | ohio · root `packages/backend` · `npm install` · `node index.js` |
 
@@ -69,6 +69,17 @@ feature/*  ──merge──▶  dev  ──auto-deploy──▶  staging  (test
 - Free Postgres is deleted after **30 days**. To recreate: provision a new
   staging DB and update `DATABASE_URL` (migrations re-run on boot). For a
   persistent box, bump the `plan:` values in `render.yaml` to a paid tier.
+
+## Which backend is a build talking to?
+
+Every EAS profile now sets `EXPO_PUBLIC_API_URL` explicitly — `development`
+and `preview` at staging, `production` at production. This matters: a profile
+with no `env` block falls back to `packages/mobile/.env`, which points at
+**production**, so a build you believe is on staging can quietly be on prod.
+The only symptom is confusing errors from the wrong server.
+
+As a second line of defence, Profile's footer shows the API host on any build
+not pointed at production. If you see no host there, you are on production.
 
 ## Secrets
 Never commit real secret values. `ENCRYPTION_KEY` / `JWT_SECRET` for staging are
