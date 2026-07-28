@@ -4,6 +4,13 @@
  * Supports both Plaid liabilities and custom user-entered debts
  */
 
+/**
+ * Cap on points in a returned balance schedule. A mortgage can run the full
+ * 600-month simulation, and no phone-width chart can resolve that many points —
+ * the curve is monotonic, so evenly-spaced sampling keeps its shape.
+ */
+const MAX_SCHEDULE_POINTS = 48;
+
 // Default APRs by account type
 const DEFAULT_APRS = {
     'credit_card': 22.00,
@@ -169,6 +176,14 @@ class DebtCalculator {
         let months = 0;
         const payoffOrder = []; // Track in which month each debt gets paid off
 
+        // Combined balance after each month. This is what the payoff chart draws:
+        // taking it from the same loop that produces months_to_payoff and
+        // total_interest is what stops the curve disagreeing with the headline.
+        const schedule = [{
+            month: 0,
+            balance: Math.round(debts.reduce((sum, d) => sum + d.balance, 0))
+        }];
+
         // Safety break to prevent infinite loops
         while (debts.some(d => d.balance > 0) && months < 600) {
             months++;
@@ -213,6 +228,16 @@ class DebtCalculator {
                     }
                 }
             }
+
+            // Record only while the balance is actually falling. A minimum
+            // payment below the month's interest makes it grow without bound,
+            // and 600 months of that compounds into the billions — plotted, it
+            // would squash the real curve flat against the axis. A schedule
+            // that stops short is read alongside paid_off, which says why.
+            const remaining = Math.round(debts.reduce((sum, d) => sum + Math.max(0, d.balance), 0));
+            if (remaining < schedule[schedule.length - 1].balance) {
+                schedule.push({ month: months, balance: remaining });
+            }
         }
 
         const today = new Date();
@@ -222,8 +247,28 @@ class DebtCalculator {
             total_interest: Math.round(totalInterest),
             months_to_payoff: months,
             payoff_date: today.toISOString().slice(0, 7), // YYYY-MM
-            payoff_order: payoffOrder
+            payoff_order: payoffOrder,
+            balance_schedule: this._downsample(schedule),
+            // The loop stops at 600 months whether or not the debt is gone. Say
+            // so, rather than letting a truncated curve read as a payoff.
+            paid_off: months < 600
         };
+    }
+
+    /**
+     * Evenly sample a series down to MAX_SCHEDULE_POINTS, always keeping the
+     * first and last entry so the curve still starts at the opening balance and
+     * ends where the simulation ended.
+     */
+    _downsample(series) {
+        if (series.length <= MAX_SCHEDULE_POINTS) return series;
+
+        const step = (series.length - 1) / (MAX_SCHEDULE_POINTS - 1);
+        const sampled = [];
+        for (let i = 0; i < MAX_SCHEDULE_POINTS; i++) {
+            sampled.push(series[Math.round(i * step)]);
+        }
+        return sampled;
     }
 
     _emptyResult() {
@@ -233,9 +278,9 @@ class DebtCalculator {
             debt_count: 0,
             debts: [],
             strategies: {
-                status_quo: { total_interest: 0, months_to_payoff: 0, payoff_date: null, payoff_order: [] },
-                avalanche: { total_interest: 0, months_to_payoff: 0, payoff_date: null, payoff_order: [] },
-                snowball: { total_interest: 0, months_to_payoff: 0, payoff_date: null, payoff_order: [] }
+                status_quo: { total_interest: 0, months_to_payoff: 0, payoff_date: null, payoff_order: [], balance_schedule: [], paid_off: true },
+                avalanche: { total_interest: 0, months_to_payoff: 0, payoff_date: null, payoff_order: [], balance_schedule: [], paid_off: true },
+                snowball: { total_interest: 0, months_to_payoff: 0, payoff_date: null, payoff_order: [], balance_schedule: [], paid_off: true }
             },
             savings: {
                 interest_saved_avalanche: 0,

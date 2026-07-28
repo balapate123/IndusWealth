@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View,
     StyleSheet,
@@ -8,11 +8,12 @@ import {
     ActivityIndicator,
     Modal,
     KeyboardAvoidingView,
+    Dimensions,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { create, open } from '../services/plaidLink';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Circle, Line, Polyline } from 'react-native-svg';
 import { RADIUS, SPACING, alpha } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import {
@@ -33,6 +34,10 @@ import {
 } from '../components/ui';
 import api from '../services/api';
 import CustomAlert from '../components/CustomAlert';
+import { buildPayoffChart, CHART_HEIGHT, CHART_PAD } from '../utils/payoffChart';
+
+// Card is inset SPACING.MEDIUM each side and padded SPACING.MEDIUM each side.
+const CHART_WIDTH = Dimensions.get('window').width - SPACING.MEDIUM * 4;
 
 // Default APR by debt type
 const DEFAULT_APRS = {
@@ -128,16 +133,27 @@ const makeStyles = (t) => StyleSheet.create({
     slider: { width: '100%', height: 40, marginTop: SPACING.SMALL },
     sliderLabels: { flexDirection: 'row', justifyContent: 'space-between' },
 
-    // Trend chart
-    chartContainer: { marginVertical: SPACING.SMALL },
+    // Payoff chart
+    chartContainer: { marginTop: SPACING.SMALL },
+    chartAxis: { flexDirection: 'row', justifyContent: 'space-between' },
     legendRow: { flexDirection: 'row', gap: SPACING.MEDIUM, marginTop: SPACING.SMALL },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     legendDot: { width: 8, height: 8, borderRadius: 4 },
+    trendText: { flex: 1 },
     trendSavings: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: SPACING.SMALL,
         backgroundColor: t.ACCENT_DIM,
+        padding: SPACING.MEDIUM - 4,
+        borderRadius: RADIUS.MEDIUM,
+        marginTop: SPACING.MEDIUM,
+    },
+    trendWarning: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+        backgroundColor: t.WARNING_DIM,
         padding: SPACING.MEDIUM - 4,
         borderRadius: RADIUS.MEDIUM,
         marginTop: SPACING.MEDIUM,
@@ -525,6 +541,11 @@ const DebtAttackScreen = () => {
     const totalMinPayment = analysis?.total_min_payment || 0;
     const totalPayment = totalMinPayment + extraPayment;
 
+    const payoffChart = useMemo(
+        () => buildPayoffChart(analysis, strategy, extraPayment, CHART_WIDTH),
+        [analysis, strategy, extraPayment]
+    );
+
     const renderDebtItem = (item, index) => {
         const isCustom = item.is_custom;
         const payoffText = item.solo_payoff_months === 999
@@ -800,47 +821,130 @@ const DebtAttackScreen = () => {
                     </View>
                 </Card>
 
-                {/* Payoff comparison — illustrative shape, see note below */}
-                {analysis && debts.length > 0 && (
+                {/* Balance over time, drawn from the same simulation that produced
+                    the debt-free date above. */}
+                {payoffChart && (
                     <Card>
                         <SectionTitle
-                            title="Payment comparison"
-                            subtitle="Illustrative shape of minimum-only versus extra payments"
+                            title="Balance over time"
+                            subtitle={
+                                !payoffChart.hasPlot
+                                    ? 'This debt is not on track to be paid off'
+                                    : payoffChart.strategy
+                                        ? `Minimum payments versus +$${extraPayment}/mo`
+                                        : 'What you owe at minimum payments'
+                            }
                         />
+
+                        {payoffChart.hasPlot && (
                         <View style={styles.chartContainer}>
-                            <Svg width="100%" height={160} viewBox="0 0 320 160">
-                                <Path
-                                    d="M 20 30 Q 80 35, 140 50 Q 200 70, 260 100 Q 290 120, 300 140"
-                                    stroke={theme.DANGER}
-                                    strokeWidth={2.5}
-                                    fill="none"
-                                    strokeLinecap="round"
+                            <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
+                                {/* Zero line: recessive, and the only rule on the plot. */}
+                                <Line
+                                    x1={CHART_PAD.left}
+                                    y1={payoffChart.baselineY}
+                                    x2={CHART_WIDTH - CHART_PAD.right}
+                                    y2={payoffChart.baselineY}
+                                    stroke={theme.HAIRLINE_STRONG}
+                                    strokeWidth={1}
                                 />
-                                <Path
-                                    d="M 20 30 Q 60 45, 100 80 Q 140 110, 180 130 Q 200 140, 220 140"
-                                    stroke={theme.SUCCESS}
-                                    strokeWidth={2.5}
-                                    fill="none"
-                                    strokeLinecap="round"
-                                />
-                                <Circle cx={300} cy={140} r={4} fill={theme.DANGER} />
-                                <Circle cx={220} cy={140} r={4} fill={theme.SUCCESS} />
+
+                                {payoffChart.minimum && (
+                                    <Polyline
+                                        points={payoffChart.minimum.line}
+                                        stroke={theme.DANGER}
+                                        strokeWidth={2}
+                                        fill="none"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    />
+                                )}
+                                {payoffChart.strategy && (
+                                    <Polyline
+                                        points={payoffChart.strategy.line}
+                                        stroke={theme.SUCCESS}
+                                        strokeWidth={2}
+                                        fill="none"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    />
+                                )}
+
+                                {/* Endpoint marks only where the debt actually reaches zero. */}
+                                {payoffChart.minimum?.paidOff && (
+                                    <Circle
+                                        cx={payoffChart.minimum.end.x}
+                                        cy={payoffChart.minimum.end.y}
+                                        r={4}
+                                        fill={theme.DANGER}
+                                    />
+                                )}
+                                {payoffChart.strategy?.paidOff && (
+                                    <Circle
+                                        cx={payoffChart.strategy.end.x}
+                                        cy={payoffChart.strategy.end.y}
+                                        r={4}
+                                        fill={theme.SUCCESS}
+                                    />
+                                )}
                             </Svg>
                         </View>
-                        <View style={styles.legendRow}>
-                            <View style={styles.legendItem}>
-                                <View style={[styles.legendDot, { backgroundColor: theme.DANGER }]} />
-                                <Text variant="meta" tone="secondary">Minimum only</Text>
-                            </View>
-                            <View style={styles.legendItem}>
-                                <View style={[styles.legendDot, { backgroundColor: theme.SUCCESS }]} />
-                                <Text variant="meta" tone="secondary">With +${extraPayment}/mo</Text>
-                            </View>
+                        )}
+
+                        {payoffChart.hasPlot && (
+                        <View style={styles.chartAxis}>
+                            <Text variant="meta" tone="muted">Today</Text>
+                            <Text variant="meta" tone="muted">
+                                {payoffChart.maxMonth >= 24
+                                    ? `${Math.round(payoffChart.maxMonth / 12)} yrs`
+                                    : `${payoffChart.maxMonth} mo`}
+                            </Text>
                         </View>
+                        )}
+
+                        <View style={styles.legendRow}>
+                            {payoffChart.minimum && (
+                                <View style={styles.legendItem}>
+                                    <View style={[styles.legendDot, { backgroundColor: theme.DANGER }]} />
+                                    <Text variant="meta" tone="secondary">Minimum only</Text>
+                                </View>
+                            )}
+                            {payoffChart.strategy && (
+                                <View style={styles.legendItem}>
+                                    <View style={[styles.legendDot, { backgroundColor: theme.SUCCESS }]} />
+                                    <Text variant="meta" tone="secondary">With +${extraPayment}/mo</Text>
+                                </View>
+                            )}
+                        </View>
+
+                        {payoffChart.minimumNeverClears && (
+                            <View style={styles.trendWarning}>
+                                <Ionicons name="alert-circle" size={16} color={theme.WARNING} />
+                                <Text variant="meta" tone="secondary" style={styles.trendText}>
+                                    {payoffChart.strategyNeverClears
+                                        ? `Interest is outpacing both the minimum and the extra $${extraPayment}`
+                                          + '/mo, so the balance still grows. It needs a larger payment'
+                                          + ' before there is a payoff date at all.'
+                                        : 'At minimum payments the interest outpaces the payment, so the'
+                                          + ' balance never clears. Adding an extra payment is what changes'
+                                          + ' that.'}
+                                </Text>
+                            </View>
+                        )}
+
+                        {!payoffChart.strategy && !payoffChart.minimumNeverClears && (
+                            <View style={styles.trendSavings}>
+                                <Ionicons name="flash" size={16} color={theme.ACCENT} />
+                                <Text variant="meta" tone="secondary" style={styles.trendText}>
+                                    Add an extra monthly payment above to see how much sooner this ends.
+                                </Text>
+                            </View>
+                        )}
+
                         {monthsSooner > 0 && (
                             <View style={styles.trendSavings}>
                                 <Ionicons name="flash" size={16} color={theme.ACCENT} />
-                                <Text variant="meta" tone="secondary" style={{ flex: 1 }}>
+                                <Text variant="meta" tone="secondary" style={styles.trendText}>
                                     Pay off {monthsSooner} months faster and save $
                                     {interestSaved.toLocaleString()} in interest
                                 </Text>
