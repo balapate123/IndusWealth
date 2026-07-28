@@ -255,8 +255,10 @@ const HomeScreen = ({ navigation }) => {
 
                 if (cachedAccounts) {
                     setAccounts(cachedAccounts.accounts || []);
-                    // Use liquid_cash for display (only checking/savings accounts)
-                    setTotalCash(cachedAccounts.liquid_cash || cachedAccounts.total_balance || 0);
+                    // Liquid cash only — never fall back to total_balance. `||`
+                    // treats a real $0 as missing, so a spent-out chequing
+                    // account used to display whatever the fallback held.
+                    setTotalCash(cachedAccounts.liquid_cash ?? 0);
                     setChangePercent(cachedAccounts.change_percent || 0);
                     setMonthlySavings(cachedAccounts.monthly_savings || 0);
                 }
@@ -282,8 +284,8 @@ const HomeScreen = ({ navigation }) => {
 
             if (accountsData?.success) {
                 setAccounts(accountsData.accounts || []);
-                // Use liquid_cash for display (only checking/savings accounts)
-                setTotalCash(accountsData.liquid_cash || accountsData.total_balance || 0);
+                // Liquid cash only — see the note on the cached branch above.
+                setTotalCash(accountsData.liquid_cash ?? 0);
                 setChangePercent(accountsData.change_percent || 0);
                 setMonthlySavings(accountsData.monthly_savings || 0);
                 // Cache the accounts data

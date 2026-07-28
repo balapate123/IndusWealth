@@ -19,6 +19,22 @@ const isRevolvingCredit = (account) =>
     account.type === 'credit' || account.subtype === 'line of credit';
 
 /**
+ * Accounts whose balance is a liability. Wider than revolving credit — a
+ * mortgage or student loan is debt too, it just has no "available credit" to
+ * show.
+ *
+ * Plaid reports these as a POSITIVE current_balance meaning money owed, so they
+ * must never be added into an asset total. A negative balance means the lender
+ * owes the user (an overpaid card), which is why nothing here takes an absolute
+ * value: summed raw, an overpaid card correctly reduces total debt.
+ */
+const isDebtAccount = (account) =>
+    account.type === 'credit' || account.type === 'loan';
+
+const sumBalances = (accounts) =>
+    accounts.reduce((sum, acc) => sum + (num(acc.current_balance) ?? 0), 0);
+
+/**
  * Shape one account for the app, including the three balances Plaid reports.
  *
  * `available_balance` used to be dropped here and the credit limit was never
@@ -82,6 +98,8 @@ router.get('/', authenticateToken, async (req, res, next) => {
             return successResponse(res, {
                 accounts: [],
                 total_balance: 0,
+                total_debt: 0,
+                net_worth: 0,
                 liquid_cash: 0,
                 change_percent: 0,
                 needs_bank_connection: true
@@ -90,14 +108,19 @@ router.get('/', authenticateToken, async (req, res, next) => {
 
         logger.info('Returning cached accounts', { ...ctx, count: accounts.length, dataSource: DATA_SOURCES.DATABASE });
 
-        // Calculate total balance (all accounts)
-        const totalBalance = accounts.reduce((sum, acc) => sum + parseFloat(acc.current_balance || 0), 0);
+        // Assets only. This used to sum every account, and because Plaid reports
+        // a card's balance as a positive number meaning money owed, a $1,350
+        // card balance was added to the figure the app labels "Total assets" —
+        // so the more you owed, the wealthier the app said you were.
+        const totalBalance = sumBalances(accounts.filter(acc => !isDebtAccount(acc)));
+        const totalDebt = sumBalances(accounts.filter(isDebtAccount));
+        const netWorth = totalBalance - totalDebt;
 
         // Calculate liquid cash (only checking, savings, and depository accounts)
         const liquidAccountTypes = ['checking', 'savings', 'depository'];
-        const liquidCash = accounts
-            .filter(acc => liquidAccountTypes.includes(acc.type) || liquidAccountTypes.includes(acc.subtype))
-            .reduce((sum, acc) => sum + parseFloat(acc.current_balance || 0), 0);
+        const liquidCash = sumBalances(accounts.filter(
+            acc => liquidAccountTypes.includes(acc.type) || liquidAccountTypes.includes(acc.subtype)
+        ));
 
         // Calculate monthly savings (income - expenses for current month)
         const now = new Date();
@@ -167,7 +190,10 @@ router.get('/', authenticateToken, async (req, res, next) => {
 
         successResponse(res, {
             accounts: formattedAccounts,
+            // Assets only — see the comment where it is computed.
             total_balance: totalBalance,
+            total_debt: totalDebt,
+            net_worth: netWorth,
             liquid_cash: liquidCash,
             change_percent: changePercent,
             monthly_savings: monthlySavings

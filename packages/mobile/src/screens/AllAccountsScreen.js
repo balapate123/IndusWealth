@@ -55,6 +55,14 @@ const makeStyles = (t) => StyleSheet.create({
         backgroundColor: t.HAIRLINE,
         marginHorizontal: SPACING.MEDIUM,
     },
+    debtRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: SPACING.MEDIUM,
+        paddingTop: SPACING.MEDIUM,
+        borderTopWidth: 1,
+        borderTopColor: t.HAIRLINE,
+    },
     countBadge: {
         alignSelf: 'flex-start',
         backgroundColor: t.SURFACE_HIGH,
@@ -92,6 +100,8 @@ const AllAccountsScreen = ({ navigation }) => {
 
     const [accounts, setAccounts] = useState([]);
     const [totalBalance, setTotalBalance] = useState(0);
+    const [totalDebt, setTotalDebt] = useState(0);
+    const [netWorth, setNetWorth] = useState(0);
     const [liquidCash, setLiquidCash] = useState(0);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -124,8 +134,12 @@ const AllAccountsScreen = ({ navigation }) => {
                 // Filter out aggregate accounts
                 const realAccounts = (response.accounts || []).filter((acc) => acc.type !== 'aggregate');
                 setAccounts(realAccounts);
-                setTotalBalance(response.total_balance || 0);
-                setLiquidCash(response.liquid_cash || 0);
+                // `??` not `||`: a real zero is a valid balance, and coalescing
+                // it away is what made the old fallback show debt as cash.
+                setTotalBalance(response.total_balance ?? 0);
+                setTotalDebt(response.total_debt ?? 0);
+                setNetWorth(response.net_worth ?? 0);
+                setLiquidCash(response.liquid_cash ?? 0);
             }
         } catch (error) {
             console.error('Error loading accounts:', error);
@@ -317,6 +331,29 @@ const AllAccountsScreen = ({ navigation }) => {
                             <Text variant="h1">{formatBalance(liquidCash)}</Text>
                         </View>
                     </View>
+                    {/* "Total assets" no longer quietly includes what is owed,
+                        so the debt has to be shown somewhere or the card tells
+                        half the story. Hidden entirely when there is none. */}
+                    {totalDebt !== 0 ? (
+                        <View style={styles.debtRow}>
+                            <View style={styles.summaryItem}>
+                                <Text variant="overline" tone="muted">
+                                    {totalDebt > 0 ? 'You owe' : 'Credit balance'}
+                                </Text>
+                                <Text variant="h2" tone={totalDebt > 0 ? 'danger' : 'success'}>
+                                    {formatBalance(Math.abs(totalDebt))}
+                                </Text>
+                            </View>
+                            <View style={styles.summaryDivider} />
+                            <View style={styles.summaryItem}>
+                                <Text variant="overline" tone="muted">Net worth</Text>
+                                <Text variant="h2" tone={netWorth < 0 ? 'danger' : 'primary'}>
+                                    {netWorth < 0 ? '−' : ''}{formatBalance(Math.abs(netWorth))}
+                                </Text>
+                            </View>
+                        </View>
+                    ) : null}
+
                     <View style={styles.countBadge}>
                         <Text variant="meta" tone="secondary">
                             {accounts.length} account{accounts.length === 1 ? '' : 's'} connected
