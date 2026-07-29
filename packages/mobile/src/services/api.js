@@ -530,6 +530,36 @@ export const api = {
     getFlagAnalytics: (flagId, days) =>
         apiRequest(`/flags/${flagId}/analytics${days ? `?days=${days}` : ''}`),
 
+    // Savings goals
+    getGoals: (status = 'active') => apiRequest(`/goals?status=${status}`),
+
+    getGoal: (goalId) => apiRequest(`/goals/${goalId}`),
+
+    createGoal: (goal) =>
+        apiRequest('/goals', { method: 'POST', body: JSON.stringify(goal) }),
+
+    updateGoal: (goalId, fields) =>
+        apiRequest(`/goals/${goalId}`, { method: 'PATCH', body: JSON.stringify(fields) }),
+
+    deleteGoal: (goalId) => apiRequest(`/goals/${goalId}`, { method: 'DELETE' }),
+
+    addGoalContribution: (goalId, { amount, note, occurredOn }) =>
+        apiRequest(`/goals/${goalId}/contributions`, {
+            method: 'POST',
+            body: JSON.stringify({ amount, note, occurredOn }),
+        }),
+
+    deleteGoalContribution: (goalId, contributionId) =>
+        apiRequest(`/goals/${goalId}/contributions/${contributionId}`, { method: 'DELETE' }),
+
+    /**
+     * Which goals have newly crossed a milestone. Called on app open: a local
+     * notification's content freezes when scheduled, so a milestone cannot be
+     * scheduled ahead of the balance change that causes it.
+     */
+    checkGoalMilestones: () =>
+        apiRequest('/goals/milestones/check', { method: 'POST' }),
+
     // Watchdog - Recurring Expenses
     getWatchdogAnalysis: (forceRefresh = false) =>
         apiRequest(`/watchdog${forceRefresh ? '?force_refresh=true' : ''}`),

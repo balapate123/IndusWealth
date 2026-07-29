@@ -20,7 +20,10 @@ import {
 } from '../components/ui';
 import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
+import GoalCard from '../components/GoalCard';
 import useTransactionFlags from '../hooks/useTransactionFlags';
+import useGoals from '../hooks/useGoals';
+import { presentMilestones } from '../services/notifications';
 import api from '../services/api';
 import cache from '../services/cache';
 import { categorizeTransaction } from '../utils/categorization';
@@ -210,6 +213,29 @@ const HomeScreen = ({ navigation }) => {
     const [saving, setSaving] = useState(false);
 
     const flagState = useTransactionFlags();
+
+    // Home is the first screen after login, so this is also where the device's
+    // reminders get reconciled with the server — the hook reschedules whenever
+    // the list loads, which covers a goal changed on another device.
+    const { goals: activeGoals } = useGoals({ status: 'active' });
+
+    // Milestones cannot be scheduled ahead: crossing 50% depends on a balance
+    // the device does not know until it asks. So it asks once per app open, and
+    // the server records what it announced so two devices cannot both claim it.
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const response = await api.checkGoalMilestones();
+                if (cancelled || !response?.success || !response.data?.length) return;
+                await presentMilestones(response.data);
+            } catch (err) {
+                // A goal celebration is not worth interrupting the dashboard for.
+                console.warn('Could not check goal milestones:', err?.message || err);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     // Format transactions for display
     const formatTransactions = (rawTransactions) => {
@@ -543,6 +569,33 @@ const HomeScreen = ({ navigation }) => {
                     />
                 </View>
             </Card>
+
+            {/* Goals — only the ones still in progress, newest target first.
+                Capped at two: this is a summary, and the full list is one tap
+                away. A Home screen that lists everything stops being a summary. */}
+            {activeGoals.length > 0 && (
+                <View>
+                    <Overline
+                        right={
+                            <TouchableOpacity onPress={() => navigation.navigate('Goals')}>
+                                <Text variant="label" tone="link">
+                                    {activeGoals.length > 2 ? `All ${activeGoals.length}` : 'Manage'}
+                                </Text>
+                            </TouchableOpacity>
+                        }
+                    >
+                        Goals
+                    </Overline>
+                    {activeGoals.slice(0, 2).map((goal) => (
+                        <GoalCard
+                            key={goal.id}
+                            goal={goal}
+                            compact
+                            onPress={() => navigation.navigate('GoalDetail', { goalId: goal.id, name: goal.name })}
+                        />
+                    ))}
+                </View>
+            )}
 
             {/* Accounts */}
             {realAccounts.length > 0 ? (

@@ -34,4 +34,5 @@ module.exports = [
     'add_transaction_paging_index.sql',
     'add_transaction_flags.sql',
     'add_account_credit_limit.sql',
+    'add_goals.sql',
 ];

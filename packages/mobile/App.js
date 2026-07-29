@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
 import { useFonts, SpaceGrotesk_400Regular, SpaceGrotesk_500Medium, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { initAnalytics } from './src/services/analytics';
+import { configureNotifications } from './src/services/notifications';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import { DEFAULT_THEME } from './src/constants/tokens';
 
@@ -31,6 +32,13 @@ export default function App() {
 
   useEffect(() => {
     initAnalytics();
+    // Installs the foreground handler and the Android channel. Deliberately
+    // does NOT ask for permission — iOS grants one prompt, and spending it on a
+    // cold start is how an app ends up permanently unable to notify anyone. It
+    // is requested when a reminder is actually switched on.
+    configureNotifications().catch((err) => {
+      console.warn('Could not configure notifications:', err?.message || err);
+    });
   }, []);
 
   // The stored theme preference hasn't been read yet at this point, so the

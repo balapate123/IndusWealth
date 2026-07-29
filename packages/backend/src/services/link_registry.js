@@ -153,6 +153,7 @@ const APP_ROUTES = {
     ETFList: 'Canadian ETF list',
     Watchdog: 'Recurring expense watchdog',
     Flags: 'User-defined transaction flags',
+    Goals: 'Savings goals and their progress',
     ConnectBank: 'Connect a bank account',
 };
 

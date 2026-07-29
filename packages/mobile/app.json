@@ -34,7 +34,9 @@
       "versionCode": 1,
       "permissions": [
         "android.permission.INTERNET",
-        "android.permission.ACCESS_NETWORK_STATE"
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM"
       ],
       "intentFilters": [
         {
@@ -55,6 +57,15 @@
     "web": {
       "favicon": "./assets/indus-icon.png"
     },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/indus-icon.png",
+          "color": "#C9A227"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "357b50ad-ba30-47ac-9665-6ab6a8422ff3"

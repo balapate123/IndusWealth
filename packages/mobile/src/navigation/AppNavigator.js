@@ -16,6 +16,8 @@ import AccountTransactionsScreen from '../screens/AccountTransactionsScreen';
 import FlagsScreen from '../screens/FlagsScreen';
 import FlagDetailScreen from '../screens/FlagDetailScreen';
 import FlagTransactionPickerScreen from '../screens/FlagTransactionPickerScreen';
+import GoalsScreen from '../screens/GoalsScreen';
+import GoalDetailScreen from '../screens/GoalDetailScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import ConnectBankScreen from '../screens/ConnectBankScreen';
@@ -264,6 +266,20 @@ const AppNavigator = () => {
                 <Stack.Screen
                     name="FlagTransactionPicker"
                     component={FlagTransactionPickerScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="Goals"
+                    component={GoalsScreen}
+                    options={{
+                        presentation: 'card',
+                    }}
+                />
+                <Stack.Screen
+                    name="GoalDetail"
+                    component={GoalDetailScreen}
                     options={{
                         presentation: 'card',
                     }}

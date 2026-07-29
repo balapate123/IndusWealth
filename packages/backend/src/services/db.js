@@ -1097,6 +1097,291 @@ const clearPasswordResetToken = async (userId) => {
     );
 };
 
+// ============ SAVINGS GOALS ============
+
+/**
+ * The columns every goal read returns, with progress computed in SQL.
+ *
+ * `saved` is deliberately not floored at zero — an account-tracked goal whose
+ * balance fell below its baseline really has lost ground, and hiding that would
+ * make the number a cheerleader rather than a measurement. Only the percentage
+ * is clamped, because a progress bar cannot render -8%.
+ *
+ * `saved` is NULL when a goal tracks an account that is gone (deleted, or
+ * never this user's). That is distinct from zero progress, and `needs_relink`
+ * tells the client which of the two it is looking at.
+ */
+const GOAL_COLUMNS = `
+    g.id, g.name, g.goal_type, g.target_amount::float AS target_amount,
+    g.target_date, g.tracking_mode, g.account_id,
+    g.baseline_amount::float AS baseline_amount,
+    g.color_index, g.icon,
+    g.reminder_cadence, g.reminder_day, g.reminder_hour,
+    g.reminder_amount::float AS reminder_amount,
+    g.milestones_notified, g.status, g.achieved_at, g.created_at,
+    a.name AS account_name, a.mask AS account_mask,
+    -- The client addresses accounts by their Plaid id, the same way flags
+    -- address transactions: it is what GET /accounts hands it. The numeric id
+    -- is the foreign key and never leaves this table's own joins.
+    a.plaid_account_id AS account_plaid_id,
+    a.current_balance::float AS account_balance,
+    p.saved::float AS saved_amount,
+    CASE WHEN p.saved IS NULL THEN NULL
+         ELSE LEAST(GREATEST(p.saved / g.target_amount * 100, 0), 100)
+    END::float AS progress_percent,
+    (g.tracking_mode = 'account' AND a.id IS NULL) AS needs_relink`;
+
+// `a.user_id = g.user_id` in the join is the authorisation: an account_id
+// pointing at someone else's account joins to nothing and reads as unlinked,
+// rather than exposing a stranger's balance.
+const GOAL_FROM = `
+    FROM user_goals g
+    LEFT JOIN accounts a ON a.id = g.account_id AND a.user_id = g.user_id
+    LEFT JOIN LATERAL (
+        SELECT SUM(amount) AS total FROM goal_contributions WHERE goal_id = g.id
+    ) c ON TRUE
+    CROSS JOIN LATERAL (
+        SELECT CASE
+            WHEN g.tracking_mode = 'account' AND a.id IS NOT NULL
+                THEN a.current_balance - g.baseline_amount
+            WHEN g.tracking_mode = 'manual'
+                THEN COALESCE(c.total, 0)
+            ELSE NULL
+        END AS saved
+    ) p`;
+
+const getGoals = async (userId, { status = 'active' } = {}) => {
+    const params = [userId];
+    let statusClause = '';
+    if (status && status !== 'all') {
+        params.push(status);
+        statusClause = ` AND g.status = $${params.length}`;
+    }
+
+    const result = await pool.query(
+        `SELECT ${GOAL_COLUMNS} ${GOAL_FROM}
+         WHERE g.user_id = $1${statusClause}
+         ORDER BY g.status = 'achieved', g.target_date NULLS LAST, LOWER(g.name)`,
+        params
+    );
+    return result.rows;
+};
+
+const getGoalById = async (userId, goalId) => {
+    const result = await pool.query(
+        `SELECT ${GOAL_COLUMNS} ${GOAL_FROM}
+         WHERE g.user_id = $1 AND g.id = $2`,
+        [userId, goalId]
+    );
+    return result.rows[0] || null;
+};
+
+/**
+ * Look up one of this user's accounts by the Plaid id the client holds.
+ *
+ * Scoping to `user_id` here is the authorisation for every account link: a
+ * crafted Plaid id belonging to someone else simply resolves to nothing.
+ */
+const _resolveOwnedAccount = async (userId, plaidAccountId) => {
+    const result = await pool.query(
+        `SELECT id, current_balance FROM accounts
+         WHERE user_id = $1 AND plaid_account_id = $2`,
+        [userId, String(plaidAccountId)]
+    );
+    return result.rows[0] || null;
+};
+
+/**
+ * Create a goal.
+ *
+ * When tracking an account, the baseline is snapshotted here from the live
+ * balance so an existing $4,000 does not instantly complete a $5,000 goal.
+ * `countExistingBalance: true` sets the baseline to 0 for the user who meant
+ * "I already have some of this saved".
+ */
+const createGoal = async (userId, goal) => {
+    const {
+        name,
+        goalType = 'savings',
+        targetAmount,
+        targetDate = null,
+        trackingMode = 'manual',
+        accountId = null,
+        countExistingBalance = false,
+        colorIndex = 0,
+        icon = 'flag',
+        reminderCadence = null,
+        reminderDay = null,
+        reminderHour = 9,
+        reminderAmount = null,
+    } = goal;
+
+    let baseline = 0;
+    let linkedAccountId = null;
+
+    if (trackingMode === 'account' && accountId) {
+        const account = await _resolveOwnedAccount(userId, accountId);
+        // Null means the Plaid id is not one of this user's accounts, so the
+        // ownership check lives in the query rather than in the route.
+        if (!account) return null;
+
+        linkedAccountId = account.id;
+        baseline = countExistingBalance ? 0 : parseFloat(account.current_balance) || 0;
+    }
+
+    const created = await pool.query(
+        `INSERT INTO user_goals
+            (user_id, name, goal_type, target_amount, target_date, tracking_mode,
+             account_id, baseline_amount, color_index, icon,
+             reminder_cadence, reminder_day, reminder_hour, reminder_amount)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         RETURNING id`,
+        [
+            userId, name, goalType, targetAmount, targetDate,
+            trackingMode === 'account' ? 'account' : 'manual',
+            linkedAccountId, baseline, colorIndex, icon,
+            reminderCadence, reminderDay, reminderHour, reminderAmount,
+        ]
+    );
+
+    return getGoalById(userId, created.rows[0].id);
+};
+
+const updateGoal = async (userId, goalId, fields) => {
+    const params = [userId, goalId];
+    const sets = [];
+    const set = (column, value) => {
+        params.push(value);
+        sets.push(`${column} = $${params.length}`);
+    };
+
+    const map = {
+        name: 'name',
+        goalType: 'goal_type',
+        targetAmount: 'target_amount',
+        targetDate: 'target_date',
+        colorIndex: 'color_index',
+        icon: 'icon',
+        reminderCadence: 'reminder_cadence',
+        reminderDay: 'reminder_day',
+        reminderHour: 'reminder_hour',
+        reminderAmount: 'reminder_amount',
+        status: 'status',
+    };
+
+    for (const [key, column] of Object.entries(map)) {
+        if (fields[key] !== undefined) set(column, fields[key]);
+    }
+
+    // Relinking re-snapshots the baseline, otherwise progress would be measured
+    // against a balance from a different account.
+    if (fields.accountId !== undefined) {
+        if (fields.accountId === null) {
+            set('account_id', null);
+            set('tracking_mode', 'manual');
+            set('baseline_amount', 0);
+        } else {
+            const account = await _resolveOwnedAccount(userId, fields.accountId);
+            if (!account) return null;
+            set('account_id', account.id);
+            set('tracking_mode', 'account');
+            set('baseline_amount', fields.countExistingBalance
+                ? 0
+                : parseFloat(account.current_balance) || 0);
+        }
+    }
+
+    if (!sets.length) return getGoalById(userId, goalId);
+    sets.push('updated_at = NOW()');
+
+    const result = await pool.query(
+        `UPDATE user_goals SET ${sets.join(', ')}
+         WHERE user_id = $1 AND id = $2
+         RETURNING id`,
+        params
+    );
+    if (!result.rows.length) return null;
+    return getGoalById(userId, goalId);
+};
+
+const deleteGoal = async (userId, goalId) => {
+    const result = await pool.query(
+        `DELETE FROM user_goals WHERE user_id = $1 AND id = $2 RETURNING id`,
+        [userId, goalId]
+    );
+    return result.rowCount > 0;
+};
+
+/**
+ * Log a manual contribution.
+ *
+ * The `EXISTS` guard is the authorisation: goal_contributions has no user_id of
+ * its own, so without it any goal id would accept a row.
+ */
+const addGoalContribution = async (userId, goalId, { amount, note = null, occurredOn = null }) => {
+    const result = await pool.query(
+        `INSERT INTO goal_contributions (goal_id, amount, note, occurred_on)
+         SELECT $2, $3, $4, COALESCE($5::date, CURRENT_DATE)
+         WHERE EXISTS (SELECT 1 FROM user_goals WHERE id = $2 AND user_id = $1)
+         RETURNING id, amount::float AS amount, note, occurred_on, created_at`,
+        [userId, goalId, amount, note, occurredOn]
+    );
+    return result.rows[0] || null;
+};
+
+const getGoalContributions = async (userId, goalId, limit = 100) => {
+    const result = await pool.query(
+        `SELECT c.id, c.amount::float AS amount, c.note, c.occurred_on, c.created_at
+         FROM goal_contributions c
+         JOIN user_goals g ON g.id = c.goal_id
+         WHERE g.user_id = $1 AND c.goal_id = $2
+         ORDER BY c.occurred_on DESC, c.id DESC
+         LIMIT $3`,
+        [userId, goalId, limit]
+    );
+    return result.rows;
+};
+
+const deleteGoalContribution = async (userId, goalId, contributionId) => {
+    const result = await pool.query(
+        `DELETE FROM goal_contributions c
+         USING user_goals g
+         WHERE c.goal_id = g.id AND g.user_id = $1 AND c.goal_id = $2 AND c.id = $3`,
+        [userId, goalId, contributionId]
+    );
+    return result.rowCount > 0;
+};
+
+/**
+ * Record milestones as announced, and flip a goal to achieved at 100%.
+ *
+ * Uses array union rather than assignment so two devices reporting different
+ * milestones in the same moment cannot erase each other's.
+ */
+const markGoalMilestones = async (userId, goalId, milestones) => {
+    if (!Array.isArray(milestones) || milestones.length === 0) {
+        return getGoalById(userId, goalId);
+    }
+
+    const result = await pool.query(
+        `UPDATE user_goals
+         SET milestones_notified = (
+                 SELECT ARRAY(SELECT DISTINCT UNNEST(milestones_notified || $3::smallint[]) ORDER BY 1)
+             ),
+             status = CASE WHEN 100 = ANY($3::smallint[]) THEN 'achieved' ELSE status END,
+             achieved_at = CASE
+                 WHEN 100 = ANY($3::smallint[]) AND achieved_at IS NULL THEN NOW()
+                 ELSE achieved_at
+             END,
+             updated_at = NOW()
+         WHERE user_id = $1 AND id = $2
+         RETURNING id`,
+        [userId, goalId, milestones]
+    );
+    if (!result.rows.length) return null;
+    return getGoalById(userId, goalId);
+};
+
 module.exports = {
     pool,
     // User operations
@@ -1135,6 +1420,16 @@ module.exports = {
     deleteFlag,
     setFlagAssignments,
     getFlagAnalytics,
+    // Goal operations
+    getGoals,
+    getGoalById,
+    createGoal,
+    updateGoal,
+    deleteGoal,
+    addGoalContribution,
+    getGoalContributions,
+    deleteGoalContribution,
+    markGoalMilestones,
     // Analytics operations
     getCategorySpending,
     getDailySpending,

@@ -1,5 +1,13 @@
 const { body, validationResult } = require('express-validator');
 const { FLAG_ICONS, FLAG_RAMP_SIZE } = require('../services/flags');
+const {
+    GOAL_ICONS,
+    GOAL_RAMP_SIZE,
+    GOAL_TYPES,
+    TRACKING_MODES,
+    REMINDER_CADENCES,
+    MILESTONES,
+} = require('../services/goals');
 
 /**
  * Middleware to check validation results and return errors.
@@ -231,11 +239,172 @@ const validateFlagAssignment = [
     handleValidationErrors,
 ];
 
+/**
+ * Validation chains for savings goals.
+ *
+ * Same reasoning as the flag chains: names are trimmed and capped but not
+ * escaped, and icons are checked against the allowlist the picker offers rather
+ * than a shape regex.
+ *
+ * The money cap is $100,000,000. It exists so a typo cannot overflow
+ * DECIMAL(15,2) at the database and come back as a 500 the user cannot act on.
+ */
+const MAX_GOAL_AMOUNT = 100000000;
+
+const goalName = (chain) => chain
+    .trim()
+    .isLength({ min: 1, max: 60 }).withMessage('Goal name must be 1-60 characters');
+
+const goalAmount = (chain, field) => chain
+    .isFloat({ gt: 0, max: MAX_GOAL_AMOUNT })
+    .withMessage(`${field} must be greater than 0`)
+    .toFloat();
+
+const goalTargetDate = (chain) => chain
+    .optional({ nullable: true })
+    .isISO8601().withMessage('targetDate must be a date')
+    .custom((value) => {
+        // A target in the past cannot be worked toward, and a thousand-year
+        // goal is a typo. Both produce nonsense pace maths downstream.
+        const date = new Date(value);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (date < today) throw new Error('targetDate cannot be in the past');
+        const max = new Date(today);
+        max.setFullYear(max.getFullYear() + 50);
+        if (date > max) throw new Error('targetDate must be within 50 years');
+        return true;
+    });
+
+const goalColorIndex = (chain) => chain
+    .isInt({ min: 0, max: GOAL_RAMP_SIZE - 1 })
+    .withMessage(`colorIndex must be between 0 and ${GOAL_RAMP_SIZE - 1}`)
+    .toInt();
+
+const goalIcon = (chain) => chain
+    .isIn(GOAL_ICONS).withMessage('icon must be one of the supported goal icons');
+
+const goalReminder = [
+    body('reminderCadence').optional({ nullable: true })
+        .isIn(REMINDER_CADENCES).withMessage(`reminderCadence must be one of: ${REMINDER_CADENCES.join(', ')}`),
+    body('reminderHour').optional({ nullable: true })
+        .isInt({ min: 0, max: 23 }).withMessage('reminderHour must be 0-23').toInt(),
+    body('reminderAmount').optional({ nullable: true })
+        .isFloat({ gt: 0, max: MAX_GOAL_AMOUNT }).withMessage('reminderAmount must be greater than 0').toFloat(),
+    // The valid range for reminderDay depends on the cadence: a weekday index
+    // for weekly, a day of month for monthly. Capped at 28 so a monthly
+    // reminder cannot silently skip February.
+    body('reminderDay').optional({ nullable: true })
+        .isInt({ min: 0, max: 28 }).withMessage('reminderDay is out of range').toInt(),
+    body().custom((value) => {
+        const { reminderCadence, reminderDay } = value || {};
+        if (reminderCadence === 'weekly' && reminderDay !== undefined && reminderDay !== null
+            && (reminderDay < 0 || reminderDay > 6)) {
+            throw new Error('For a weekly reminder, reminderDay must be 0-6 (Sunday is 0)');
+        }
+        if (reminderCadence === 'monthly' && reminderDay !== undefined && reminderDay !== null
+            && (reminderDay < 1 || reminderDay > 28)) {
+            throw new Error('For a monthly reminder, reminderDay must be 1-28');
+        }
+        return true;
+    }),
+];
+
+const validateGoalCreate = [
+    goalName(body('name').notEmpty().withMessage('Goal name is required')),
+    goalAmount(body('targetAmount'), 'targetAmount'),
+    goalTargetDate(body('targetDate')),
+    body('goalType').optional().isIn(GOAL_TYPES).withMessage(`goalType must be one of: ${GOAL_TYPES.join(', ')}`),
+    body('trackingMode').optional().isIn(TRACKING_MODES).withMessage(`trackingMode must be one of: ${TRACKING_MODES.join(', ')}`),
+    // The Plaid account id the client holds, not our numeric primary key —
+    // GET /accounts hands out Plaid ids, same as it does for transactions.
+    body('accountId').optional({ nullable: true })
+        .isString().withMessage('accountId must be an account id')
+        .bail()
+        .isLength({ min: 1, max: 255 }).withMessage('accountId must be an account id'),
+    body('countExistingBalance').optional().isBoolean().withMessage('countExistingBalance must be a boolean').toBoolean(),
+    goalColorIndex(body('colorIndex').optional()),
+    goalIcon(body('icon').optional()),
+    ...goalReminder,
+    body().custom((value) => {
+        if (value?.trackingMode === 'account' && !value?.accountId) {
+            throw new Error('An account-tracked goal needs an accountId');
+        }
+        return true;
+    }),
+    handleValidationErrors,
+];
+
+const GOAL_UPDATE_FIELDS = [
+    'name', 'goalType', 'targetAmount', 'targetDate', 'colorIndex', 'icon',
+    'reminderCadence', 'reminderDay', 'reminderHour', 'reminderAmount',
+    'status', 'accountId', 'countExistingBalance',
+];
+
+const validateGoalUpdate = [
+    goalName(body('name').optional()),
+    body('targetAmount').optional().isFloat({ gt: 0, max: MAX_GOAL_AMOUNT })
+        .withMessage('targetAmount must be greater than 0').toFloat(),
+    goalTargetDate(body('targetDate')),
+    body('goalType').optional().isIn(GOAL_TYPES).withMessage(`goalType must be one of: ${GOAL_TYPES.join(', ')}`),
+    // The Plaid account id the client holds, not our numeric primary key —
+    // GET /accounts hands out Plaid ids, same as it does for transactions.
+    body('accountId').optional({ nullable: true })
+        .isString().withMessage('accountId must be an account id')
+        .bail()
+        .isLength({ min: 1, max: 255 }).withMessage('accountId must be an account id'),
+    body('countExistingBalance').optional().isBoolean().toBoolean(),
+    goalColorIndex(body('colorIndex').optional()),
+    goalIcon(body('icon').optional()),
+    // 'achieved' is not settable by hand: it is a consequence of reaching the
+    // target, recorded by the milestone endpoint, not a label to apply.
+    body('status').optional().isIn(['active', 'archived']).withMessage('status must be active or archived'),
+    ...goalReminder,
+    body().custom((value) => {
+        if (!GOAL_UPDATE_FIELDS.some((key) => value?.[key] !== undefined)) {
+            throw new Error(`Provide at least one of: ${GOAL_UPDATE_FIELDS.join(', ')}`);
+        }
+        return true;
+    }),
+    handleValidationErrors,
+];
+
+const validateGoalContribution = [
+    body('amount').exists().withMessage('amount is required')
+        // Negative is allowed on purpose: a correction or a withdrawal is a
+        // real event, and forcing it positive would make the total a fiction.
+        .isFloat({ min: -MAX_GOAL_AMOUNT, max: MAX_GOAL_AMOUNT }).withMessage('amount must be a number')
+        .custom((value) => {
+            if (Number(value) === 0) throw new Error('amount cannot be zero');
+            return true;
+        })
+        .toFloat(),
+    body('note').optional({ nullable: true }).trim().isLength({ max: 140 }).withMessage('note must be at most 140 characters'),
+    body('occurredOn').optional({ nullable: true }).isISO8601().withMessage('occurredOn must be a date'),
+    handleValidationErrors,
+];
+
+const validateGoalMilestones = [
+    body('milestones').isArray({ min: 1, max: MILESTONES.length })
+        .withMessage('milestones must be a non-empty array')
+        .custom((values) => {
+            if (!values.every((m) => MILESTONES.includes(Number(m)))) {
+                throw new Error(`milestones must be among: ${MILESTONES.join(', ')}`);
+            }
+            return true;
+        }),
+    handleValidationErrors,
+];
+
 module.exports = {
     handleValidationErrors,
     validateFlagCreate,
     validateFlagUpdate,
     validateFlagAssignment,
+    validateGoalCreate,
+    validateGoalUpdate,
+    validateGoalContribution,
+    validateGoalMilestones,
     validateLogin,
     validateSignup,
     validateProfileUpdate,
