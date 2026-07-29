@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Linking } from '
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { create, open } from '../services/plaidLink';
-import { SPACING, categoryColor } from '../constants/tokens';
+import { SPACING, RADIUS, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import {
     Screen,
@@ -189,6 +189,21 @@ const makeStyles = (t) => StyleSheet.create({
         borderRadius: 2,
         backgroundColor: t.HAIRLINE_STRONG,
     },
+
+    goalsEmpty: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.MEDIUM,
+    },
+    goalsEmptyIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: RADIUS.MEDIUM,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: t.ACCENT_DIM,
+    },
+    goalsEmptyBody: { flex: 1 },
 
 });
 
@@ -590,30 +605,52 @@ const HomeScreen = ({ navigation }) => {
 
             {/* Goals — only the ones still in progress, newest target first.
                 Capped at two: this is a summary, and the full list is one tap
-                away. A Home screen that lists everything stops being a summary. */}
-            {activeGoals.length > 0 && (
-                <View>
-                    <Overline
-                        right={
-                            <TouchableOpacity onPress={() => navigation.navigate('Goals')}>
-                                <Text variant="label" tone="link">
-                                    {activeGoals.length > 2 ? `All ${activeGoals.length}` : 'Manage'}
-                                </Text>
-                            </TouchableOpacity>
-                        }
-                    >
-                        Goals
-                    </Overline>
-                    {activeGoals.slice(0, 2).map((goal) => (
+                away. A Home screen that lists everything stops being a summary.
+
+                The empty branch is not decoration. This section used to render
+                only when a goal already existed, and the "Manage" link inside it
+                was the single route to the Goals screen — so the only door to
+                where you create your first goal was hidden until you had one.
+                Someone with no goals could not reach the feature at all. */}
+            <View>
+                <Overline
+                    right={activeGoals.length > 0 ? (
+                        <TouchableOpacity onPress={() => navigation.navigate('Goals')}>
+                            <Text variant="label" tone="link">
+                                {activeGoals.length > 2 ? `All ${activeGoals.length}` : 'Manage'}
+                            </Text>
+                        </TouchableOpacity>
+                    ) : null}
+                >
+                    Goals
+                </Overline>
+
+                {activeGoals.length > 0 ? (
+                    activeGoals.slice(0, 2).map((goal) => (
                         <GoalCard
                             key={goal.id}
                             goal={goal}
                             compact
                             onPress={() => navigation.navigate('GoalDetail', { goalId: goal.id, name: goal.name })}
                         />
-                    ))}
-                </View>
-            )}
+                    ))
+                ) : (
+                    <Card onPress={() => navigation.navigate('Goals')}>
+                        <View style={styles.goalsEmpty}>
+                            <View style={styles.goalsEmptyIcon}>
+                                <Ionicons name="flag" size={20} color={theme.ACCENT} />
+                            </View>
+                            <View style={styles.goalsEmptyBody}>
+                                <Text variant="bodyMed">Set a savings goal</Text>
+                                <Text variant="meta" tone="secondary">
+                                    Track what you are saving toward, with a reminder to keep at it.
+                                </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={18} color={theme.TEXT_MUTED} />
+                        </View>
+                    </Card>
+                )}
+            </View>
 
             {/* Accounts */}
             {realAccounts.length > 0 ? (
