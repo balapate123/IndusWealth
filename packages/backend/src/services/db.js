@@ -1382,6 +1382,304 @@ const markGoalMilestones = async (userId, goalId, milestones) => {
     return getGoalById(userId, goalId);
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Insight tracking — recurrence and cost of inaction
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Thresholds for showing a cost-of-inaction figure.
+ *
+ * These exist to stop the app saying something true but ridiculous. On day one
+ * of a $340/year insight the arithmetic gives "$0.93 forgone", which reads as a
+ * gimmick and costs the number all its credibility for the day it actually
+ * matters. Two sightings and two weeks is the point where "you have been
+ * sitting on this" is a fair thing to say.
+ */
+const COST_MIN_OCCURRENCES = 2;
+const COST_MIN_DAYS = 14;
+
+/** Days a single insight is left alone after being shown as a pop-up. */
+const SPOTLIGHT_INSIGHT_COOLDOWN_DAYS = 14;
+/** Days before the user may be interrupted by any pop-up again. */
+const SPOTLIGHT_USER_COOLDOWN_DAYS = 7;
+/** Below this annual figure an interruption is not worth the user's attention. */
+const SPOTLIGHT_MIN_BENEFIT = 100;
+
+const OUTSTANDING_DAYS_SQL = '(EXTRACT(EPOCH FROM (NOW() - t.first_seen_at)) / 86400.0)';
+
+/**
+ * The benefit the cost figure is calculated from.
+ *
+ * LEAST of the first and latest quotes, floored at zero. The model requotes the
+ * benefit each cycle as balances move, and applying a figure that grew last
+ * week to the whole elapsed period would overstate what the user gave up. A
+ * number presented as "what this cost you" only survives contact with a
+ * sceptical user if it is never the flattering reading.
+ */
+const EFFECTIVE_BENEFIT_SQL =
+    'GREATEST(0, LEAST(t.first_annual_benefit, t.annual_benefit))';
+
+const COST_OF_INACTION_SQL = `
+    CASE
+        WHEN t.acted_at IS NOT NULL THEN NULL
+        WHEN t.occurrence_count < ${COST_MIN_OCCURRENCES} THEN NULL
+        WHEN ${OUTSTANDING_DAYS_SQL} < ${COST_MIN_DAYS} THEN NULL
+        WHEN ${EFFECTIVE_BENEFIT_SQL} <= 0 THEN NULL
+        ELSE ROUND((${EFFECTIVE_BENEFIT_SQL} * ${OUTSTANDING_DAYS_SQL} / 365.0)::numeric, 2)
+    END`;
+
+const TRACKING_COLUMNS = `
+    t.fingerprint,
+    t.insight_type,
+    t.subject,
+    t.title,
+    t.first_seen_at,
+    t.last_seen_at,
+    t.occurrence_count,
+    t.acted_at,
+    t.spotlighted_at,
+    t.annual_benefit::float AS annual_benefit,
+    FLOOR(${OUTSTANDING_DAYS_SQL})::int AS outstanding_days,
+    ${COST_OF_INACTION_SQL}::float AS cost_of_inaction`;
+
+/**
+ * Record that these insights were shown, once per generation.
+ *
+ * `occurrence_count` only advances when the previous sighting was more than 20
+ * hours ago, so pulling to refresh five times in a row counts as one. The count
+ * means "days we told you", and it gates the cost figure — letting a refresh
+ * button inflate it would let the user manufacture their own guilt trip.
+ */
+const recordInsightSightings = async (userId, insights) => {
+    if (!Array.isArray(insights) || insights.length === 0) return 0;
+
+    const rows = insights.filter((i) => i && typeof i.fingerprint === 'string' && i.fingerprint);
+    if (rows.length === 0) return 0;
+
+    const result = await pool.query(
+        `INSERT INTO insight_tracking
+             (user_id, fingerprint, insight_type, subject, title,
+              first_annual_benefit, annual_benefit)
+         SELECT $1, f, ty, su, ti, be, be
+         FROM UNNEST($2::text[], $3::text[], $4::text[], $5::text[], $6::numeric[])
+              AS x(f, ty, su, ti, be)
+         ON CONFLICT (user_id, fingerprint) DO UPDATE SET
+             insight_type = EXCLUDED.insight_type,
+             subject = EXCLUDED.subject,
+             title = EXCLUDED.title,
+             annual_benefit = EXCLUDED.annual_benefit,
+             last_seen_at = NOW(),
+             -- A condition that resolved and later came back starts a new clock.
+             -- The gap was not time the user spent ignoring anything, and
+             -- carrying the old first_seen_at across it would bill them for it.
+             first_seen_at = CASE
+                 WHEN insight_tracking.resolved_at IS NOT NULL THEN NOW()
+                 ELSE insight_tracking.first_seen_at
+             END,
+             first_annual_benefit = CASE
+                 WHEN insight_tracking.resolved_at IS NOT NULL THEN EXCLUDED.first_annual_benefit
+                 ELSE insight_tracking.first_annual_benefit
+             END,
+             occurrence_count = CASE
+                 WHEN insight_tracking.resolved_at IS NOT NULL THEN 1
+                 ELSE insight_tracking.occurrence_count + CASE
+                     WHEN insight_tracking.last_seen_at < NOW() - INTERVAL '20 hours' THEN 1
+                     ELSE 0
+                 END
+             END,
+             acted_at = CASE
+                 WHEN insight_tracking.resolved_at IS NOT NULL THEN NULL
+                 ELSE insight_tracking.acted_at
+             END,
+             resolved_at = NULL,
+             updated_at = NOW()`,
+        [
+            userId,
+            rows.map((i) => i.fingerprint),
+            rows.map((i) => i.type || 'other'),
+            rows.map((i) => i.subject || 'general'),
+            rows.map((i) => (i.title || '').slice(0, 200)),
+            rows.map((i) => Number(i.potential_benefit?.annual_savings) || 0),
+        ]
+    );
+    return result.rowCount;
+};
+
+/**
+ * Mark everything the latest generation did NOT produce as resolved.
+ *
+ * Guarded against an empty batch: an empty array would resolve the user's
+ * entire history, so a failed or filtered-to-nothing generation must be treated
+ * as "no information", not as "everything is fixed".
+ */
+const markInsightsResolved = async (userId, activeFingerprints) => {
+    if (!Array.isArray(activeFingerprints) || activeFingerprints.length === 0) return 0;
+
+    const result = await pool.query(
+        `UPDATE insight_tracking
+         SET resolved_at = NOW(), updated_at = NOW()
+         WHERE user_id = $1
+           AND resolved_at IS NULL
+           AND NOT (fingerprint = ANY($2::text[]))`,
+        [userId, activeFingerprints]
+    );
+    return result.rowCount;
+};
+
+/**
+ * Everything still outstanding for a user, worst first.
+ *
+ * Feeds the prompt's ALREADY OUTSTANDING block so the model knows what it has
+ * already said, and can lead with what changed instead of restating it.
+ */
+const getOutstandingInsights = async (userId, limit = 10) => {
+    const result = await pool.query(
+        `SELECT ${TRACKING_COLUMNS}
+         FROM insight_tracking t
+         WHERE t.user_id = $1
+           AND t.resolved_at IS NULL
+           AND t.acted_at IS NULL
+         ORDER BY ${OUTSTANDING_DAYS_SQL} DESC
+         LIMIT $2`,
+        [userId, limit]
+    );
+    return result.rows;
+};
+
+/** Tracking rows for a set of fingerprints, keyed by fingerprint. */
+const getInsightTracking = async (userId, fingerprints) => {
+    if (!Array.isArray(fingerprints) || fingerprints.length === 0) return {};
+
+    const result = await pool.query(
+        `SELECT ${TRACKING_COLUMNS}
+         FROM insight_tracking t
+         WHERE t.user_id = $1 AND t.fingerprint = ANY($2::text[])`,
+        [userId, fingerprints]
+    );
+
+    return Object.fromEntries(result.rows.map((row) => [row.fingerprint, row]));
+};
+
+/**
+ * Record that the user acted on an insight.
+ *
+ * This stops the cost counter. We cannot verify they followed through — only
+ * that they tapped the button — but continuing to tell someone they are
+ * ignoring advice they visibly engaged with is worse than under-counting.
+ */
+const markInsightActed = async (userId, fingerprint) => {
+    const result = await pool.query(
+        `UPDATE insight_tracking
+         SET acted_at = COALESCE(acted_at, NOW()), updated_at = NOW()
+         WHERE user_id = $1 AND fingerprint = $2
+         RETURNING id`,
+        [userId, fingerprint]
+    );
+    return result.rowCount > 0;
+};
+
+/**
+ * The one insight worth interrupting the user for, or null.
+ *
+ * Requires a second sighting on purpose: a brand-new insight is already sitting
+ * on the Insights tab, and interrupting someone to show them something they
+ * have not had a chance to see yet is just noise. An interruption is earned by
+ * persistence plus money, which is also exactly what the pop-up is there to say.
+ */
+const getSpotlightCandidate = async (userId) => {
+    const result = await pool.query(
+        `SELECT ${TRACKING_COLUMNS}
+         FROM insight_tracking t
+         LEFT JOIN user_insight_dismissals d
+                ON d.user_id = t.user_id
+               AND d.insight_fingerprint = t.fingerprint
+               AND (d.remind_after IS NULL OR d.remind_after > NOW())
+         WHERE t.user_id = $1
+           AND t.resolved_at IS NULL
+           AND t.acted_at IS NULL
+           AND d.id IS NULL
+           AND t.occurrence_count >= $2
+           AND ${EFFECTIVE_BENEFIT_SQL} >= $3
+           AND (t.spotlighted_at IS NULL
+                OR t.spotlighted_at < NOW() - ($4 || ' days')::interval)
+         ORDER BY ${EFFECTIVE_BENEFIT_SQL} * ${OUTSTANDING_DAYS_SQL} DESC
+         LIMIT 1`,
+        [userId, COST_MIN_OCCURRENCES, SPOTLIGHT_MIN_BENEFIT, String(SPOTLIGHT_INSIGHT_COOLDOWN_DAYS)]
+    );
+    return result.rows[0] || null;
+};
+
+/** Is the user due a pop-up at all? Honours the opt-out and the global cooldown. */
+const isSpotlightDue = async (userId) => {
+    const result = await pool.query(
+        `SELECT spotlight_enabled,
+                spotlight_last_shown_at
+         FROM user_preferences
+         WHERE user_id = $1`,
+        [userId]
+    );
+
+    // No preferences row is the common case for a new user, not a problem:
+    // defaults are "enabled, never shown".
+    if (result.rows.length === 0) return true;
+
+    const { spotlight_enabled: enabled, spotlight_last_shown_at: lastShown } = result.rows[0];
+    if (enabled === false) return false;
+    if (!lastShown) return true;
+
+    const dueAfter = new Date(lastShown).getTime()
+        + SPOTLIGHT_USER_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+    return Date.now() >= dueAfter;
+};
+
+/** Stamp both cooldowns: this insight, and this user. */
+const markSpotlightShown = async (userId, fingerprint) => {
+    await pool.query(
+        `UPDATE insight_tracking
+         SET spotlighted_at = NOW(), updated_at = NOW()
+         WHERE user_id = $1 AND fingerprint = $2`,
+        [userId, fingerprint]
+    );
+    await pool.query(
+        `INSERT INTO user_preferences (user_id, spotlight_last_shown_at)
+         VALUES ($1, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET spotlight_last_shown_at = NOW()`,
+        [userId]
+    );
+};
+
+/**
+ * Fingerprints the user has dismissed or snoozed.
+ *
+ * `remind_after IS NULL` means dismissed outright; a future `remind_after` is a
+ * snooze. This is the read that never existed — the dismiss endpoint has been
+ * writing to this table since the feature shipped and nothing has ever looked
+ * at it, so dismissing an insight removed it from the screen and it returned on
+ * the next generation.
+ */
+const getActiveDismissals = async (userId) => {
+    const result = await pool.query(
+        `SELECT insight_fingerprint
+         FROM user_insight_dismissals
+         WHERE user_id = $1
+           AND insight_fingerprint IS NOT NULL
+           AND (remind_after IS NULL OR remind_after > NOW())`,
+        [userId]
+    );
+    return new Set(result.rows.map((row) => row.insight_fingerprint));
+};
+
+const dismissInsight = async (userId, { insightType, fingerprint, reason = null, remindAfter = null }) => {
+    await pool.query(
+        `INSERT INTO user_insight_dismissals
+             (user_id, insight_type, insight_fingerprint, dismiss_reason, remind_after)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (user_id, insight_type, insight_fingerprint)
+         DO UPDATE SET dismissed_at = NOW(), dismiss_reason = $4, remind_after = $5`,
+        [userId, insightType, fingerprint, reason, remindAfter]
+    );
+};
+
 module.exports = {
     pool,
     // User operations
@@ -1430,6 +1728,22 @@ module.exports = {
     getGoalContributions,
     deleteGoalContribution,
     markGoalMilestones,
+    // Insight tracking operations
+    recordInsightSightings,
+    markInsightsResolved,
+    getOutstandingInsights,
+    getInsightTracking,
+    markInsightActed,
+    getSpotlightCandidate,
+    isSpotlightDue,
+    markSpotlightShown,
+    getActiveDismissals,
+    dismissInsight,
+    COST_MIN_OCCURRENCES,
+    COST_MIN_DAYS,
+    SPOTLIGHT_INSIGHT_COOLDOWN_DAYS,
+    SPOTLIGHT_USER_COOLDOWN_DAYS,
+    SPOTLIGHT_MIN_BENEFIT,
     // Analytics operations
     getCategorySpending,
     getDailySpending,

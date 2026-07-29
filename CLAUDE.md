@@ -21,7 +21,7 @@
 | | `src/routes/debt.js` | Debt overview + snowball/avalanche calc |
 | | `src/routes/analytics.js` | Spending analytics + `/analytics/categories` (advanced category analytics) + `/analytics/categories/insights` (AI insights, 6h cache) |
 | | `src/routes/watchdog.js` | Recurring expense detection |
-| | `src/routes/insights.js` | AI-generated financial insights |
+| | `src/routes/insights.js` | AI insights, dismissals, `GET /insights/spotlight` + `POST /insights/spotlight/seen` (the pop-up) |
 | | `src/routes/educational.js` | Wealth Academy articles |
 | | `src/routes/feedback.js` | User feedback |
 | | `src/routes/twoFactor.js` | TOTP 2FA setup/verify/disable |
@@ -37,6 +37,8 @@
 | | `src/services/watchdog.js` | Recurring expense logic |
 | | `src/services/educational_content.js` | Article management |
 | | `src/services/insight_data.js` | Insight aggregation |
+| | `src/services/insight_identity.js` | **The stable identity of an insight.** Type enum + subject slug → `type:subject` fingerprint; dedupes a batch |
+| | `src/services/insight_persistence.js` | Recurrence → prompt text and the `persistence` block; the only writer of the cost-of-inaction figure |
 | | `src/services/logger.js` | Logging utility |
 | | `src/services/flags.js` | Flag constants: icon allowlist, ramp size, starter set |
 | | `src/services/goals.js` | Goal constants: icons, types, cadences, milestones + `newMilestones()` |
@@ -93,18 +95,21 @@
 | Hooks | `src/hooks/useAlert.js` | CustomAlert boilerplate |
 | | `src/hooks/useTransactionFlags.js` | Flags + the attach/detach diff for the transaction sheet |
 | | `src/hooks/useGoals.js` | Goals CRUD; re-syncs device reminders after every mutation |
+| | `src/hooks/useInsightSpotlight.js` | Fetches the pop-up once per launch; act/snooze/dismiss |
 | Components | `src/components/CustomAlert.js` | Alert component |
 | | `src/components/DataFreshnessIndicator.js` | Cache freshness badge |
 | | `src/components/ErrorMessage.js` | Error display |
 | | `src/components/ArticleCard.js` | Article card |
 | | `src/components/GoalCard.js` | Goal progress card (shared by Home and the Goals list) |
 | | `src/components/GoalEditorSheet.js` | Create/edit a goal incl. tracking mode and reminder |
+| | `src/components/InsightSpotlight.js` | The pop-up recommendation: ledger, action, snooze, dismiss |
 | Constants | `src/constants/theme.js` | Dark theme + gold accents |
+| | `src/constants/insights.js` | Insight type enum → icon/label/ramp slot; must mirror `insight_identity.js` |
 | Utils | `src/utils/categorization.js` | Client-side category helpers |
 | | `src/utils/goalReminders.js` | Pure reminder logic (trigger building, copy, cadence text) — no expo/RN imports so it is testable off-device |
 
 ### Database Tables
-`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`), `transaction_flags` + `transaction_flag_links` (migration: `add_transaction_flags.sql`), `user_goals` + `goal_contributions` (migration: `add_goals.sql`)
+`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`), `transaction_flags` + `transaction_flag_links` (migration: `add_transaction_flags.sql`), `user_goals` + `goal_contributions` (migration: `add_goals.sql`), `insight_tracking` (migration: `add_insight_tracking.sql`, also adds `user_preferences.spotlight_enabled` / `.spotlight_last_shown_at`)
 
 ### Transaction Flags
 User-defined groupings ("Home", "Trip to Montreal"), **distinct from `category`** — a category is inferred by Plaid/AI and single-valued; a flag is chosen by the user and a transaction can carry several.
@@ -130,6 +135,21 @@ Local, **not push** — no APNs cert, no FCM key, no server scheduler. Two iOS c
 - **Weekday conversion is off by one**: the API stores 0–6 (Sunday = 0, JS convention); expo/iOS want 1–7 (Sunday = 1). Isolated in `utils/goalReminders.js` with tests, because getting it wrong delivers every weekly reminder on the wrong day *without erroring*. Monthly days cap at 28 so nothing skips February.
 - Permission is requested **when a reminder is switched on, never at launch** — iOS grants one prompt.
 - `expo-notifications` is a native module and there is **no OTA**, so it needs an EAS rebuild to reach a device.
+
+### Insight Persistence & the Spotlight Pop-up
+An insight's `id` is invented by the model every generation and its `type` used to be free text, so the same condition was unrecognisable between runs. That made dismissals, recurrence, and any notion of "you have been told this before" impossible — and both `user_insight_dismissals` and `insight_actions` were **write-only tables nothing ever read**.
+- **Identity is `type:subject`**, computed server-side by `insight_identity.js`. `type` is a closed enum; `subject` is a slug the model reuses from a list in the prompt. Model-authored strings are normalised, never trusted as keys — the same rule as link destinations. Drift is aliased (`dining` → `dining_out`); drift past that costs a reset streak, never a wrong one.
+- **A batch is deduped before the top-7 slice.** Two phrasings of one condition would otherwise each bump `occurrence_count`, so one generation would read as two days of being ignored.
+- **The cost-of-inaction figure is calculated in SQL, never by the model.** Prompt rule 30 forbids it from writing one and `insight_persistence.js` is the only thing that computes it — an invented number contradicting the recorded one is worse than none. It uses `LEAST(first_annual_benefit, annual_benefit)` so a later upward requote cannot be applied retroactively.
+- **Gated at 2 sightings + 14 days + positive benefit.** Day one of a $340/yr insight is "$0.93 forgone", which is true, ridiculous, and spends the number's credibility before it matters.
+- **`occurrence_count` advances at most once per 20 hours**, so pulling to refresh cannot manufacture a streak.
+- **A resolved condition that returns restarts the clock** (`first_seen_at`, `occurrence_count`, `acted_at` all reset). The gap was not time spent ignoring anything.
+- **`markInsightsResolved` refuses an empty batch** — that means "we learned nothing", not "everything is fixed".
+- **Decoration happens on read, not at generation**, on the cache-hit path too, so a dismissal takes effect immediately and the day count is never frozen. Dismissed insights are filtered for *display* only; the ledger keeps recording that the condition persists, because a snooze hides a card, it does not stop the money leaking.
+- **The spotlight reads cache only** and never triggers a Gemini call — it runs on app open. Two cooldowns: 14 days per insight, 7 days per user. `POST /spotlight/seen` starts them, sent when the sheet *renders*, not when it is fetched, or a background request would spend the user's one interruption on nothing.
+- **It requires a second sighting**: a brand-new insight is already on the Insights tab, and interrupting someone with something they have not had a chance to read is just noise.
+- **Never scold.** Prompt rule 31 bans the model from shaming; our own copy holds the same line (`test_insight_identity.cjs` asserts it). The user declined to act, which is their decision.
+- `constants/insights.js` on mobile mirrors the backend enum. A missing key means the two drifted, not that the model improvised.
 
 ### No Investment Advice (hard product constraint)
 IndusWealth is **not a registered adviser**, so it must never recommend a security. Google Play rejected the app in July 2026 under the Financial Services policy because the Financial features declaration said the app gives no personalized advice while the Insights tab recommended specific ETFs off the user's own surplus.
@@ -256,7 +276,12 @@ EXPO_PUBLIC_API_URL=   # Override default API endpoint
 
 Work is on `dev`. Backend deploys to Render from the deploy branch.
 
-**Working:** Advanced Analytics page (entry: "Advanced" button on Analytics header), AI category insights with rule-based fallback, `Taxes & Government` category (fixes CANADA TXD → Transportation misclassification), Resend email verification from hello@induswealth.app (domain verified, DNS on Spaceship), transaction flags, savings goals with local reminders, registry-backed insight links.
+**Working:** Advanced Analytics page (entry: "Advanced" button on Analytics header), AI category insights with rule-based fallback, `Taxes & Government` category (fixes CANADA TXD → Transportation misclassification), Resend email verification from hello@induswealth.app (domain verified, DNS on Spaceship), transaction flags, savings goals with local reminders, registry-backed insight links, insight persistence + the spotlight pop-up.
+
+**Fixed in passing while building the spotlight** (all three were silent, all three had shipped):
+- `PUT /insights/preferences` built an INSERT with one more target column than expressions (`updated_at` was pushed into the SET array that also generated the column list), so it **500'd on every call since it shipped**. Rewritten around explicit (column, value) pairs.
+- `api.dismissInsight()` sent only `insight_id` while the route requires `insight_type`, so **every dismiss returned 400** and the card came back on the next load.
+- `InsightCardV2`'s `TYPE_META` was keyed on long human labels the model wrote freehand, so **every card fell back to a generic bulb** and printed the raw type string above the title. Now keyed on the enum.
 
 **Needs an EAS rebuild before it reaches a device:** `expo-notifications` (goal reminders) is a native module and there is no OTA. Everything else in the goals feature is JS.
 
@@ -265,8 +290,8 @@ Work is on `dev`. Backend deploys to Render from the deploy branch.
 2. **Plaid Link cannot open in Expo Go** (native module missing). Testing bank connect requires a dev build: `cd packages/mobile && eas build --profile development --platform android`, then `npx expo start` and open the standalone dev app. JS-only changes need no rebuild; there is NO EAS Update (OTA) configured, so installed builds only get new JS via rebuild.
 3. ~~Run `npm run migrate` against prod DB for `category_ai_insights`~~ **RESOLVED**: migrations now run automatically on every deploy. `services/db.js` `initDb()` (called on boot) and the `npm run migrate` CLI both iterate the single ordered list in `db/migrations.js`; `add_category_insights.sql` is included, so it lands on the next Render deploy. All migrations are idempotent, so the boot re-run is a safe no-op.
 4. **Render env check**: if `GEMINI_MODEL` is set to a retired model (e.g. `gemini-2.0-flash`/`gemini-2.0-pro`), delete it or set `gemini-3.5-flash`. (Local `packages/backend/.env` currently pins the dead `gemini-2.0-flash` — local-only.)
-5. ~~`migrate.js` MIGRATIONS list missing 8 files~~ **RESOLVED**: boot + CLI now share `db/migrations.js` (18 files, dependency-ordered) so the two lists can't drift. Add a migration by dropping the `.sql` in `db/` and appending its name there (must be idempotent).
+5. ~~`migrate.js` MIGRATIONS list missing 8 files~~ **RESOLVED**: boot + CLI now share `db/migrations.js` (19 files, dependency-ordered) so the two lists can't drift. Add a migration by dropping the `.sql` in `db/` and appending its name there (must be idempotent).
 6. `liabilities` product: request access in Plaid dashboard, then re-add to `products` in `services/plaid.js`.
 7. **Gemini "thinking" was truncating JSON** (FIXED): all Gemini JSON calls now set `thinkingConfig: { thinkingBudget: 0 }` (`ai_insights.js` ×2, `ai_categorization.js`). Without it, hidden reasoning tokens exhausted `maxOutputTokens` and cut the JSON mid-string → "Unterminated string in JSON" (Insights tab 500s, silent AI-insight/categorization failures).
 8. **Two years of Plaid history needs a reconnect.** `days_requested` is fixed when the Item is created, so connections made before that change still return 90 days regardless of what we ask for. Disconnect and relink to get the full depth.
-9. **113 → 123 ESLint findings** (`npm run lint` in `packages/mobile`) are a known backlog, mostly `react-hooks/static-components`, `set-state-in-effect`, and `import/no-named-as-default` on the `api` default import. `npm run lint:theme` is the gate that must stay clean and is unaffected.
+9. **113 → 124 ESLint findings** (`npm run lint` in `packages/mobile`) are a known backlog, mostly `react-hooks/static-components`, `set-state-in-effect`, and `import/no-named-as-default` on the `api` default import. `npm run lint:theme` is the gate that must stay clean and is unaffected.

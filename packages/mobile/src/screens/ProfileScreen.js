@@ -237,6 +237,10 @@ const ProfileScreen = ({ navigation }) => {
 
     const [avatarColorModalVisible, setAvatarColorModalVisible] = useState(false);
 
+    // Whether the recommendation pop-up may interrupt. Defaults to on, matching
+    // the server, so the row reads correctly before the request lands.
+    const [spotlightEnabled, setSpotlightEnabled] = useState(true);
+
     const apiTarget = getApiTarget();
 
     // Avatar options come from the validated ramp plus the brand accent, so the
@@ -247,7 +251,33 @@ const ProfileScreen = ({ navigation }) => {
         loadUser();
         loadProfilePicture();
         loadAccounts();
+        loadInsightPreferences();
     }, []);
+
+    const loadInsightPreferences = async () => {
+        try {
+            const response = await api.getInsightPreferences();
+            if (response?.data?.spotlight_enabled !== undefined) {
+                setSpotlightEnabled(response.data.spotlight_enabled !== false);
+            }
+        } catch (err) {
+            // The row keeps its default. A settings screen that cannot render
+            // because one preference failed to load is the worse outcome.
+            console.error('Failed to load insight preferences:', err);
+        }
+    };
+
+    const handleToggleSpotlight = async () => {
+        const next = !spotlightEnabled;
+        setSpotlightEnabled(next);
+        try {
+            await api.updateInsightPreferences({ spotlight_enabled: next });
+        } catch (err) {
+            console.error('Failed to update spotlight preference:', err);
+            setSpotlightEnabled(!next);
+            showAlert("Couldn't save that", 'Your preference could not be updated. Please try again.');
+        }
+    };
 
     const showAlert = (title, message, buttons = []) => {
         setAlertConfig({ visible: true, title, message, buttons });
@@ -655,6 +685,13 @@ const ProfileScreen = ({ navigation }) => {
                         label="Appearance"
                         subtitle="Theme and colours"
                         onPress={() => navigation.navigate('Appearance')}
+                    />
+                    <MenuItem
+                        icon="notifications-outline"
+                        label="Recommendation pop-ups"
+                        subtitle="At most one a week, for something long outstanding"
+                        badgeText={spotlightEnabled ? 'On' : 'Off'}
+                        onPress={handleToggleSpotlight}
                     />
                 </Card>
 

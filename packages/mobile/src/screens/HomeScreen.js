@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { create, open } from '../services/plaidLink';
@@ -21,8 +21,10 @@ import {
 import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import GoalCard from '../components/GoalCard';
+import InsightSpotlight from '../components/InsightSpotlight';
 import useTransactionFlags from '../hooks/useTransactionFlags';
 import useGoals from '../hooks/useGoals';
+import useInsightSpotlight from '../hooks/useInsightSpotlight';
 import { presentMilestones } from '../services/notifications';
 import api from '../services/api';
 import cache from '../services/cache';
@@ -218,6 +220,22 @@ const HomeScreen = ({ navigation }) => {
     // reminders get reconciled with the server — the hook reschedules whenever
     // the list loads, which covers a goal changed on another device.
     const { goals: activeGoals } = useGoals({ status: 'active' });
+
+    // The pop-up recommendation. Gated on having accounts: a user who has not
+    // connected a bank has nothing to be reminded about, and the first thing
+    // they should meet is the connect flow, not a sheet over the top of it.
+    const spotlight = useInsightSpotlight({ enabled: !loading && accounts.length > 0 });
+
+    const handleSpotlightAct = useCallback((action, insight) => {
+        spotlight.act(insight);
+        if (action?.type === 'web_link' && action.url) {
+            Linking.openURL(action.url).catch((err) => {
+                console.error('Failed to open spotlight link:', err);
+            });
+        } else if (action?.type === 'navigate' && action.route) {
+            navigation.navigate(action.route, action.params || {});
+        }
+    }, [spotlight, navigation]);
 
     // Milestones cannot be scheduled ahead: crossing 50% depends on a balance
     // the device does not know until it asks. So it asks once per app open, and
@@ -710,6 +728,15 @@ const HomeScreen = ({ navigation }) => {
             saving={saving}
             onSave={handleSaveDetails}
             onClose={() => setShowTransactionModal(false)}
+        />
+
+        <InsightSpotlight
+            insight={spotlight.spotlight}
+            visible={spotlight.visible}
+            onSeen={spotlight.markSeen}
+            onAct={handleSpotlightAct}
+            onSnooze={spotlight.snooze}
+            onDismiss={spotlight.dismiss}
         />
         </>
     );

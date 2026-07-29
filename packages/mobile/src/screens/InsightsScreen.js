@@ -240,8 +240,15 @@ const InsightsScreen = ({ navigation, route }) => {
         loadInsights(true);
     };
 
-    const handleAction = async (action) => {
+    const handleAction = async (action, insight) => {
         if (!action) return;
+
+        // Fire and forget: this stops the cost-of-inaction counter server-side,
+        // but a failed analytics write must not stop the button from working.
+        if (insight?.fingerprint) {
+            api.trackInsightAction(insight, 'clicked_primary')
+                .catch((err) => console.error('Failed to track insight action:', err));
+        }
 
         try {
             if (action.type === 'web_link' && action.url) {
@@ -265,12 +272,12 @@ const InsightsScreen = ({ navigation, route }) => {
         }
     };
 
-    const handleDismiss = async (insightId) => {
+    const handleDismiss = async (insight) => {
         // Optimistically remove from UI
-        setInsights((prev) => prev.filter((i) => i.id !== insightId));
+        setInsights((prev) => prev.filter((i) => i.id !== insight.id));
 
         try {
-            await api.dismissInsight(insightId);
+            await api.dismissInsight(insight, { reason: 'not_interested' });
         } catch (err) {
             console.error('Failed to dismiss insight:', err);
             loadInsights();

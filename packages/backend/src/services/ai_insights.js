@@ -5,6 +5,7 @@
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const linkRegistry = require('./link_registry');
+const insightIdentity = require('./insight_identity');
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -31,12 +32,12 @@ const TRUSTED_SOURCES = [
  * @param {Object} userData - Aggregated financial data from insight_data.js
  * @returns {Object} Generated insights with metadata
  */
-async function generateInsights(userData, { articleCatalogText } = {}) {
+async function generateInsights(userData, { articleCatalogText, outstandingText } = {}) {
     const startTime = Date.now();
 
     try {
         // Build the prompt
-        const prompt = _buildPrompt(userData, articleCatalogText);
+        const prompt = _buildPrompt(userData, articleCatalogText, outstandingText);
 
         // Call Gemini API
         const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
@@ -90,8 +91,12 @@ async function generateInsights(userData, { articleCatalogText } = {}) {
         // invented is stripped here, before it can reach a device.
         const linkedInsights = _resolveActions(compliantInsights);
 
+        // Stamp the stable identity and collapse duplicates. Runs before the
+        // top-7 slice so two phrasings of one condition cannot take two slots.
+        const identifiedInsights = insightIdentity.identifyInsights(linkedInsights);
+
         // Calculate priority scores and limit to top 7
-        const prioritizedInsights = _prioritizeInsights(linkedInsights);
+        const prioritizedInsights = _prioritizeInsights(identifiedInsights);
 
         // Article ids only — the model no longer authors URLs, so the caller
         // maps these against the catalog it supplied.
@@ -125,7 +130,11 @@ async function generateInsights(userData, { articleCatalogText } = {}) {
  * @param {Object} userData
  * @param {string} articleCatalogText - the catalog rendered as "[id] Title — …" lines
  */
-function _buildPrompt(userData, articleCatalogText = '(no articles available)') {
+function _buildPrompt(
+    userData,
+    articleCatalogText = '(no articles available)',
+    outstandingText = '(none — this is the first analysis)'
+) {
     // No ETF/ticker reference data is injected any more. The model cannot
     // recommend a security it has never been handed, which is the same
     // principle as the link registry: remove the capability, don't ask nicely.
@@ -228,6 +237,30 @@ RULES:
 25. Frame everything as information about the user's own money, not as advice. Prefer
     "money sitting in chequing earns almost nothing" over "you should move your money".
 
+IDENTITY RULES (these make it possible to tell one analysis from the next):
+26. "type" MUST be one of the INSIGHT_TYPES strings exactly as spelled. Do not
+    invent a type, do not add a suffix, do not use Title Case.
+27. "subject" identifies WHICH thing the insight is about, so that the same
+    condition carries the same subject every time it is analysed. If a condition
+    appears in ALREADY OUTSTANDING, reuse that exact subject — a different slug
+    for the same condition makes it look like a brand-new problem.
+28. Never emit two insights with the same type and subject. If you have two
+    things to say about dining out, say them in one insight.
+
+RULES FOR OUTSTANDING CONDITIONS:
+29. If a condition is in ALREADY OUTSTANDING, do not repeat your previous framing
+    word for word. Lead with what has changed since — the balance moved, the
+    spending held steady, another month of interest was charged.
+30. Do NOT calculate, state, or estimate how much money the delay has cost. Do
+    not write "you have lost", "this has cost you", "you missed out on", or any
+    figure derived from elapsed time. That number is calculated from recorded
+    data and added after you are done; a second version invented here would
+    contradict it.
+31. Never shame, scold, warn or express disappointment about inaction. No "you
+    still haven't", no "unfortunately", no "yet again". State the current
+    position plainly. The user chose not to act, which is their right, and they
+    may well have had a reason the data does not show.
+
 SUBSCRIPTION IDENTIFICATION EXAMPLES:
 - ACTUAL SUBSCRIPTIONS: Netflix, Disney+, Spotify, Apple Music, Microsoft 365, Adobe, gym memberships, cloud storage
 - NOT SUBSCRIPTIONS: Tim Hortons, Starbucks, McDonald's, Petro-Canada, Shell, Uber, Lyft, Loblaws, Sobeys, Costco, Shoppers Drug Mart, Wealthsimple, Questrade
@@ -250,6 +283,18 @@ ${linkRegistry.getRoutesForPrompt()}
 ARTICLE CATALOG (pick by id — these are the only articles that exist):
 ${articleCatalogText}
 
+INSIGHT TYPES (the "type" field must be exactly one of these strings):
+${insightIdentity.getTypesForPrompt()}
+
+COMMON SUBJECTS (reuse one of these slugs verbatim in "subject" whenever it fits;
+invent a new lowercase_underscore slug only when none of them describes the
+condition you are writing about):
+${insightIdentity.getSubjectsForPrompt()}
+
+ALREADY OUTSTANDING (conditions this user has already been shown and has not yet
+acted on — the number of days is how long each has been outstanding):
+${outstandingText}
+
 OUTPUT FORMAT:
 Return ONLY a valid JSON object (no markdown, no extra text) matching this schema:
 
@@ -257,7 +302,8 @@ Return ONLY a valid JSON object (no markdown, no extra text) matching this schem
   "insights": [
     {
       "id": "unique_id",
-      "type": "insight_category",
+      "type": "one_of_the_INSIGHT_TYPES_above",
+      "subject": "lowercase_underscore_slug naming the specific thing this is about",
       "priority": "high|medium|low",
       "title": "Short compelling title (< 60 chars)",
       "description": "2-3 sentence explanation with specific numbers",

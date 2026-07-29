@@ -5,9 +5,12 @@
 
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../services/db');
+const db = require('../services/db');
+const { pool } = db;
 const { getUserFinancialSummary } = require('../services/insight_data');
 const { generateInsights } = require('../services/ai_insights');
+const insightPersistence = require('../services/insight_persistence');
+const { normalizeType } = require('../services/insight_identity');
 const {
     getArticleCatalog,
     formatCatalogForPrompt,
@@ -63,7 +66,10 @@ router.get('/', authenticateToken, async (req, res) => {
                 return res.json({
                     success: true,
                     data: {
-                        insights: cached.insights,
+                        // Decorated on read, not at generation: the day count
+                        // stays current and a dismissal takes effect now
+                        // rather than whenever the cache happens to expire.
+                        insights: await insightPersistence.presentInsights(userId, cached.insights),
                         health_score: healthScore,
                         summary: cached.summary,
                         generated_at: cached.generated_at,
@@ -92,9 +98,19 @@ router.get('/', authenticateToken, async (req, res) => {
             console.error('Error loading article catalog (continuing without it):', catalogError);
         }
 
+        // What we have already told this user and they have not acted on. Goes
+        // into the prompt so the model leads with what changed instead of
+        // restating an unchanged condition in the same words every six hours.
+        const outstandingText = await insightPersistence.buildOutstandingText(userId);
+
         const result = await generateInsights(userData, {
             articleCatalogText: formatCatalogForPrompt(articleCatalog),
+            outstandingText,
         });
+
+        // Record this generation against the ledger before anything is filtered
+        // for display — the history is of what is true, not of what was shown.
+        await insightPersistence.recordGeneration(userId, result.insights);
 
         // Step 3: Resolve the ids the model chose back to real articles.
         // Nothing is written to educational_articles here: every article it can
@@ -155,7 +171,7 @@ router.get('/', authenticateToken, async (req, res) => {
         res.json({
             success: true,
             data: {
-                insights: result.insights,
+                insights: await insightPersistence.presentInsights(userId, result.insights),
                 health_score: healthScore,
                 summary: result.summary,
                 generated_at: new Date().toISOString(),
@@ -229,21 +245,26 @@ router.post('/dismiss', authenticateToken, async (req, res) => {
             remindAfter.setDate(remindAfter.getDate() + parseInt(remind_after_days));
         }
 
-        // Create a fingerprint for this insight (simplified - could be more sophisticated)
-        const fingerprint = insight_id;
+        // The fingerprint is the stable "type:subject" identity. It used to be
+        // the insight id, which the model reinvents every generation — so the
+        // row never matched anything again and the dismissal, though written,
+        // could never be honoured. Older builds do not send one; those requests
+        // still succeed and behave exactly as they always did.
+        const fingerprint = typeof req.body.fingerprint === 'string' && req.body.fingerprint.trim()
+            ? req.body.fingerprint.trim()
+            : insight_id;
 
-        await pool.query(
-            `INSERT INTO user_insight_dismissals
-             (user_id, insight_type, insight_fingerprint, dismiss_reason, remind_after)
-             VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (user_id, insight_type, insight_fingerprint)
-             DO UPDATE SET dismissed_at = NOW(), dismiss_reason = $4, remind_after = $5`,
-            [userId, insight_type, fingerprint, reason || 'not_specified', remindAfter]
-        );
+        await db.dismissInsight(userId, {
+            insightType: normalizeType(insight_type),
+            fingerprint,
+            reason: reason || 'not_specified',
+            remindAfter,
+        });
 
         res.json({
             success: true,
-            message: 'Insight dismissed successfully'
+            message: 'Insight dismissed successfully',
+            data: { fingerprint, remind_after: remindAfter }
         });
     } catch (error) {
         console.error('Error dismissing insight:', error);
@@ -277,6 +298,15 @@ router.post('/action', authenticateToken, async (req, res) => {
             [userId, insight_id, insight_type, action_type]
         );
 
+        // Tapping the action stops the cost-of-inaction counter. We cannot see
+        // whether they went on to move the money — only that they engaged — but
+        // continuing to tell someone they have ignored something they visibly
+        // acted on is the worse error of the two.
+        const fingerprint = typeof req.body.fingerprint === 'string' ? req.body.fingerprint.trim() : '';
+        if (fingerprint && action_type !== 'dismissed') {
+            await db.markInsightActed(userId, fingerprint);
+        }
+
         res.json({
             success: true,
             message: 'Action tracked successfully'
@@ -291,6 +321,87 @@ router.post('/action', authenticateToken, async (req, res) => {
 });
 
 /**
+ * GET /api/insights/spotlight
+ *
+ * The one insight worth interrupting for, or null.
+ *
+ * Reads the cache only. This is called on app open, so it must never trigger a
+ * Gemini call — a pop-up that costs three seconds of cold start is a pop-up
+ * that gets the app deleted. No cached insights means no pop-up, and the user
+ * sees one on a later launch once the Insights tab has been visited.
+ *
+ * Does NOT mark the spotlight as shown; the client does that via
+ * POST /spotlight/seen once it actually renders. Otherwise a dropped response
+ * or a background fetch would burn the user's weekly interruption on a pop-up
+ * they never saw.
+ */
+router.get('/spotlight', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        if (!(await db.isSpotlightDue(userId))) {
+            return res.json({ success: true, data: { spotlight: null, reason: 'cooldown' } });
+        }
+
+        const candidate = await db.getSpotlightCandidate(userId);
+        if (!candidate) {
+            return res.json({ success: true, data: { spotlight: null, reason: 'no_candidate' } });
+        }
+
+        // Pull the full insight out of the cache so the pop-up shows the same
+        // words as the card behind it. The ledger stores a title, not the body.
+        const cacheResult = await pool.query(
+            `SELECT insights FROM user_insights
+             WHERE user_id = $1
+             ORDER BY generated_at DESC
+             LIMIT 1`,
+            [userId]
+        );
+
+        const cachedInsights = cacheResult.rows[0]?.insights || [];
+        const match = cachedInsights.find(
+            (insight) => insightPersistence.fingerprintFor(insight) === candidate.fingerprint
+        );
+
+        if (!match) {
+            // The condition is still tracked but has aged out of the newest
+            // generation. Showing a stale body would be worse than staying quiet.
+            return res.json({ success: true, data: { spotlight: null, reason: 'not_in_cache' } });
+        }
+
+        const [presented] = await insightPersistence.presentInsights(userId, [match]);
+        if (!presented) {
+            return res.json({ success: true, data: { spotlight: null, reason: 'dismissed' } });
+        }
+
+        res.json({ success: true, data: { spotlight: presented } });
+    } catch (error) {
+        console.error('Error building spotlight:', error);
+        // A failed pop-up is not a failed app open. Answer "nothing to show".
+        res.json({ success: true, data: { spotlight: null, reason: 'error' } });
+    }
+});
+
+/**
+ * POST /api/insights/spotlight/seen
+ * Client confirms the pop-up was rendered; starts both cooldowns.
+ */
+router.post('/spotlight/seen', authenticateToken, async (req, res) => {
+    try {
+        const { fingerprint } = req.body;
+        if (!fingerprint || typeof fingerprint !== 'string') {
+            return res.status(400).json({ success: false, error: 'Missing required field: fingerprint' });
+        }
+
+        await db.markSpotlightShown(req.user.id, fingerprint.trim());
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error recording spotlight impression:', error);
+        res.status(500).json({ success: false, error: 'Failed to record spotlight' });
+    }
+});
+
+/**
  * GET /api/insights/preferences
  * Get user preferences for insight personalization
  */
@@ -301,7 +412,7 @@ router.get('/preferences', authenticateToken, async (req, res) => {
         const result = await pool.query(
             `SELECT first_time_homebuyer, investment_risk_tolerance, interested_in_investing,
                     interested_in_crypto, preferred_savings_account_type,
-                    email_insights_enabled, push_insights_enabled
+                    email_insights_enabled, push_insights_enabled, spotlight_enabled
              FROM user_preferences
              WHERE user_id = $1`,
             [userId]
@@ -318,7 +429,8 @@ router.get('/preferences', authenticateToken, async (req, res) => {
                     interested_in_crypto: false,
                     preferred_savings_account_type: 'tfsa',
                     email_insights_enabled: false,
-                    push_insights_enabled: true
+                    push_insights_enabled: true,
+                    spotlight_enabled: true
                 }
             });
         }
@@ -350,57 +462,48 @@ router.put('/preferences', authenticateToken, async (req, res) => {
             interested_in_crypto,
             preferred_savings_account_type,
             email_insights_enabled,
-            push_insights_enabled
+            push_insights_enabled,
+            spotlight_enabled
         } = req.body;
 
-        // Build dynamic update query
-        const updates = [];
-        const values = [userId];
-        let valueIndex = 2;
+        // Build the upsert from (column, value) pairs.
+        //
+        // This used to derive the INSERT column list from the same array that
+        // carried the SET clauses, after 'updated_at = NOW()' had been pushed
+        // into it — so the statement always named one more column than it had
+        // expressions and Postgres rejected it at parse time. The endpoint
+        // therefore 500'd on every call, for every preference, since it shipped.
+        // updated_at is written literally now rather than being smuggled through
+        // the parameter list.
+        const candidates = {
+            first_time_homebuyer,
+            investment_risk_tolerance,
+            interested_in_investing,
+            interested_in_crypto,
+            preferred_savings_account_type,
+            email_insights_enabled,
+            push_insights_enabled,
+            spotlight_enabled,
+        };
 
-        if (first_time_homebuyer !== undefined) {
-            updates.push(`first_time_homebuyer = $${valueIndex++}`);
-            values.push(first_time_homebuyer);
-        }
-        if (investment_risk_tolerance !== undefined) {
-            updates.push(`investment_risk_tolerance = $${valueIndex++}`);
-            values.push(investment_risk_tolerance);
-        }
-        if (interested_in_investing !== undefined) {
-            updates.push(`interested_in_investing = $${valueIndex++}`);
-            values.push(interested_in_investing);
-        }
-        if (interested_in_crypto !== undefined) {
-            updates.push(`interested_in_crypto = $${valueIndex++}`);
-            values.push(interested_in_crypto);
-        }
-        if (preferred_savings_account_type !== undefined) {
-            updates.push(`preferred_savings_account_type = $${valueIndex++}`);
-            values.push(preferred_savings_account_type);
-        }
-        if (email_insights_enabled !== undefined) {
-            updates.push(`email_insights_enabled = $${valueIndex++}`);
-            values.push(email_insights_enabled);
-        }
-        if (push_insights_enabled !== undefined) {
-            updates.push(`push_insights_enabled = $${valueIndex++}`);
-            values.push(push_insights_enabled);
-        }
+        const columns = Object.keys(candidates).filter((key) => candidates[key] !== undefined);
 
-        if (updates.length === 0) {
+        if (columns.length === 0) {
             return res.status(400).json({
                 success: false,
                 error: 'No preferences provided to update'
             });
         }
 
-        updates.push('updated_at = NOW()');
+        const values = [userId, ...columns.map((key) => candidates[key])];
+        const placeholders = columns.map((_, i) => `$${i + 2}`);
+        const assignments = columns.map((column, i) => `${column} = $${i + 2}`);
 
         await pool.query(
-            `INSERT INTO user_preferences (user_id, ${updates.map((_, i) => updates[i].split(' = ')[0]).join(', ')})
-             VALUES ($1, ${values.slice(1).map((_, i) => `$${i + 2}`).join(', ')})
+            `INSERT INTO user_preferences (user_id, ${columns.join(', ')}, updated_at)
+             VALUES ($1, ${placeholders.join(', ')}, NOW())
              ON CONFLICT (user_id)
-             DO UPDATE SET ${updates.join(', ')}`,
+             DO UPDATE SET ${assignments.join(', ')}, updated_at = NOW()`,
             values
         );
 

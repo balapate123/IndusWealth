@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RADIUS, SPACING, alpha, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import { Card, Text, Button, BarTrack } from './ui';
+import { insightTypeMeta } from '../constants/insights';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -30,23 +31,13 @@ const priorityConfig = (theme, priority) => {
     }
 };
 
-// Insight types draw identity from the same validated ramp as everything else,
-// by index so each theme resolves its own.
-const TYPE_META = {
-    'Tax-Advantaged Account Opportunities': { icon: 'trending-up', slot: 4 },
-    'Spending Optimization': { icon: 'cut', slot: 1 },
-    'Debt Payoff Acceleration': { icon: 'card', slot: 6 },
-    'Savings Acceleration': { icon: 'wallet', slot: 0 },
-    'Cash Flow Optimization': { icon: 'cash', slot: 2 },
-    'Investment Readiness': { icon: 'bar-chart', slot: 5 },
-    'Milestone Celebrations': { icon: 'trophy', slot: 3 },
-    'ETF/Investment Recommendations': { icon: 'pie-chart', slot: 5 },
-    'Tax Optimization': { icon: 'receipt', slot: 4 },
-    'Wealth Building Strategies': { icon: 'diamond', slot: 4 },
-    'Comparative Analysis': { icon: 'stats-chart', slot: 6 },
-    'Opportunity Cost Insights': { icon: 'swap-horizontal', slot: 1 },
-    'Seasonal/Timely Insights': { icon: 'calendar', slot: 0 },
-};
+// Icon, label and ramp slot per insight type. Shared with the spotlight pop-up
+// so a type never looks like two different things in two places.
+//
+// These used to be keyed on long human strings the model wrote freehand
+// ("Tax-Advantaged Account Opportunities"), which meant a near certain miss:
+// every card fell back to a generic bulb and printed the raw type above the
+// title. The type is a closed enum now.
 
 const makeStyles = (t) => StyleSheet.create({
     topRow: {
@@ -125,7 +116,43 @@ const makeStyles = (t) => StyleSheet.create({
         marginTop: 2,
     },
     calculation: { marginTop: SPACING.SMALL },
+    persistence: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        marginBottom: SPACING.SMALL + 2,
+    },
 });
+
+/**
+ * How long this has been outstanding, and roughly what of the quoted benefit has
+ * gone by in that time.
+ *
+ * Sits directly under the "$X/yr potential" bar on purpose — "about $73 so far"
+ * only means anything next to the annual figure it is a slice of. The number is
+ * calculated by the server from recorded sightings; the model is forbidden from
+ * writing one, so there is only ever one version of it.
+ *
+ * Deliberately not styled as a warning. The user declined to act, which is their
+ * decision to make; this states the position, it does not prosecute it.
+ */
+const PersistenceNote = ({ persistence, styles, theme }) => {
+    if (!persistence?.summary || !persistence.is_recurring) return null;
+
+    const cost = persistence.cost_of_inaction;
+    const costText = cost > 0
+        ? ` — about $${Math.round(cost).toLocaleString()} of that so far`
+        : '';
+
+    return (
+        <View style={styles.persistence}>
+            <Ionicons name="time-outline" size={13} color={theme.TEXT_MUTED} />
+            <Text variant="meta" tone="muted" style={{ flex: 1 }}>
+                {persistence.summary}{costText}
+            </Text>
+        </View>
+    );
+};
 
 const InsightCardV2 = ({ insight, onAction, onDismiss, maxAnnualSavings = 5000 }) => {
     const theme = useTheme();
@@ -133,7 +160,7 @@ const InsightCardV2 = ({ insight, onAction, onDismiss, maxAnnualSavings = 5000 }
     const [expanded, setExpanded] = useState(false);
 
     const priority = priorityConfig(theme, insight.priority);
-    const meta = TYPE_META[insight.type] || { icon: 'bulb', slot: null };
+    const meta = insightTypeMeta(insight.type);
     const tint = meta.slot == null ? theme.ACCENT : categoryColor(theme, meta.slot);
 
     const annualSavings =
@@ -148,8 +175,10 @@ const InsightCardV2 = ({ insight, onAction, onDismiss, maxAnnualSavings = 5000 }
     // Delegate only. This used to call onAction AND open the URL itself, so
     // every web_link opened the browser twice — the screen already handles it,
     // and it owns the navigation object that in-app routes need.
+    // The whole insight goes back, not just the id: the caller needs the
+    // fingerprint to tell the server which condition was acted on.
     const handleAction = (action) => {
-        onAction?.(action, insight.id);
+        onAction?.(action, insight);
     };
 
     const isHigh = insight.priority === 'high';
@@ -171,7 +200,7 @@ const InsightCardV2 = ({ insight, onAction, onDismiss, maxAnnualSavings = 5000 }
                 </View>
                 {insight.dismissible && (
                     <TouchableOpacity
-                        onPress={() => onDismiss?.(insight.id)}
+                        onPress={() => onDismiss?.(insight)}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         accessibilityRole="button"
                         accessibilityLabel="Dismiss insight"
@@ -186,7 +215,7 @@ const InsightCardV2 = ({ insight, onAction, onDismiss, maxAnnualSavings = 5000 }
                     <Ionicons name={meta.icon} size={20} color={tint} />
                 </View>
                 <View style={styles.headerText}>
-                    <Text variant="overline" color={tint} style={styles.typeLabel}>{insight.type}</Text>
+                    <Text variant="overline" color={tint} style={styles.typeLabel}>{meta.label}</Text>
                     <Text variant="title" numberOfLines={expanded ? 0 : 2}>{insight.title}</Text>
                 </View>
             </View>
@@ -204,6 +233,8 @@ const InsightCardV2 = ({ insight, onAction, onDismiss, maxAnnualSavings = 5000 }
                     <BarTrack value={annualSavings} max={maxAnnualSavings} color={theme.SUCCESS} height={6} />
                 </View>
             )}
+
+            <PersistenceNote persistence={insight.persistence} styles={styles} theme={theme} />
 
             {!expanded && (
                 <View style={styles.expandHint}>

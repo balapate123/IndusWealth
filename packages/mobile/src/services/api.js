@@ -652,10 +652,49 @@ export const api = {
     getInsights: (forceRefresh = false) =>
         apiRequest(`/insights${forceRefresh ? '?force_refresh=true' : ''}`),
 
-    dismissInsight: (insightId) =>
+    // The server has always required insight_type as well, so the old
+    // single-argument call answered 400 every time and the card reappeared on
+    // the next load. The fingerprint is what actually makes a dismissal stick:
+    // it is stable across generations, where insight_id is reinvented each time.
+    dismissInsight: (insight, { remindAfterDays = null, reason = null } = {}) =>
         apiRequest('/insights/dismiss', {
             method: 'POST',
-            body: JSON.stringify({ insight_id: insightId }),
+            body: JSON.stringify({
+                insight_id: insight?.id,
+                insight_type: insight?.type,
+                fingerprint: insight?.fingerprint,
+                reason,
+                remind_after_days: remindAfterDays,
+            }),
+        }),
+
+    trackInsightAction: (insight, actionType) =>
+        apiRequest('/insights/action', {
+            method: 'POST',
+            body: JSON.stringify({
+                insight_id: insight?.id,
+                insight_type: insight?.type,
+                fingerprint: insight?.fingerprint,
+                action_type: actionType,
+            }),
+        }),
+
+    // The pop-up recommendation. Reads cache only server-side, so it is safe to
+    // call on app open.
+    getSpotlight: () => apiRequest('/insights/spotlight'),
+
+    markSpotlightSeen: (fingerprint) =>
+        apiRequest('/insights/spotlight/seen', {
+            method: 'POST',
+            body: JSON.stringify({ fingerprint }),
+        }),
+
+    getInsightPreferences: () => apiRequest('/insights/preferences'),
+
+    updateInsightPreferences: (preferences) =>
+        apiRequest('/insights/preferences', {
+            method: 'PUT',
+            body: JSON.stringify(preferences),
         }),
 
     // Educational Content / Wealth Academy

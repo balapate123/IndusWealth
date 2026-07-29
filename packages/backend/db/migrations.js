@@ -35,4 +35,5 @@ module.exports = [
     'add_transaction_flags.sql',
     'add_account_credit_limit.sql',
     'add_goals.sql',
+    'add_insight_tracking.sql',
 ];
