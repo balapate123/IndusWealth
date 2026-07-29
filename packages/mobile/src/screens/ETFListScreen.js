@@ -154,8 +154,10 @@ const ETFListScreen = ({ navigation, route }) => {
             <View style={styles.disclaimer}>
                 <Ionicons name="information-circle" size={14} color={theme.TEXT_MUTED} />
                 <Text variant="meta" tone="muted" style={{ flex: 1 }}>
-                    Educational purposes only. Data is approximate and updated quarterly. Not
-                    investment advice. Past performance does not guarantee future results.
+                    A reference list of widely held Canadian ETFs, shown to everyone in the same
+                    order — nothing here is selected for you or based on your finances. Education
+                    only, not investment advice. Data is approximate and updated quarterly. Past
+                    performance does not guarantee future results.
                 </Text>
             </View>
 

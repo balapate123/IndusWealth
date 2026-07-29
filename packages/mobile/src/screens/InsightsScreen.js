@@ -443,11 +443,14 @@ const InsightsScreen = ({ navigation, route }) => {
 
             <View style={styles.disclaimer}>
                 <Ionicons name="information-circle-outline" size={14} color={theme.TEXT_MUTED} />
+                {/* Kept short and true. It used to promise "not investment advice"
+                    in the same breath as ETF data the app was using to recommend
+                    specific funds — a disclaimer the product contradicted. */}
                 <Text variant="meta" tone="muted" style={{ flex: 1 }}>
-                    AI insights are for informational purposes only and do not constitute financial,
-                    investment, or tax advice. ETF data is approximate, updated quarterly, and may not
-                    reflect current market conditions. Past performance does not guarantee future
-                    results. Consult a qualified financial advisor before making investment decisions.
+                    These insights describe your own spending and balances. They are information,
+                    not financial, investment or tax advice, and IndusWealth does not recommend
+                    investments or financial products. Figures are estimates. Speak to a qualified
+                    advisor before making financial decisions.
                 </Text>
             </View>
 

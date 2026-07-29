@@ -4,7 +4,6 @@
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const etfKnowledge = require('./etf_knowledge');
 const linkRegistry = require('./link_registry');
 
 // Initialize Gemini AI
@@ -81,9 +80,15 @@ async function generateInsights(userData, { articleCatalogText } = {}) {
         // Validate and process insights
         const validatedInsights = _validateInsights(aiResponse);
 
+        // Drop anything naming a specific security before it can reach a device.
+        const compliantInsights = _rejectSecurityMentions(validatedInsights);
+        if (compliantInsights.length === 0) {
+            throw new Error('Every generated insight named a security; none could be shown');
+        }
+
         // Resolve every action link through the registry. Anything the model
         // invented is stripped here, before it can reach a device.
-        const linkedInsights = _resolveActions(validatedInsights);
+        const linkedInsights = _resolveActions(compliantInsights);
 
         // Calculate priority scores and limit to top 7
         const prioritizedInsights = _prioritizeInsights(linkedInsights);
@@ -121,15 +126,17 @@ async function generateInsights(userData, { articleCatalogText } = {}) {
  * @param {string} articleCatalogText - the catalog rendered as "[id] Title — …" lines
  */
 function _buildPrompt(userData, articleCatalogText = '(no articles available)') {
-    // Get user risk tolerance for ETF filtering
-    const riskLevel = userData.user_preferences?.investment_risk_tolerance || 'moderate';
-    const etfPromptData = etfKnowledge.getETFDataForPrompt(riskLevel);
+    // No ETF/ticker reference data is injected any more. The model cannot
+    // recommend a security it has never been handed, which is the same
+    // principle as the link registry: remove the capability, don't ask nicely.
+    const systemPrompt = `You are a Canadian personal finance educator analyzing a user's own spending and balances. Your goal is to generate 6-8 actionable, numbers-driven observations that help the user understand and improve their finances. Be SPECIFIC with dollar amounts, percentages, and timelines.
 
-    const systemPrompt = `You are an expert Canadian personal finance advisor and AI financial co-pilot analyzing a user's financial data. Your goal is to generate 6-8 actionable, personalized, numbers-driven insights that help the user optimize their finances. Be SPECIFIC with dollar amounts, percentages, and timelines.
+You are NOT an investment adviser and you do not recommend investments. You explain
+what the user's own money is doing and what general options exist.
 
 CONTEXT:
 - User location: Canada (Ontario)
-- Financial products: TFSA, FHSA, RRSP, GIC, ETFs
+- Account types you may discuss: TFSA, FHSA, RRSP, chequing, high-interest savings
 - Tax considerations: Canadian tax brackets and deductions
 - Currency: CAD
 - Current date: ${new Date().toISOString().split('T')[0]}
@@ -148,9 +155,6 @@ SEASONAL CONTEXT:
 - RRSP season: ${userData.seasonal_context?.is_rrsp_season ? 'YES - deadline in ' + userData.seasonal_context.days_until_rrsp_deadline + ' days (March 1)' : 'No'}
 - Days until TFSA reset (Jan 1): ${userData.seasonal_context?.days_until_tfsa_reset || 'N/A'}
 
-CANADIAN ETF REFERENCE DATA (for investment recommendations):
-${etfPromptData}
-
 CANADIAN HOUSEHOLD SPENDING AVERAGES (2024 StatCan, approximate):
 - Food (groceries): $1,060/month ($12,720/year)
 - Shelter (rent/mortgage): $1,800/month ($21,600/year)
@@ -167,11 +171,10 @@ ONTARIO TAX BRACKETS (individual, combined federal+provincial marginal rates):
 - $154,906-$220,000: ~41% marginal
 - $220,000+: ~46% marginal
 
-HISA RATES (approximate):
-- EQ Bank: 4.00%
-- Tangerine: 4.50% (promo)
-- Wealthsimple Cash: 3.75%
-- HISA ETFs (CASH, PSA): 4.5-5.0%
+SAVINGS ACCOUNT RATES (approximate, for comparison only — do not present any of
+these as a recommendation, and never name a fund, ETF or ticker):
+- Typical Canadian high-interest savings account: 3.5-4.5%
+- Typical big-bank everyday savings account: 0.01-0.5%
 
 INSIGHT CATEGORIES (generate across relevant categories, aim for 6-8 total):
 EXISTING:
@@ -180,16 +183,15 @@ EXISTING:
 3. Debt Payoff Acceleration (avalanche, balance transfer, consolidation)
 4. Savings Acceleration (emergency fund, found money, automation)
 5. Cash Flow Optimization (credit utilization, bill timing, budgeting)
-6. Investment Readiness (when user is ready to start investing)
+6. Investment Readiness - whether the user's own position (emergency fund, high-interest debt) suggests they are in a position to start. Never what to buy.
 7. Milestone Celebrations (debt payoff, net worth goals)
 
 NEW:
-8. ETF/Investment Recommendations - ONLY when financial_readiness.ready_to_invest is true OR monthly surplus > $500. Name SPECIFIC tickers from the ETF reference data, include MER, approximate historical returns. Always add disclaimer about past performance.
-9. Tax Optimization - ONLY during tax season (Jan-Apr) or RRSP season. Calculate specific tax savings using user's estimated income and Ontario tax brackets.
-10. Wealth Building Strategies - When positive cash flow exists. Dollar-cost averaging plans, TFSA vs RRSP optimization at user's income level.
-11. Comparative Analysis - Compare user's spending to Canadian averages above. Be specific: "You spend $X on dining out, Y% above the Canadian average of $335."
-12. Opportunity Cost Insights - When large balances sit in chequing. Calculate: "Moving $X from chequing (0.01%) to HISA ETF (4.8%) = $Y/year more."
-13. Seasonal/Timely Insights - ONLY generate if seasonally relevant per SEASONAL CONTEXT above. Tax deadline reminders, RRSP deadline, TFSA room reset, etc.
+8. Tax Optimization - ONLY during tax season (Jan-Apr) or RRSP season. Calculate specific tax savings using user's estimated income and Ontario tax brackets.
+9. Wealth Building Habits - When positive cash flow exists. Automating transfers, the difference between registered and non-registered accounts at the user's income level. Account types only, never products.
+10. Comparative Analysis - Compare user's spending to Canadian averages above. Be specific: "You spend $X on dining out, Y% above the Canadian average of $335."
+11. Opportunity Cost Insights - When large balances sit in chequing. Compare account TYPES only: "$X sitting at 0.05% would earn approximately $Y more per year in a high-interest savings account." Never a fund, ETF or ticker.
+12. Seasonal/Timely Insights - ONLY generate if seasonally relevant per SEASONAL CONTEXT above. Tax deadline reminders, RRSP deadline, TFSA room reset, etc.
 
 RULES:
 1. Be specific with dollar amounts and calculations - no vague advice
@@ -207,15 +209,24 @@ RULES:
 13. CRITICAL: NOT SUBSCRIPTIONS are restaurants, gas stations, groceries, coffee shops, transportation, pharmacies, retail stores
 14. CRITICAL: If subscriptions data includes restaurants, gas, or transportation merchants, IGNORE them
 15. Look at category field to identify investments - do not treat them as subscriptions to cancel
-16. For ETF recommendations: ALWAYS name specific tickers from the reference data, include MER, mention approximate historical returns, and link to a brokerage. Add disclaimer about past performance.
-17. For tax insights: Use the user's estimated income to calculate approximate tax bracket and savings. Be specific with dollar amounts.
-18. For comparative analysis: Compare user spending to Canadian averages and be specific about the difference in dollars and percentage.
-19. For opportunity cost: Calculate the actual dollar difference between current and optimal allocation.
-20. For seasonal insights: Only generate if seasonally relevant (check SEASONAL CONTEXT above).
-21. Generate 6-8 insights total across the expanded categories.
-22. At least 1 insight must be from the new categories (8-13) if the user data supports it.
-23. NEVER recommend specific stocks (individual companies). Only recommend broad-market ETFs from the provided reference data.
-24. All projected returns must use the word "approximately" or "estimated" and include a disclaimer.
+16. ABSOLUTE: NEVER name a specific security. No tickers, no fund names, no ETFs,
+    no stocks, no mutual funds, no crypto assets. Not as a recommendation, not as
+    an example, not "such as", not in passing. If you cannot make the point
+    without naming one, make a different point.
+17. ABSOLUTE: NEVER tell the user to buy, sell, hold, or allocate into any
+    investment, and never suggest a portfolio mix or an equity/fixed-income split.
+    Account TYPES (TFSA, RRSP, FHSA, high-interest savings) are allowed, because
+    they are tax and account structures rather than products.
+18. ABSOLUTE: NEVER name a brokerage, bank or provider as somewhere the user
+    should move money to. Naming a merchant already in their transactions is fine.
+19. For tax insights: Use the user's estimated income to calculate approximate tax bracket and savings. Be specific with dollar amounts.
+20. For comparative analysis: Compare user spending to Canadian averages and be specific about the difference in dollars and percentage.
+21. For opportunity cost: Compare account types and be specific about the dollar difference. No products.
+22. For seasonal insights: Only generate if seasonally relevant (check SEASONAL CONTEXT above).
+23. Generate 6-8 insights total across the categories above.
+24. All projected figures must use the word "approximately" or "estimated".
+25. Frame everything as information about the user's own money, not as advice. Prefer
+    "money sitting in chequing earns almost nothing" over "you should move your money".
 
 SUBSCRIPTION IDENTIFICATION EXAMPLES:
 - ACTUAL SUBSCRIPTIONS: Netflix, Disney+, Spotify, Apple Music, Microsoft 365, Adobe, gym memberships, cloud storage
@@ -382,6 +393,79 @@ function _prioritizeInsights(insights) {
 
     // Return top 7
     return insights.slice(0, 7);
+}
+
+/**
+ * Names of specific securities, which insights may never contain.
+ *
+ * The prompt forbids them, but a prompt is a request and this is a rule — the
+ * same reason link destinations are resolved server-side rather than trusted.
+ * An insight that names a fund is dropped, not edited: a half-scrubbed sentence
+ * ("consider putting it in ") reads as a bug and still implies the advice.
+ *
+ * CASH is deliberately excluded from the ticker list. It is a real ETF ticker
+ * and an ordinary English word, and blocking it would delete every legitimate
+ * insight about cash flow.
+ */
+const AMBIGUOUS_TICKERS = new Set(['CASH']);
+
+let _securityPattern = null;
+function _getSecurityPattern() {
+    if (_securityPattern) return _securityPattern;
+
+    const { etfs } = require('../data/canadian_etfs.json');
+    const tickers = etfs
+        .map((etf) => etf.ticker)
+        .filter((ticker) => !AMBIGUOUS_TICKERS.has(ticker));
+
+    // Fund names are long and distinctive, so they match case-insensitively.
+    const names = etfs
+        .map((etf) => etf.name)
+        .filter((name) => name && name.length > 12)
+        .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+    _securityPattern = {
+        // Case-sensitive: tickers are uppercase, and lowercase "xic" in prose
+        // is not a security reference.
+        tickers: new RegExp(`\\b(${tickers.join('|')})\\b`),
+        names: new RegExp(`(${names.join('|')})`, 'i'),
+    };
+    return _securityPattern;
+}
+
+/** Does this text name a specific security? */
+function mentionsSecurity(text) {
+    if (typeof text !== 'string' || !text) return false;
+    const { tickers, names } = _getSecurityPattern();
+    return tickers.test(text) || names.test(text);
+}
+
+/**
+ * Drop any insight that names a specific security.
+ *
+ * The app is not a registered adviser, so a named fund is not a feature that
+ * needs softening — it is one that must not ship.
+ */
+function _rejectSecurityMentions(insights) {
+    return insights.filter((insight) => {
+        const surfaces = [
+            insight.title,
+            insight.description,
+            ...(Array.isArray(insight.reasoning) ? insight.reasoning : []),
+            insight.action?.primary?.label,
+            insight.action?.secondary?.label,
+            insight.potential_benefit?.calculation,
+        ];
+
+        const offending = surfaces.find((text) => mentionsSecurity(text));
+        if (offending) {
+            console.warn(
+                `Dropped insight "${insight.id}" — it named a specific security, which this app must not do.`
+            );
+            return false;
+        }
+        return true;
+    });
 }
 
 /**
@@ -633,8 +717,10 @@ module.exports = {
     generateInsights,
     generateCategoryInsights,
     TRUSTED_SOURCES,
-    // Exported for tests: these are the guards that decide whether a link ever
-    // reaches a device, so they need to be exercisable without a Gemini call.
+    // Exported for tests: these are the guards that decide what ever reaches a
+    // device, so they need to be exercisable without a Gemini call.
     _resolveActions,
     _extractArticleIds,
+    _rejectSecurityMentions,
+    mentionsSecurity,
 };

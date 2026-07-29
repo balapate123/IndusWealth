@@ -68,75 +68,16 @@ function getETFsByCategory(category) {
     return data.etfs.filter(etf => etf.category === category);
 }
 
-/**
- * Get recommended ETFs for a user based on their preferences
- * @param {Object} userPreferences - { investment_risk_tolerance, interested_in_investing, preferred_savings_account_type }
- * @returns {Object[]} 3-5 recommended ETFs
- */
-function getRecommendedETFs(userPreferences) {
-    const riskLevel = userPreferences?.investment_risk_tolerance || 'moderate';
-    const matchingETFs = getETFsByRiskProfile(riskLevel);
+// getRecommendedETFs() lived here. It scored the catalogue against the user's
+// stored risk tolerance and returned a personalized top five — a securities
+// recommendation, which this app is not registered to make. Removed rather than
+// softened: there is no wording that makes a ranked list of funds chosen for
+// one person's risk profile into education.
 
-    // Score and sort: prefer lower MER, higher 1yr return, matching risk tolerance
-    const scored = matchingETFs.map(etf => {
-        let score = 0;
-        // Direct risk tolerance match
-        if (etf.risk_tolerance_match.includes(riskLevel)) score += 10;
-        // Favor low MER
-        if (etf.mer_percent <= 0.25) score += 5;
-        // Favor diversification (higher holdings count)
-        if (etf.holdings_count > 1000) score += 3;
-        // Favor all-in-one for simplicity
-        if (etf.category === 'all_equity' || etf.category === 'balanced') score += 4;
-        // Decent 1yr return
-        if (etf.historical_returns.one_year_percent > 8) score += 2;
-        return { ...etf, _score: score };
-    });
-
-    scored.sort((a, b) => b._score - a._score);
-
-    // Return top 5, removing internal score
-    return scored.slice(0, 5).map(({ _score, ...etf }) => etf);
-}
-
-/**
- * Format ETF data for injection into the AI prompt
- * Produces a compact text representation filtered by risk level
- * @param {string} riskLevel - "conservative", "moderate", or "aggressive"
- * @returns {string} Formatted text for prompt injection
- */
-function getETFDataForPrompt(riskLevel) {
-    const data = _loadETFData();
-    const profile = data.risk_profiles[riskLevel || 'moderate'];
-    const relevantETFs = profile
-        ? data.etfs.filter(etf => profile.suitable_categories.includes(etf.category) || etf.risk_tolerance_match.includes(riskLevel))
-        : data.etfs;
-
-    let output = `DATA DISCLAIMER: ${data.data_disclaimer}\n`;
-    output += `Last updated: ${data.last_updated}\n\n`;
-
-    if (profile) {
-        output += `RISK PROFILE: ${riskLevel}\n`;
-        output += `Recommended allocation: ${profile.recommended_allocation.equity}% equity / ${profile.recommended_allocation.fixed_income}% fixed income\n\n`;
-    }
-
-    output += 'RELEVANT CANADIAN ETFs:\n';
-    relevantETFs.forEach(etf => {
-        output += `- ${etf.ticker} (${etf.name}): MER ${etf.mer_percent}%, `;
-        output += `Category: ${etf.category}, Risk: ${etf.risk_level}, `;
-        output += `1yr: ${etf.historical_returns.one_year_percent}%, `;
-        output += `5yr annualized: ${etf.historical_returns.five_year_annualized_percent}%, `;
-        output += `Yield: ${etf.distribution_yield_percent}%, `;
-        output += `${etf.description}\n`;
-    });
-
-    output += '\nCATEGORIES:\n';
-    Object.entries(data.categories).forEach(([key, desc]) => {
-        output += `- ${key}: ${desc}\n`;
-    });
-
-    return output;
-}
+// getETFDataForPrompt() lived here. It fed the whole ticker list, filtered by
+// the user's risk profile and headed by a recommended equity/fixed-income
+// split, straight into the insights prompt — which is how the model came to be
+// naming funds at people. The model is no longer given securities to name.
 
 /**
  * Search ETFs by text query (ticker or name)
@@ -177,8 +118,6 @@ module.exports = {
     getETFByTicker,
     getETFsByRiskProfile,
     getETFsByCategory,
-    getRecommendedETFs,
-    getETFDataForPrompt,
     searchETFs,
     getLastUpdated,
     getDisclaimer,

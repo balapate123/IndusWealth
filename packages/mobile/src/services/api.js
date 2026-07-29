@@ -686,7 +686,9 @@ export const api = {
         return apiRequest(`/etfs${qs ? '?' + qs : ''}`);
     },
 
-    getRecommendedETFs: () => apiRequest('/etfs/recommended'),
+    // getRecommendedETFs() was removed along with the endpoint: it ranked the
+    // ETF catalogue against the user's risk profile, which is a personalized
+    // securities recommendation. The list is browsable education now.
 
     getETFByTicker: (ticker) => apiRequest(`/etfs/${ticker}`),
 

@@ -131,6 +131,16 @@ Local, **not push** — no APNs cert, no FCM key, no server scheduler. Two iOS c
 - Permission is requested **when a reminder is switched on, never at launch** — iOS grants one prompt.
 - `expo-notifications` is a native module and there is **no OTA**, so it needs an EAS rebuild to reach a device.
 
+### No Investment Advice (hard product constraint)
+IndusWealth is **not a registered adviser**, so it must never recommend a security. Google Play rejected the app in July 2026 under the Financial Services policy because the Financial features declaration said the app gives no personalized advice while the Insights tab recommended specific ETFs off the user's own surplus.
+- **Never name a specific security anywhere** — no tickers, no fund names, not as an example, not "such as". Account *types* (TFSA, RRSP, FHSA, HISA) are fine: they are tax structures, not products.
+- **Never rank or filter products by a user's own data.** `getRecommendedETFs()` and `GET /etfs/recommended` were removed for exactly this; the endpoint now returns 410 because there is no OTA and old builds still call it.
+- **No ticker data is given to the model at all** (`getETFDataForPrompt` is gone). It cannot name a fund it was never handed — the same principle as the link registry.
+- `_rejectSecurityMentions()` in `ai_insights.js` **drops** any insight naming a security, checking title, description, reasoning, button labels and the benefit calculation. A prompt rule is a request; this is the enforcement. `CASH` is excluded from the ticker blocklist — it is a real ticker and an ordinary word, and blocking it would delete every cash-flow insight.
+- The ETF list screen stays as **education**: same order for everyone, nothing derived from the user's finances.
+- No brokerage or bank product pages in `link_registry.js`. Neutral rate comparison (`ratehub_savings`) is fine; a provider signup page reached from an insight about your own balance is product steering.
+- `docs/store/PLAY_STORE_LISTING.md` already promises "does not provide financial, investment, legal, or tax advice" — keep the app matching that claim, not the other way round.
+
 ### AI Insight Links
 The insights prompt used to ask Gemini for "REAL, valid URLs", which is the one thing an LLM cannot do — it knows the domain and invents the path. 40% of links 404'd.
 - **The model never writes a URL.** It picks a `destination` key from `link_registry.js`, and the server resolves it. An invented key resolves to null and the action degrades to an in-app route.

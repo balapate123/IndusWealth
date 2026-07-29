@@ -81,34 +81,18 @@ const DESTINATIONS = {
         description: 'Canadian credit card comparison including balance transfer offers',
     },
 
-    // --- Brokerages and banks ---
-    wealthsimple_invest: {
-        url: 'https://www.wealthsimple.com/en-ca/invest',
-        label: 'Wealthsimple Invest',
-        description: 'Canadian commission-free investing and managed portfolios',
-    },
+    // --- Education ---
+    //
+    // No brokerage or bank product pages live here. wealthsimple_invest,
+    // questrade_home, eq_bank_savings and tangerine_savings were removed: an
+    // insight generated from someone's own balances, ending in a button that
+    // opens a provider's signup page, is product steering by an app that is not
+    // a registered adviser. Rate comparison (ratehub_savings) stays, because a
+    // comparison table is not a recommendation of any one provider.
     wealthsimple_learn: {
         url: 'https://www.wealthsimple.com/en-ca/learn',
         label: 'Wealthsimple Learn',
         description: 'Canadian personal finance and investing explainers',
-    },
-    questrade_home: {
-        url: 'https://www.questrade.com/',
-        label: 'Questrade',
-        description: 'Canadian self-directed brokerage for ETF investing',
-    },
-    eq_bank_savings: {
-        url: 'https://www.eqbank.ca/personal-banking/save-invest',
-        label: 'EQ Bank savings',
-        description: 'High-interest savings account with no monthly fee',
-    },
-    // Root only: every Tangerine product path tried (/products/saving,
-    // /personal/save-invest, /save-invest) returns 404. This is exactly the rot
-    // the verifier exists to catch — keep it at the domain root, which is stable.
-    tangerine_savings: {
-        url: 'https://www.tangerine.ca/en',
-        label: 'Tangerine',
-        description: 'High-interest savings accounts, frequent promotional rates',
     },
 };
 
@@ -120,9 +104,6 @@ const ALLOWED_HOSTS = [
     'canada.ca',
     'ratehub.ca',
     'wealthsimple.com',
-    'questrade.com',
-    'eqbank.ca',
-    'tangerine.ca',
     'equifax.ca',
     'transunion.ca',
     'moneysense.ca',

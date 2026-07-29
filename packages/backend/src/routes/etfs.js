@@ -1,15 +1,23 @@
 /**
  * ETF API Routes
- * Endpoints for browsing and getting recommended Canadian ETFs
+ *
+ * A reference library, not a recommendation engine. The user browses and
+ * searches; nothing here reads their finances or their risk tolerance to decide
+ * what to show them.
+ *
+ * `GET /recommended` used to filter this list by the user's stored risk profile
+ * and surface the result as "Investment Corner" — a personalized securities
+ * recommendation from a developer who is not a registered adviser, sitting
+ * directly beneath a disclaimer saying the app does not recommend products.
+ * It is gone.
  */
 
 const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
-const { pool } = require('../services/db');
 const etfKnowledge = require('../services/etf_knowledge');
 
-const ETF_DISCLAIMER = 'The ETF information is for educational purposes only. Data is approximate and updated quarterly. IndusWealth does not sell, recommend, or endorse any specific investment product. Past performance does not guarantee future results.';
+const ETF_DISCLAIMER = 'This is a reference list of widely held Canadian ETFs, provided for education only. Data is approximate and updated quarterly. IndusWealth does not sell, recommend, or endorse any investment product, and nothing here is investment advice. Past performance does not guarantee future results. Speak to a registered advisor before investing.';
 
 /**
  * GET /api/etfs
@@ -49,45 +57,18 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 /**
- * GET /api/etfs/recommended
- * Get ETFs recommended for the user based on their risk profile
+ * GET /api/etfs/recommended  (REMOVED)
+ *
+ * Kept as an explicit 410 rather than a 404 so an older installed build gets a
+ * clear answer instead of looking like a broken endpoint. There is no OTA, so
+ * old builds will keep calling this for a while.
  */
-router.get('/recommended', authenticateToken, async (req, res) => {
-    try {
-        const userId = req.user.id;
-
-        // Get user preferences
-        const prefResult = await pool.query(
-            `SELECT investment_risk_tolerance, interested_in_investing,
-                    preferred_savings_account_type
-             FROM user_preferences WHERE user_id = $1`,
-            [userId]
-        );
-
-        const preferences = prefResult.rows[0] || {
-            investment_risk_tolerance: 'moderate',
-            interested_in_investing: true,
-            preferred_savings_account_type: 'tfsa'
-        };
-
-        const recommended = etfKnowledge.getRecommendedETFs(preferences);
-
-        res.json({
-            success: true,
-            data: {
-                etfs: recommended,
-                risk_profile: preferences.investment_risk_tolerance,
-                last_updated: etfKnowledge.getLastUpdated(),
-                disclaimer: ETF_DISCLAIMER
-            }
-        });
-    } catch (error) {
-        console.error('Error fetching recommended ETFs:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch recommended ETFs'
-        });
-    }
+router.get('/recommended', authenticateToken, (req, res) => {
+    res.status(410).json({
+        success: false,
+        code: 'ENDPOINT_REMOVED',
+        message: 'IndusWealth no longer recommends investments. Browse the ETF reference list instead.',
+    });
 });
 
 /**
