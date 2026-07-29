@@ -557,6 +557,15 @@ export const api = {
      * notification's content freezes when scheduled, so a milestone cannot be
      * scheduled ahead of the balance change that causes it.
      */
+    // Confirms a milestone was actually shown. Separate from the check on
+    // purpose: the check is read-only, so a milestone the device could not
+    // display stays pending instead of being silently consumed.
+    markGoalMilestones: (goalId, milestones) =>
+        apiRequest(`/goals/${goalId}/milestones`, {
+            method: 'POST',
+            body: JSON.stringify({ milestones }),
+        }),
+
     checkGoalMilestones: () =>
         apiRequest('/goals/milestones/check', { method: 'POST' }),
 

@@ -253,15 +253,31 @@ const HomeScreen = ({ navigation }) => {
     }, [spotlight, navigation]);
 
     // Milestones cannot be scheduled ahead: crossing 50% depends on a balance
-    // the device does not know until it asks. So it asks once per app open, and
-    // the server records what it announced so two devices cannot both claim it.
+    // the device does not know until it asks. So it asks once per app open.
+    //
+    // Ask, present, then confirm only what was presented. The check is
+    // read-only, so a milestone the device could not show (no notification
+    // permission) stays pending rather than being consumed by having been
+    // asked about — which is how the first version lost them permanently.
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const response = await api.checkGoalMilestones();
                 if (cancelled || !response?.success || !response.data?.length) return;
-                await presentMilestones(response.data);
+
+                const shown = await presentMilestones(response.data);
+                if (cancelled || shown.length === 0) return;
+
+                await Promise.all(shown.map((crossing) =>
+                    api.markGoalMilestones(crossing.goal_id, crossing.milestones)
+                        .catch((err) => {
+                            // Unconfirmed means it repeats on the next open. A
+                            // duplicate celebration is a far better failure than
+                            // a lost one.
+                            console.warn('Could not confirm a milestone:', err?.message || err);
+                        })
+                ));
             } catch (err) {
                 // A goal celebration is not worth interrupting the dashboard for.
                 console.warn('Could not check goal milestones:', err?.message || err);

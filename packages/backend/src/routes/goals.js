@@ -100,8 +100,18 @@ router.get('/', authenticateToken, async (req, res, next) => {
 //
 // Called when the app opens. Local notifications freeze their content at
 // schedule time, so a milestone cannot be scheduled in advance — the device
-// asks which ones have been newly crossed, shows them, and the server records
-// them so they fire exactly once across all of a user's devices.
+// asks which ones have been newly crossed and presents them itself.
+//
+// READ-ONLY. It used to call markGoalMilestones here, which meant the milestone
+// was consumed by the act of asking: if the device then could not show it —
+// notification permission not granted is the common case, and presentMilestones
+// returns silently in that case — the milestone was already recorded as
+// announced and newMilestones() would filter it out forever. One missed
+// notification, permanently. The device now confirms via
+// POST /goals/:goalId/milestones once it has actually scheduled something, so
+// an unshowable milestone stays pending and fires whenever notifications are
+// turned on. Two devices still cannot both claim one: whichever confirms first
+// records it, and the loser's next check no longer sees it.
 //
 // Declared above the /:goalId routes so a literal path can never be captured
 // by the parameter.
@@ -117,7 +127,6 @@ router.post('/milestones/check', authenticateToken, async (req, res, next) => {
             const reached = newMilestones(goal.progress_percent, goal.milestones_notified);
             if (reached.length === 0) continue;
 
-            const updated = await db.markGoalMilestones(req.user.id, goal.id, reached);
             crossed.push({
                 goal_id: goal.id,
                 name: goal.name,
@@ -125,7 +134,7 @@ router.post('/milestones/check', authenticateToken, async (req, res, next) => {
                 progress_percent: goal.progress_percent,
                 target_amount: goal.target_amount,
                 saved_amount: goal.saved_amount,
-                achieved: updated?.status === 'achieved',
+                achieved: reached.includes(100),
             });
         }
 

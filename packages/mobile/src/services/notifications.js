@@ -157,10 +157,24 @@ export async function syncGoalReminders(goals = []) {
  * presents what it is handed — a null trigger means "now".
  */
 export async function presentMilestones(crossings = []) {
-    const { granted } = await getNotificationPermission();
-    if (!granted || crossings.length === 0) return 0;
+    if (crossings.length === 0) return [];
 
-    let shown = 0;
+    // Deliberately does NOT request permission: iOS grants one prompt and it is
+    // spent when a reminder is switched on, not at app open. So an un-permitted
+    // milestone is not an error — it stays pending server-side and announces
+    // itself whenever notifications are turned on. It is logged because
+    // "nothing happened" is otherwise indistinguishable from a broken feature.
+    const { granted } = await getNotificationPermission();
+    if (!granted) {
+        console.warn(
+            `[notifications] permission not granted — ${crossings.length} goal milestone(s) left pending, not consumed`
+        );
+        return [];
+    }
+
+    // Returns the crossings actually scheduled, so the caller confirms only
+    // those. Anything that threw stays unconfirmed and will be retried.
+    const shown = [];
     for (const crossing of crossings) {
         const highest = Math.max(...(crossing.milestones || []).map(Number));
         if (!Number.isFinite(highest)) continue;
@@ -177,7 +191,7 @@ export async function presentMilestones(crossings = []) {
                 },
                 trigger: null,
             });
-            shown++;
+            shown.push(crossing);
         } catch (err) {
             console.warn('Could not present a milestone notification:', err?.message || err);
         }
