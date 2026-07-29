@@ -6,7 +6,6 @@ import {
     LayoutAnimation,
     UIManager,
     Platform,
-    Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RADIUS, SPACING, alpha, categoryColor } from '../constants/tokens';
@@ -146,15 +145,11 @@ const InsightCardV2 = ({ insight, onAction, onDismiss, maxAnnualSavings = 5000 }
         setExpanded((v) => !v);
     };
 
-    const handleAction = async (action) => {
-        if (onAction) onAction(action, insight.id);
-        if (action?.type === 'web_link' && action?.url) {
-            try {
-                await Linking.openURL(action.url);
-            } catch (err) {
-                console.error('Failed to open URL:', err);
-            }
-        }
+    // Delegate only. This used to call onAction AND open the URL itself, so
+    // every web_link opened the browser twice — the screen already handles it,
+    // and it owns the navigation object that in-app routes need.
+    const handleAction = (action) => {
+        onAction?.(action, insight.id);
     };
 
     const isHigh = insight.priority === 'high';

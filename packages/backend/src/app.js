@@ -153,9 +153,18 @@ app.use('/insights', require('./routes/insights'));
 app.use('/educational', require('./routes/educational'));
 app.use('/etfs', require('./routes/etfs'));
 
-// Sync curated articles on startup (non-blocking)
+// Sync curated articles on startup (non-blocking), then check a batch of links.
+// The verifier runs after the sync so freshly-inserted rows are eligible, and is
+// bounded per boot — it drains the catalog over several restarts rather than
+// firing dozens of requests at publishers every time the dyno wakes up.
 const { syncCuratedArticles } = require('./services/educational_content');
-syncCuratedArticles().catch(err => console.error('Curated article sync failed on startup:', err));
+const { verifyArticleLinks } = require('./services/link_health');
+syncCuratedArticles()
+    .then(() => {
+        if (process.env.LINK_HEALTH_CHECK_ENABLED === 'false') return null;
+        return verifyArticleLinks();
+    })
+    .catch(err => console.error('Curated article sync / link check failed on startup:', err));
 app.use('/2fa', require('./routes/twoFactor'));
 app.use('/feedback', require('./routes/feedback'));
 

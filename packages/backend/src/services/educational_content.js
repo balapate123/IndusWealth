@@ -433,6 +433,105 @@ async function syncCuratedArticles() {
     }
 }
 
+// ============ CATALOG SELECTION (replaces AI-authored article URLs) ============
+
+// A prompt line costs tokens, so the catalog handed to the model is capped.
+// Curated articles sort first: they are the ones a human actually opened.
+const CATALOG_LIMIT = 60;
+
+/**
+ * The article catalog the AI picks from, as rows.
+ *
+ * The model never sees a URL — only `[id] Title`. It returns ids, and
+ * `getArticlesByIds` maps them back. An id it invents simply isn't in the
+ * result set, so a hallucination costs us one fewer article rather than one
+ * dead link.
+ */
+async function getArticleCatalog(limit = CATALOG_LIMIT) {
+    const result = await pool.query(
+        `SELECT id, title, description, category, source_name,
+                read_time_minutes, difficulty, tags
+         FROM educational_articles
+         WHERE url_status = 'active' AND expires_at > NOW()
+         ORDER BY source_type = 'curated' DESC, id ASC
+         LIMIT $1`,
+        [limit]
+    );
+    return result.rows;
+}
+
+/**
+ * Render the catalog as prompt text.
+ */
+function formatCatalogForPrompt(catalog) {
+    if (!catalog || catalog.length === 0) return '(no articles available)';
+    return catalog
+        .map((a) => `[${a.id}] ${a.title} — ${a.source_name || 'Unknown'}, ${a.category}, ${a.read_time_minutes || 5} min`)
+        .join('\n');
+}
+
+/**
+ * Map AI-selected ids back to real article rows.
+ *
+ * Order follows the ids the model gave us (its ranking), not the database's.
+ * Anything unknown, non-numeric or duplicated falls out silently.
+ *
+ * @param {Array<number|string>} ids
+ * @param {number} limit
+ */
+async function getArticlesByIds(ids, limit = 5) {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+
+    const seen = new Set();
+    const wanted = [];
+    for (const raw of ids) {
+        const id = Number.parseInt(raw, 10);
+        if (!Number.isInteger(id) || id <= 0 || seen.has(id)) continue;
+        seen.add(id);
+        wanted.push(id);
+    }
+    if (wanted.length === 0) return [];
+
+    const result = await pool.query(
+        `SELECT id, external_url, title, description, image_url, source_name,
+                category, read_time_minutes, source_type, difficulty
+         FROM educational_articles
+         WHERE id = ANY($1) AND url_status = 'active' AND expires_at > NOW()`,
+        [wanted]
+    );
+
+    const byId = new Map(result.rows.map((row) => [row.id, row]));
+    return wanted
+        .map((id) => byId.get(id))
+        .filter(Boolean)
+        .slice(0, limit)
+        .map((a) => ({ ...a, categoryColor: getCategoryColor(a.category) }));
+}
+
+/**
+ * Record which insight types an article is relevant to, so the next generation
+ * can reach for it directly. Best-effort: a failure here must not sink a request.
+ */
+async function linkArticlesToInsightTypes(articleIds, insightTypes) {
+    if (!Array.isArray(articleIds) || articleIds.length === 0) return 0;
+    if (!Array.isArray(insightTypes) || insightTypes.length === 0) return 0;
+
+    let linked = 0;
+    for (const articleId of articleIds) {
+        for (const insightType of insightTypes) {
+            await pool.query(
+                `INSERT INTO insight_articles (insight_type, article_id, relevance_score)
+                 VALUES ($1, $2, 1.0)
+                 ON CONFLICT (insight_type, article_id)
+                 DO UPDATE SET relevance_score = GREATEST(insight_articles.relevance_score, 1.0)`,
+                [insightType, articleId]
+            );
+            linked++;
+        }
+    }
+    return linked;
+}
+
 /**
  * Get recommended articles for a user based on their current insight types
  * @param {number} userId
@@ -568,6 +667,10 @@ module.exports = {
     cacheArticleFromUrl,
     saveAIGeneratedArticles,
     syncCuratedArticles,
+    getArticleCatalog,
+    formatCatalogForPrompt,
+    getArticlesByIds,
+    linkArticlesToInsightTypes,
     getRecommendedArticles,
     addBookmark,
     removeBookmark,

@@ -5,6 +5,7 @@
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const etfKnowledge = require('./etf_knowledge');
+const linkRegistry = require('./link_registry');
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -31,12 +32,12 @@ const TRUSTED_SOURCES = [
  * @param {Object} userData - Aggregated financial data from insight_data.js
  * @returns {Object} Generated insights with metadata
  */
-async function generateInsights(userData) {
+async function generateInsights(userData, { articleCatalogText } = {}) {
     const startTime = Date.now();
 
     try {
         // Build the prompt
-        const prompt = _buildPrompt(userData);
+        const prompt = _buildPrompt(userData, articleCatalogText);
 
         // Call Gemini API
         const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
@@ -80,11 +81,16 @@ async function generateInsights(userData) {
         // Validate and process insights
         const validatedInsights = _validateInsights(aiResponse);
 
-        // Calculate priority scores and limit to top 7
-        const prioritizedInsights = _prioritizeInsights(validatedInsights);
+        // Resolve every action link through the registry. Anything the model
+        // invented is stripped here, before it can reach a device.
+        const linkedInsights = _resolveActions(validatedInsights);
 
-        // Extract recommended articles if present
-        const recommendedArticles = _validateArticles(aiResponse.recommendedArticles || []);
+        // Calculate priority scores and limit to top 7
+        const prioritizedInsights = _prioritizeInsights(linkedInsights);
+
+        // Article ids only — the model no longer authors URLs, so the caller
+        // maps these against the catalog it supplied.
+        const recommendedArticleIds = _extractArticleIds(aiResponse.recommendedArticleIds);
 
         // Estimate token counts (approximate)
         const tokenCountInput = Math.ceil(prompt.length / 4);
@@ -94,7 +100,7 @@ async function generateInsights(userData) {
 
         return {
             insights: prioritizedInsights,
-            recommendedArticles,
+            recommendedArticleIds,
             summary: `${prioritizedInsights.length} insights generated from your last ${userData.user_profile.analysis_period_days} days of activity`,
             metadata: {
                 token_count_input: tokenCountInput,
@@ -111,8 +117,10 @@ async function generateInsights(userData) {
 
 /**
  * Build the AI prompt with user data
+ * @param {Object} userData
+ * @param {string} articleCatalogText - the catalog rendered as "[id] Title — …" lines
  */
-function _buildPrompt(userData) {
+function _buildPrompt(userData, articleCatalogText = '(no articles available)') {
     // Get user risk tolerance for ETF filtering
     const riskLevel = userData.user_preferences?.investment_risk_tolerance || 'moderate';
     const etfPromptData = etfKnowledge.getETFDataForPrompt(riskLevel);
@@ -222,8 +230,14 @@ CANADIAN FINANCIAL CONSTANTS:
 - Recommended credit utilization: < 30%
 - Recommended emergency fund: 3-6 months of expenses
 
-TRUSTED EDUCATIONAL SOURCES (use these for article recommendations):
-${TRUSTED_SOURCES.map(s => `- ${s.name} (${s.domain}): ${s.focus}`).join('\n')}
+LINK DESTINATIONS (the ONLY external links that exist; reference them by key):
+${linkRegistry.getDestinationsForPrompt()}
+
+IN-APP SCREENS (for actions that stay inside the app):
+${linkRegistry.getRoutesForPrompt()}
+
+ARTICLE CATALOG (pick by id — these are the only articles that exist):
+${articleCatalogText}
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON object (no markdown, no extra text) matching this schema:
@@ -244,8 +258,9 @@ Return ONLY a valid JSON object (no markdown, no extra text) matching this schem
       "action": {
         "primary": {
           "label": "Action button text",
-          "type": "web_link|navigate|external_action",
-          "url": "https://..." OR "route": "ScreenName"
+          "type": "web_link|navigate",
+          "destination": "key_from_LINK_DESTINATIONS"  // when type is web_link
+          "route": "NameFromINAPPSCREENS"              // when type is navigate
         }
       },
       "potential_benefit": {
@@ -258,26 +273,27 @@ Return ONLY a valid JSON object (no markdown, no extra text) matching this schem
       "generated_at": "${new Date().toISOString()}"
     }
   ],
-  "recommendedArticles": [
-    {
-      "url": "https://...",
-      "title": "Article Title",
-      "description": "Brief 1-2 sentence description of the article",
-      "category": "budgeting|investing|debt|taxes|savings|general|etf_education|wealth_building",
-      "source": "Source Name",
-      "relatedInsightTypes": ["insight_type_1", "insight_type_2"],
-      "read_time_minutes": 5
-    }
-  ]
+  "recommendedArticleIds": [12, 7, 31]
 }
 
+LINK RULES (CRITICAL — read twice):
+1. NEVER write a URL. Not in a description, not in an action, not anywhere. You
+   do not know any URLs. Any URL you produce will be discarded and the button
+   with it, leaving the user with a worse insight.
+2. For an external link, set "type": "web_link" and "destination" to a key from
+   LINK DESTINATIONS exactly as spelled. Do not invent keys.
+3. For an in-app action, set "type": "navigate" and "route" to a name from
+   IN-APP SCREENS exactly as spelled.
+4. If no destination or screen fits the insight, prefer "navigate" to the closest
+   screen. A generic in-app action beats a wrong external link.
+
 ARTICLE RECOMMENDATION RULES:
-1. Recommend 3-5 educational articles from the TRUSTED SOURCES above
-2. Articles should be relevant to the user's financial situation and generated insights
-3. Use REAL, valid URLs from these trusted sources (not made up URLs)
-4. Each article should relate to at least one generated insight type
-5. Prioritize Canadian financial content (MoneySense, Wealthsimple, Government of Canada)
-6. Include a mix of categories based on user's situation
+1. Return 3-5 ids in "recommendedArticleIds", chosen from the ARTICLE CATALOG above
+2. Use the numeric id only — no titles, no URLs, no objects
+3. Pick articles relevant to the insights you generated and this user's situation
+4. Ids not in the catalog are discarded, so do not guess
+5. Order them most-relevant first
+6. If fewer than 3 catalog articles are relevant, return only the relevant ones
 
 PRIORITY SCORING:
 - high: Potential savings/benefit > $1,000/year OR urgent financial health issue
@@ -369,50 +385,122 @@ function _prioritizeInsights(insights) {
 }
 
 /**
- * Validate article recommendations from AI response
+ * Extract article ids from the AI response.
+ *
+ * The model used to return whole article objects including a URL it had made
+ * up. Now it returns ids and nothing else, so there is nothing to validate
+ * beyond "is this a positive integer" — the catalog lookup does the rest.
  */
-function _validateArticles(articles) {
-    if (!Array.isArray(articles)) {
+function _extractArticleIds(raw) {
+    if (!Array.isArray(raw)) {
+        if (raw !== undefined) console.warn('AI returned recommendedArticleIds that was not an array:', typeof raw);
         return [];
     }
 
-    const requiredFields = ['url', 'title', 'category'];
-    const validCategories = ['budgeting', 'investing', 'debt', 'taxes', 'savings', 'general', 'etf_education', 'wealth_building', 'investing_basics', 'tax_planning', 'debt_management', 'canadian_finance_101'];
+    const ids = [];
+    for (const value of raw) {
+        // Tolerate "12" and { id: 12 }; reject everything else.
+        const candidate = typeof value === 'object' && value !== null ? value.id : value;
+        const id = Number.parseInt(candidate, 10);
+        if (Number.isInteger(id) && id > 0 && !ids.includes(id)) ids.push(id);
+    }
+    return ids.slice(0, 5);
+}
 
-    return articles.filter(article => {
-        // Check required fields
-        for (const field of requiredFields) {
-            if (!article[field]) {
-                console.warn(`Article missing required field: ${field}`, article);
-                return false;
-            }
+// Where an insight lands when its action cannot be resolved. Keyed on substrings
+// because insight `type` is model-authored and never quite matches an enum.
+const FALLBACK_ROUTES = [
+    { match: /debt|loan|credit_card|payoff|balance_transfer/, route: 'Wealth' },
+    { match: /etf|invest|portfolio|wealth_building/, route: 'ETFList' },
+    { match: /subscription|recurring|watchdog/, route: 'Watchdog' },
+    { match: /saving|emergency|cash_flow|opportunity_cost/, route: 'AllAccounts' },
+    { match: /tax|tfsa|rrsp|fhsa/, route: 'WealthAcademy' },
+];
+const DEFAULT_FALLBACK_ROUTE = 'AnalyticsTab';
+
+function _fallbackRouteFor(insightType) {
+    const type = String(insightType || '').toLowerCase();
+    const hit = FALLBACK_ROUTES.find((entry) => entry.match.test(type));
+    return hit ? hit.route : DEFAULT_FALLBACK_ROUTE;
+}
+
+/**
+ * Turn one model-authored action into something safe to render.
+ *
+ * A web_link is valid ONLY through a registry destination key. There is no
+ * escape hatch for a raw URL, not even one whose host is on the allowlist:
+ * `moneysense.ca/save/anything-i-imagine/` passes a host check and still 404s,
+ * and permitting it would reinstate exactly the bug this file exists to fix.
+ * If a link is missing, the answer is to add it to link_registry.js, where
+ * scripts/verify-links.js will prove it resolves.
+ *
+ * Anything unresolvable degrades to an in-app route rather than disappearing,
+ * so every card keeps a button that does something.
+ */
+function _resolveAction(action, insightType) {
+    // Tolerate null, a string, anything — the model improvises and a crash here
+    // would take down an otherwise good set of insights.
+    const raw = action && typeof action === 'object' ? action : {};
+
+    const label = typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim() : null;
+    const fallback = () => ({
+        label: label || 'View details',
+        type: 'navigate',
+        route: _fallbackRouteFor(insightType),
+    });
+
+    if (raw.type === 'web_link') {
+        const destination = linkRegistry.resolveDestination(raw.destination);
+        if (destination) {
+            return {
+                label: label || destination.label,
+                type: 'web_link',
+                destination: destination.key,
+                url: destination.url,
+            };
+        }
+        console.warn(
+            `Discarded unresolvable insight link — destination="${raw.destination}" url="${raw.url}"`
+        );
+        return fallback();
+    }
+
+    if (raw.type === 'navigate' || raw.route) {
+        const route = linkRegistry.resolveRoute(raw.route);
+        if (route) {
+            return { label: label || 'Open', type: 'navigate', route, params: raw.params || undefined };
+        }
+        console.warn(`Discarded unknown insight route: "${raw.route}"`);
+        return fallback();
+    }
+
+    // 'external_action' and anything else the model improvises.
+    return fallback();
+}
+
+/**
+ * Resolve every action on every insight.
+ */
+function _resolveActions(insights) {
+    const URL_IN_PROSE = /https?:\/\//i;
+
+    return insights.map((insight) => {
+        const resolved = { ...insight, action: { ...insight.action } };
+
+        resolved.action.primary = _resolveAction(insight.action?.primary, insight.type);
+        if (insight.action?.secondary) {
+            resolved.action.secondary = _resolveAction(insight.action.secondary, insight.type);
         }
 
-        // Validate URL format
-        try {
-            new URL(article.url);
-        } catch (e) {
-            console.warn(`Invalid article URL: ${article.url}`);
-            return false;
+        // Not sanitised — prose is rendered as plain text, so a stray URL is
+        // ugly rather than dangerous. Logged because it means the model is
+        // drifting from the link rules and the prompt may need tightening.
+        if (URL_IN_PROSE.test(insight.description || '')) {
+            console.warn(`Insight "${insight.id}" has a URL in its description — link rules are being ignored`);
         }
 
-        // Normalize category
-        if (!validCategories.includes(article.category)) {
-            article.category = 'general';
-        }
-
-        // Ensure relatedInsightTypes is an array
-        if (!Array.isArray(article.relatedInsightTypes)) {
-            article.relatedInsightTypes = [];
-        }
-
-        // Set default read time if missing
-        if (!article.read_time_minutes) {
-            article.read_time_minutes = 5;
-        }
-
-        return true;
-    }).slice(0, 5); // Limit to 5 articles
+        return resolved;
+    });
 }
 
 // ============ CATEGORY ANALYTICS INSIGHTS (Advanced Analytics screen) ============
@@ -544,5 +632,9 @@ ${JSON.stringify(promptData)}`;
 module.exports = {
     generateInsights,
     generateCategoryInsights,
-    TRUSTED_SOURCES
+    TRUSTED_SOURCES,
+    // Exported for tests: these are the guards that decide whether a link ever
+    // reaches a device, so they need to be exercisable without a Gemini call.
+    _resolveActions,
+    _extractArticleIds,
 };

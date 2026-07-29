@@ -8,7 +8,12 @@ const router = express.Router();
 const { pool } = require('../services/db');
 const { getUserFinancialSummary } = require('../services/insight_data');
 const { generateInsights } = require('../services/ai_insights');
-const { saveAIGeneratedArticles } = require('../services/educational_content');
+const {
+    getArticleCatalog,
+    formatCatalogForPrompt,
+    getArticlesByIds,
+    linkArticlesToInsightTypes,
+} = require('../services/educational_content');
 const { authenticateToken } = require('../middleware/auth');
 const { calculateHealthScore, saveHealthScore } = require('../services/health_score');
 
@@ -76,18 +81,39 @@ router.get('/', authenticateToken, async (req, res) => {
         // Step 1: Aggregate user financial data
         const userData = await getUserFinancialSummary(userId, 90);
 
-        // Step 2: Generate AI insights
-        const result = await generateInsights(userData);
+        // Step 2: Generate AI insights.
+        // The catalog goes in so the model can only pick articles that exist —
+        // it used to be asked for URLs, which it invented, which is why so many
+        // insight links 404'd.
+        let articleCatalog = [];
+        try {
+            articleCatalog = await getArticleCatalog();
+        } catch (catalogError) {
+            console.error('Error loading article catalog (continuing without it):', catalogError);
+        }
 
-        // Step 3: Cache AI-recommended articles if any
+        const result = await generateInsights(userData, {
+            articleCatalogText: formatCatalogForPrompt(articleCatalog),
+        });
+
+        // Step 3: Resolve the ids the model chose back to real articles.
+        // Nothing is written to educational_articles here: every article it can
+        // name is already in the table.
         let savedArticles = [];
-        if (result.recommendedArticles && result.recommendedArticles.length > 0) {
+        if (result.recommendedArticleIds && result.recommendedArticleIds.length > 0) {
             try {
-                savedArticles = await saveAIGeneratedArticles(result.recommendedArticles);
-                console.log(`Cached ${savedArticles.length} educational articles from AI recommendations`);
+                savedArticles = await getArticlesByIds(result.recommendedArticleIds);
+                const dropped = result.recommendedArticleIds.length - savedArticles.length;
+                if (dropped > 0) {
+                    console.warn(`Dropped ${dropped} AI-recommended article id(s) not in the catalog`);
+                }
+                await linkArticlesToInsightTypes(
+                    savedArticles.map((a) => a.id),
+                    [...new Set(result.insights.map((i) => i.type).filter(Boolean))]
+                );
             } catch (articleError) {
-                console.error('Error saving AI-recommended articles:', articleError);
-                // Don't fail the whole request if article caching fails
+                console.error('Error resolving AI-recommended articles:', articleError);
+                // Don't fail the whole request if article resolution fails
             }
         }
 

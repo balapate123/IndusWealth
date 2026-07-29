@@ -19,6 +19,8 @@ import {
     LoadingState,
 } from '../components/ui';
 import api from '../services/api';
+import { useAlert } from '../hooks/useAlert';
+import CustomAlert from '../components/CustomAlert';
 import ArticleCard from '../components/ArticleCard';
 import FinancialHealthScore from '../components/FinancialHealthScore';
 import InsightCardV2 from '../components/InsightCardV2';
@@ -113,6 +115,7 @@ const InsightsScreen = ({ navigation, route }) => {
     const [academyLoading, setAcademyLoading] = useState(true);
     const [healthScore, setHealthScore] = useState(null);
     const [activeTab, setActiveTab] = useState('all');
+    const { showAlert, alertProps } = useAlert();
 
     const loadInsights = useCallback(async (forceRefresh = false, isRetry = false) => {
         try {
@@ -242,17 +245,23 @@ const InsightsScreen = ({ navigation, route }) => {
 
         try {
             if (action.type === 'web_link' && action.url) {
-                const supported = await Linking.canOpenURL(action.url);
-                if (supported) {
-                    await Linking.openURL(action.url);
-                } else {
-                    console.error('Cannot open URL:', action.url);
-                }
+                // Not guarded by canOpenURL: on Android it returns true for any
+                // https:// string, so it never caught a bad link — it only hid
+                // the real failure. Let openURL throw and say so.
+                await Linking.openURL(action.url);
             } else if (action.type === 'navigate' && action.route) {
                 navigation.navigate(action.route, action.params || {});
+            } else {
+                showAlert('Nothing to open', 'This suggestion has no action attached to it yet.');
             }
         } catch (err) {
             console.error('Failed to handle action:', err);
+            showAlert(
+                "Couldn't open that",
+                action.type === 'web_link'
+                    ? 'The link would not open. It may have moved — please let us know so we can fix it.'
+                    : 'That screen could not be opened.'
+            );
         }
     };
 
@@ -441,6 +450,8 @@ const InsightsScreen = ({ navigation, route }) => {
                     results. Consult a qualified financial advisor before making investment decisions.
                 </Text>
             </View>
+
+            <CustomAlert {...alertProps} />
         </Screen>
     );
 };
