@@ -105,6 +105,28 @@ export async function cancelAllGoalReminders() {
 }
 
 /**
+ * Serialises syncGoalReminders. Never reset — the chain is the lock.
+ *
+ * Cancel-then-reschedule is not safe to run concurrently: two overlapping runs
+ * interleave as cancel, cancel, schedule, schedule and leave every reminder on
+ * the device twice. That is reachable in normal use — deleting a goal triggers a
+ * reload, and navigating straight back to Home triggers another before the first
+ * has finished. Chaining is sufficient here: the work is short and idempotent,
+ * and the last caller's list is the one that ends up scheduled.
+ */
+let reminderSyncQueue = Promise.resolve();
+
+export function syncGoalReminders(goals = []) {
+    // Both handlers run the sync, so one failed run cannot wedge the queue.
+    const run = reminderSyncQueue.then(
+        () => _syncGoalReminders(goals),
+        () => _syncGoalReminders(goals)
+    );
+    reminderSyncQueue = run.catch(() => {});
+    return run;
+}
+
+/**
  * Make the device's scheduled reminders match the server's goals.
  *
  * Cancel-then-reschedule rather than diffing: the set is at most 25 entries, a
@@ -112,9 +134,11 @@ export async function cancelAllGoalReminders() {
  * separately, and a leftover reminder for a deleted goal is a genuinely bad
  * bug. Rebuilding from server state cannot drift.
  *
+ * Call through syncGoalReminders, never directly — see the queue above.
+ *
  * @returns {{scheduled: number, cancelled: number, permitted: boolean}}
  */
-export async function syncGoalReminders(goals = []) {
+async function _syncGoalReminders(goals = []) {
     const { granted } = await getNotificationPermission();
 
     if (!granted) {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { create, open } from '../services/plaidLink';
 import { SPACING, RADIUS, categoryColor } from '../constants/tokens';
@@ -234,7 +235,18 @@ const HomeScreen = ({ navigation }) => {
     // Home is the first screen after login, so this is also where the device's
     // reminders get reconciled with the server — the hook reschedules whenever
     // the list loads, which covers a goal changed on another device.
-    const { goals: activeGoals } = useGoals({ status: 'active' });
+    const { goals: activeGoals, load: loadGoals } = useGoals({ status: 'active' });
+
+    // Reload on focus. useGoals holds its state per instance, and Home and the
+    // Goals list each have their own — so deleting a goal over there refetched
+    // that copy and left this one intact. Home is a tab: it does not remount
+    // when you navigate back to it, so without this the deleted goal sat on the
+    // dashboard until the app restarted. Same for a goal created, renamed, or
+    // contributed to elsewhere. Silent: the cards are already on screen and
+    // blanking them to a spinner on every tab switch would be worse.
+    useFocusEffect(
+        useCallback(() => { loadGoals({ silent: true }); }, [loadGoals])
+    );
 
     // The pop-up recommendation. Gated on having accounts: a user who has not
     // connected a bank has nothing to be reminded about, and the first thing
