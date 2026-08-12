@@ -342,6 +342,8 @@ Work is on `dev`. Backend deploys to Render from the deploy branch.
 - **The per-account transaction list had no flags.** `AccountTransactionsScreen` called `api.getAccountTransactions` and summed one page client-side. Now on `api.getTransactions(?account_id=…&flag_id=…)` with the header pricetags button, the All/flag/Unflagged chip row, and server-computed totals — same contract as `AllTransactionsScreen`.
 - **Deleting a goal left it on Home.** `useGoals` state is per-instance and Home is a tab that never remounts, so its copy went stale until an app restart (same for create/rename/contribute — just less visible). Home now uses `useFocusEffect` + `load({ silent: true })`, matching every other screen. That second refetch trigger is what forced the reminder-sync serialisation above.
 
+**Build profiles (`packages/mobile/eas.json`):** `development` (dev client, **staging**), `preview` (apk, **staging**), `production` (**app-bundle** → Play upload only, cannot be sideloaded), `production-apk` (apk, internal distribution, **production** backend — the only profile that installs the real app on a phone). Every key under `build` must be a profile object: a string comment key fails schema validation and blocks all builds. Validate with `eas config --profile <name> --platform android`, not by checking the JSON parses.
+
 **Reaching a device:** JS-only changes load from Metro on a dev build — no rebuild. Only native changes (e.g. adding `expo-notifications`) need `eas build`. Note the `development` EAS profile bakes `EXPO_PUBLIC_API_URL` pointing at **staging**, so the dev build talks to staging unless the local `.env` overrides it.
 
 **Pending / blockers:**
