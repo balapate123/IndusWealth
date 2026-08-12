@@ -27,6 +27,8 @@
 | | `src/routes/twoFactor.js` | TOTP 2FA setup/verify/disable |
 | | `src/routes/flags.js` | User-defined transaction flags: CRUD, bulk attach/detach, per-flag analytics |
 | | `src/routes/goals.js` | Savings goals: CRUD, manual contributions, `POST /goals/milestones/check` |
+| | `src/routes/cardDueDates.js` | Credit card payment due dates: list, upsert (`PUT`), delete |
+| | `src/routes/nudges.js` | Weekly check-in: `GET /nudges/checkin`, `POST /checkin/seen`, `PUT /checkin/enabled` |
 | Services | `src/services/db.js` | PostgreSQL pool + query helpers |
 | | `src/services/plaid.js` | Plaid API client wrapper |
 | | `src/services/encryption.js` | AES-256-GCM (Plaid tokens) |
@@ -42,6 +44,8 @@
 | | `src/services/logger.js` | Logging utility |
 | | `src/services/flags.js` | Flag constants: icon allowlist, ramp size, starter set |
 | | `src/services/goals.js` | Goal constants: icons, types, cadences, milestones + `newMilestones()` |
+| | `src/services/cardDueDates.js` | Due-date constants: 28-day cap, lead bounds, 10-card cap |
+| | `src/services/nudges.js` | **Pure** check-in selection: candidates, priority, both cooldowns |
 | | `src/services/link_registry.js` | **The only source of outbound URLs.** Vetted destinations by key + host allowlist + safe in-app routes |
 | | `src/services/link_health.js` | Probes article URLs and writes `educational_articles.url_status` |
 | | `src/services/transactionSync.js` | Plaid→DB sync, shared by `GET /transactions` and the webhook (per-item in-flight guard) |
@@ -83,6 +87,7 @@
 | | `src/screens/FlagTransactionPickerScreen.js` | Multi-select picker; saves one add/remove diff |
 | | `src/screens/GoalsScreen.js` | Goal list with progress; create; notification-permission banner |
 | | `src/screens/GoalDetailScreen.js` | One goal: progress, linked account, contributions; edit + delete |
+| | (due dates live in the Debt tab via `components/CardDueDates.js`) | |
 | | `src/screens/AllAccountsScreen.js` | Accounts list |
 | | `src/screens/AccountTransactionsScreen.js` | Per-account transactions |
 | | `src/screens/FeedbackScreen.js` | Feedback form |
@@ -93,6 +98,8 @@
 | | `src/services/plaidLink.js` | Plaid Link SDK handler |
 | | `src/services/notifications.js` | Local goal reminders: permission, Android channel, cancel-and-reschedule sync |
 | Hooks | `src/hooks/useAlert.js` | CustomAlert boilerplate |
+| | `src/hooks/useCardDueDates.js` | Due dates CRUD; re-syncs device reminders after every mutation |
+| | `src/hooks/useCheckinNudge.js` | Fetches the weekly nudge once per launch; suppressed by the spotlight |
 | | `src/hooks/useTransactionFlags.js` | Flags + the attach/detach diff for the transaction sheet |
 | | `src/hooks/useGoals.js` | Goals CRUD; re-syncs device reminders after every mutation |
 | | `src/hooks/useInsightSpotlight.js` | Fetches the pop-up once per launch; act/snooze/dismiss |
@@ -103,13 +110,27 @@
 | | `src/components/GoalCard.js` | Goal progress card (shared by Home and the Goals list) |
 | | `src/components/GoalEditorSheet.js` | Create/edit a goal incl. tracking mode and reminder |
 | | `src/components/InsightSpotlight.js` | The pop-up recommendation: ledger, action, snooze, dismiss |
+| | `src/components/CardDueDates.js` | Debt-tab section: list, day picker, lead time, on/off |
+| | `src/components/CheckinNudge.js` | The weekly check-in sheet: one thing, one action, a way out |
+| | `src/components/ui/Treemap.js` | Part-to-whole by area (Analytics "Spending by category") |
 | Constants | `src/constants/theme.js` | Dark theme + gold accents |
 | | `src/constants/insights.js` | Insight type enum → icon/label/ramp slot; must mirror `insight_identity.js` |
 | Utils | `src/utils/categorization.js` | Client-side category helpers |
 | | `src/utils/goalReminders.js` | Pure reminder logic (trigger building, copy, cadence text) — no expo/RN imports so it is testable off-device |
+| | `src/utils/cardDueReminders.js` | Pure due-date scheduling incl. the **lead-day wraparound** |
+| | `src/utils/treemap.js` | Pure squarified treemap layout + top-7/Other folding |
+| | `src/utils/syncQueue.js` | The one-at-a-time queue every reminder sync runs through |
+| Tests | `packages/mobile/tests/*.test.mjs` | `npm test` — node --test, zero deps (Node 22 detects the module syntax) |
+| | `packages/backend/tests/*.test.js` | `npm test` — node --test |
 
 ### Database Tables
-`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`), `transaction_flags` + `transaction_flag_links` (migration: `add_transaction_flags.sql`), `user_goals` + `goal_contributions` (migration: `add_goals.sql`), `insight_tracking` (migration: `add_insight_tracking.sql`, also adds `user_preferences.spotlight_enabled` / `.spotlight_last_shown_at`)
+`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`), `transaction_flags` + `transaction_flag_links` (migration: `add_transaction_flags.sql`), `user_goals` + `goal_contributions` (migration: `add_goals.sql`), `insight_tracking` (migration: `add_insight_tracking.sql`, also adds `user_preferences.spotlight_enabled` / `.spotlight_last_shown_at`), `card_due_dates` (migration: `add_card_due_dates.sql`), `nudge_history` (migration: `add_checkin_nudges.sql`, also adds `user_preferences.checkin_enabled` / `.checkin_last_shown_at`)
+
+### Charts
+`Spending by category` on Analytics is a **treemap** (`components/ui/Treemap.js`), not a stacked bar: past about four shares a bar's segments are too thin to compare and the labels stop fitting. Layout is squarified (`utils/treemap.js`, pure + tested).
+- Hue is **category identity** via `categoryColor()`, never rank — filtering or re-sorting must not repaint the survivors.
+- Folds to **top 7 + Other**, per the ramp rule in `tokens.js` — unless the tail is a single category, where "Other" would be a rename.
+- Labels use `TEXT_ON_CATEGORY`. **White-on-fill fails on every hue in the dark ramp** (2.84–3.49:1); the token flips per mode and clears 6:1 there. Three light-ramp hues sit near 4.1:1, which is why the category rows below the chart matter — they are the readable copy of the same numbers, alongside a per-tile a11y label.
 
 ### Transaction Flags
 User-defined groupings ("Home", "Trip to Montreal"), **distinct from `category`** — a category is inferred by Plaid/AI and single-valued; a flag is chosen by the user and a transaction can carry several.
@@ -152,6 +173,26 @@ An insight's `id` is invented by the model every generation and its `type` used 
 - **It requires a second sighting**: a brand-new insight is already on the Insights tab, and interrupting someone with something they have not had a chance to read is just noise.
 - **Never scold.** Prompt rule 31 bans the model from shaming; our own copy holds the same line (`test_insight_identity.cjs` asserts it). The user declined to act, which is their decision.
 - `constants/insights.js` on mobile mirrors the backend enum. A missing key means the two drifted, not that the model improvised.
+
+### Card Payment Due Dates
+**User-entered, because there is nowhere to read them from.** Plaid's `liabilities` product carries `credit[].next_payment_due_date` and is **not enabled on our account** — `services/plaid.js` requests `transactions` only, and `routes/debt.js` already swallows the unsupported-product error. When liabilities is granted the Plaid date takes precedence and the stored value becomes the fallback; it stays useful either way (CA coverage is partial, the field is often null, and a user may want a reminder for a card they never linked).
+- `target_type` (`plaid_account` | `custom_debt`) is **explicit, never inferred** from which FK is null — the `user_goals.tracking_mode` lesson. A CHECK enforces exactly one target matching the declared type.
+- `due_day` caps at **28**. 29–31 do not exist in every month and a monthly repeating trigger on a missing day **does not error, it just never fires**. Same cap and reason as goal reminders. The day picker says so rather than leaving it an unexplained limit.
+- **The lead-day wraparound is the bug this feature is built around.** A card due on the 2nd with 3 days' notice wants the 30th of the *previous* month; naive subtraction gives −1, and the day-28 cap does not help because the value is not too large, it is negative. `leadDay()` in `utils/cardDueReminders.js` wraps in a 28-day cycle, with tests over every (due, lead) pair. Months are modelled as 28 days deliberately — repeating triggers, not dated instances, keeps us under the 64 cap; the cost is a wrapped warning up to 3 days early in a 31-day month. Early is harmless, missing is not. Only due days 1..leadDays wrap.
+- Two partial unique indexes, not one combined — **NULL is not equal to itself**, so a combined index would allow duplicates.
+- Keyed on `plaid_account_id`, so **disconnecting a card keeps its due date** (`needs_relink` surfaces it). Dropping it silently is the worst failure available to a payment reminder.
+- Capped at **10 cards** — 2 notification slots each, so 25 goals + 10 cards + 1 check-in ceilings at 46 of iOS's 64.
+- Card reminders get their own Android channel at HIGH importance, so silencing savings nudges does not silence the one that costs money to miss.
+
+### The Weekly Check-in Nudge
+One local weekly notification with **evergreen** copy that opens the app to a live recommendation. Content freezes at schedule time, so the notification cannot name a figure — it would be a week stale and might name a deleted goal. The specific ask is fetched on open, the same split as milestones.
+- **Scope is a compliance boundary, not a preference.** A nudge may reference a goal or debt **the user created**, and nothing else. No branch in `services/nudges.js` invents a destination — "put your surplus into X" is the shape that got the app rejected. Tests assert no nudge names a security or product, and that every action points at an id the user already owns.
+- Priority: goal ≥90% → goal needing a relink → goal idle 21 days → routine step → interest on a **manually entered** debt. Plaid-derived debts are excluded: their balances move on their own, so a nudge about one can be stale by the time it is read.
+- A goal that **cannot be measured** (`needs_relink`, `saved_amount` null) asks for a reconnect and quotes no figure. "Move $25 toward" a number we cannot see is worse than silence.
+- Two cooldowns, both **server-owned** so two devices cannot disagree: **7 days per user**, **21 days per nudge**. Per-user is checked first, or somebody with several eligible nudges gets a different one every day. Recorded when the sheet **renders**, not when it is fetched.
+- The suggested amount **never exceeds what is left**, and the user's own per-goal `reminder_amount` wins over anything computed.
+- On Home the **spotlight has first claim**; the check-in is suppressed while one is showing. Two pop-ups on one app open is not two chances to help.
+- Nothing about what a nudge *says* is stored — only cooldown bookkeeping. A stored nudge goes stale between write and read.
 
 ### No Investment Advice (hard product constraint)
 IndusWealth is **not a registered adviser**, so it must never recommend a security. Google Play rejected the app in July 2026 under the Financial Services policy because the Financial features declaration said the app gives no personalized advice while the Insights tab recommended specific ETFs off the user's own surplus.
@@ -200,7 +241,9 @@ npx expo start                          # Expo dev server
 npx expo start --android                # Android direct
 npx expo start --ios                    # iOS direct
 
-# No test suite configured (test script is a stub)
+# Tests — node --test, no dependencies, no device, no database
+npm test                                # from packages/mobile (35) or packages/backend (19)
+npm run lint:theme                      # the gate that must stay clean
 ```
 
 ---
@@ -278,6 +321,13 @@ EXPO_PUBLIC_API_URL=   # Override default API endpoint
 
 Work is on `dev`. Backend deploys to Render from the deploy branch.
 
+**Added 2026-08-11 (all on `dev`, none deployed):** the category treemap on Analytics, credit card payment due dates with local reminders, and the weekly check-in nudge. Three real bugs were found by verification rather than by running the app:
+- `_resolveOwnedAccount` was used by the new card route but **had never been exported** from `db.js` — every card save 500'd.
+- `recordNudgeShown` **table-qualified the column on the left of an `ON CONFLICT ... SET`**, which Postgres reads as a column named `nudge_history`; every `POST /nudges/checkin/seen` 500'd. Same silent write-path shape as the `PUT /insights/preferences` bug.
+- A treemap mutation test passed against a deliberately broken layout because the aspect-ratio bound was guessed (6:1) rather than measured. It is now 4:1, measured against both variants across four box shapes.
+
+**There is now a real test suite** — `npm test` in either package, `node --test`, no dependencies, no device, no database. 35 mobile + 19 backend. Node 22 detects the ESM syntax in `src/utils`, so mobile tests import the **shipped** file rather than a copy. Previous sessions' verification scripts lived in the scratchpad and were lost; these are committed.
+
 **Working:** Advanced Analytics page (entry: "Advanced" button on Analytics header), AI category insights with rule-based fallback, `Taxes & Government` category (fixes CANADA TXD → Transportation misclassification), Resend email verification from hello@induswealth.app (domain verified, DNS on Spaceship), transaction flags, savings goals with local reminders, registry-backed insight links, insight persistence + the spotlight pop-up.
 
 **Fixed in passing while building the spotlight** (all three were silent, all three had shipped):
@@ -296,7 +346,7 @@ Work is on `dev`. Backend deploys to Render from the deploy branch.
 
 **Pending / blockers:**
 0. **Play Store rejection #3 — needs an organisation developer account.** Not a code fix. The user is handling it; development continues meanwhile. (Rejections #1 and #2 had different causes — see `memory/project_play_store_rejections.md`.)
-0b. **Deploy branch has drifted.** Production builds from `feature/web-export-fix`, which is at `d32dee6`; `ba0f778`, `f326be9`, `24845de`, `c1e0ff4` are on `dev` only (standing instruction: work stays on `dev` until told otherwise). Production still 404s `/insights/spotlight` and needs a **Manual Deploy** — auto-deploy is off. Staging (`induswealth-staging.onrender.com`) has the Track B routes but not the milestone fix.
+0b. **Deploy branch has drifted badly.** Production builds from `feature/web-export-fix` (`d32dee6`); `dev` is now **ten commits ahead** (standing instruction: work stays on `dev` until told otherwise). Production 404s `/insights/spotlight`, `/card-due-dates` and `/nudges`, and needs a **Manual Deploy** — auto-deploy is off. Two migrations are pending there (`add_card_due_dates.sql`, `add_checkin_nudges.sql`); both are idempotent and run automatically on boot. Staging has the Track B routes but nothing since.
 1. **Plaid Android OAuth (IN PROGRESS — user finishing manually)**: `PLAID_ENV=production` on Render. The Plaid dashboard login has TWO teams: "BHARGAV KIRIT MARSONIA" (personal) and "IndusWealth". The Android package name `com.induswealth.app` was mistakenly being registered under the personal team; it must be saved under Developers → API → "Allowed Android package names" in the team whose `PLAID_CLIENT_ID` matches Render's (verify via Developers → Keys — likely the IndusWealth team). Redirect URIs list was empty on the personal team, further evidence Render's keys belong to the other team. Error until done: "Android package name must be configured in the developer dashboard."
 2. **Plaid Link cannot open in Expo Go** (native module missing). Testing bank connect requires a dev build: `cd packages/mobile && eas build --profile development --platform android`, then `npx expo start` and open the standalone dev app. JS-only changes need no rebuild; there is NO EAS Update (OTA) configured, so installed builds only get new JS via rebuild.
 3. ~~Run `npm run migrate` against prod DB for `category_ai_insights`~~ **RESOLVED**: migrations now run automatically on every deploy. `services/db.js` `initDb()` (called on boot) and the `npm run migrate` CLI both iterate the single ordered list in `db/migrations.js`; `add_category_insights.sql` is included, so it lands on the next Render deploy. All migrations are idempotent, so the boot re-run is a safe no-op.
@@ -306,4 +356,5 @@ Work is on `dev`. Backend deploys to Render from the deploy branch.
 7. **Gemini "thinking" was truncating JSON** (FIXED): all Gemini JSON calls now set `thinkingConfig: { thinkingBudget: 0 }` (`ai_insights.js` ×2, `ai_categorization.js`). Without it, hidden reasoning tokens exhausted `maxOutputTokens` and cut the JSON mid-string → "Unterminated string in JSON" (Insights tab 500s, silent AI-insight/categorization failures).
 8. **Two years of Plaid history needs a reconnect.** `days_requested` is fixed when the Item is created, so connections made before that change still return 90 days regardless of what we ask for. Disconnect and relink to get the full depth.
 9. **~126 ESLint findings** (`npm run lint` in `packages/mobile`) are a known backlog, mostly `react-hooks/static-components`, `set-state-in-effect`, and `import/no-named-as-default` on the `api` default import. `npm run lint:theme` is the gate that must stay clean and is unaffected. The single highest-value fix is hoisting `MenuItem` out of `ProfileScreen`'s render (~22 `static-components` errors in one change). **Method for keeping this honest:** the count only means something against a baseline — `git stash` the touched file, lint HEAD, then compare, rather than reading the absolute number.
-10. **Product-benefit matching (A5) is parked** until the app is live — user decision, on compliance grounds (see "No Investment Advice"). Goal notifications stay as-is. The affiliate question is deferred, not answered.
+10. **The check-in nudge overlaps goal reminders by design** — a per-goal reminder already says "Move $25 toward Emergency Fund" on the user's own cadence. The check-in adds value only for people who set **no** per-goal reminder, and for debt-interest nudges. Worth watching whether both firing in one week reads as nagging; the per-user cooldown does not know about goal reminders.
+11. **Product-benefit matching (A5) is parked** until the app is live — user decision, on compliance grounds (see "No Investment Advice"). Goal notifications stay as-is. The affiliate question is deferred, not answered.
