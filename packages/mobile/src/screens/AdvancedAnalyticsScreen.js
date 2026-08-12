@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SPACING, RADIUS, alpha, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
@@ -12,6 +12,7 @@ import {
     Chip,
     ChipRow,
     BarTrack,
+    Treemap,
     SectionTitle,
     Overline,
     StatTile,
@@ -20,7 +21,13 @@ import {
     LoadingState,
 } from '../components/ui';
 import { getCategoryMeta } from '../utils/categorization';
+import { OTHER_KEY } from '../utils/treemap';
 import api from '../services/api';
+
+// Card is inset SPACING.MEDIUM each side and padded SPACING.MEDIUM each side.
+const CHART_WIDTH = Dimensions.get('window').width - SPACING.MEDIUM * 4;
+// Tall enough that the smallest of eight tiles still reads as a rectangle.
+const TREEMAP_HEIGHT = 200;
 
 // `365` was labelled YTD, which it never was — the backend windows back that
 // many days from today, so in July it covered the previous August onward, not
@@ -143,6 +150,7 @@ const makeStyles = (t) => StyleSheet.create({
         alignItems: 'center',
     },
 
+    leaderTreemap: { marginBottom: SPACING.MEDIUM },
     leaderRow: {
         flexDirection: 'row',
         alignItems: 'flex-start',
@@ -264,12 +272,41 @@ const InsightCard = ({ insight }) => {
 const CategoryLeaderboard = ({ categories, onSelect }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
+
+    // Hooks before the early return — they must run in the same order every
+    // render, whatever the data looks like.
+    const treemapItems = useMemo(
+        () => categories.map((cat) => ({
+            key: cat.name,
+            label: cat.name,
+            value: cat.total,
+            color: colorForCategory(theme, cat.name),
+        })),
+        [categories, theme]
+    );
+
     if (categories.length === 0) return null;
     const maxTotal = categories[0].total || 1;
 
     return (
         <Card>
             <SectionTitle title="Category leaderboard" subtitle="Tap a category to drill down" />
+
+            {/* Area first, then the ranked rows. The rows are the table view:
+                they carry the change badge, the count and the average, and they
+                are what keeps the chart readable where a tile is too small for
+                a label or its hue is short of contrast. */}
+            <Treemap
+                data={treemapItems}
+                width={CHART_WIDTH}
+                height={TREEMAP_HEIGHT}
+                formatValue={formatCurrency}
+                // The folded tile stands for several categories, so there is
+                // nothing single to drill into — it selects nothing rather than
+                // opening whichever category happens to be first.
+                onSelect={(key) => { if (key && key !== OTHER_KEY) onSelect(key); }}
+                style={styles.leaderTreemap}
+            />
             {categories.map((cat) => {
                 const tint = colorForCategory(theme, cat.name);
                 return (
