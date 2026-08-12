@@ -531,6 +531,17 @@ export const api = {
         apiRequest(`/flags/${flagId}/analytics${days ? `?days=${days}` : ''}`),
 
     // Savings goals
+    // The weekly check-in nudge. `markCheckinSeen` is sent when the sheet
+    // RENDERS, not when the nudge is fetched — a background request nobody saw
+    // must not spend the user's one interruption a week.
+    getCheckinNudge: () => apiRequest('/nudges/checkin'),
+
+    markCheckinSeen: (key) =>
+        apiRequest('/nudges/checkin/seen', { method: 'POST', body: JSON.stringify({ key }) }),
+
+    setCheckinEnabled: (enabled) =>
+        apiRequest('/nudges/checkin/enabled', { method: 'PUT', body: JSON.stringify({ enabled }) }),
+
     // Credit card payment due dates. User-entered — Plaid's `liabilities`
     // product is not enabled, so there is no due date to read. saveCardDueDate
     // is an upsert: there is at most one reminder per card, so a client that

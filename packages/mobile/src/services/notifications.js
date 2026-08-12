@@ -36,6 +36,7 @@ const GOAL_REMINDER_KIND = 'goal_reminder';
 const GOAL_MILESTONE_KIND = 'goal_milestone';
 const ANDROID_CHANNEL_ID = 'goal-reminders';
 const CARD_CHANNEL_ID = 'card-payments';
+const CHECKIN_KIND = 'checkin';
 
 /**
  * Install the foreground handler and the Android channel.
@@ -124,6 +125,10 @@ export async function cancelAllCardReminders() {
     return cancelKind(CARD_DUE_KIND);
 }
 
+export async function cancelCheckinReminder() {
+    return cancelKind(CHECKIN_KIND);
+}
+
 /**
  * Serialises every reminder sync. See utils/syncQueue.js for why it must be.
  *
@@ -140,6 +145,52 @@ export function syncGoalReminders(goals = []) {
 
 export function syncCardDueReminders(cards = []) {
     return enqueue(() => _syncCardDueReminders(cards));
+}
+
+export function syncCheckinReminder(options = {}) {
+    return enqueue(() => _syncCheckinReminder(options));
+}
+
+/**
+ * One weekly notification that opens the app to whatever is worth saying.
+ *
+ * The copy is evergreen and says nothing specific, which is not laziness: local
+ * content freezes when it is SCHEDULED, so anything concrete here would be a
+ * week stale by delivery and could name a goal the user has since deleted. The
+ * specific ask is fetched live on open — the same split as goal milestones.
+ *
+ * One notification total, whatever the user has set up.
+ */
+async function _syncCheckinReminder({ enabled = true, weekday = 1, hour = 10 } = {}) {
+    const { granted } = await getNotificationPermission();
+    const cancelled = await cancelKind(CHECKIN_KIND);
+
+    if (!granted || !enabled) {
+        return { scheduled: 0, cancelled, permitted: granted };
+    }
+
+    try {
+        await Notifications.scheduleNotificationAsync({
+            content: {
+                title: 'Your weekly check-in',
+                body: 'One small thing you could do this week.',
+                data: { kind: CHECKIN_KIND },
+            },
+            trigger: {
+                type: 'weekly',
+                // 0-6 Sunday-first on our side, 1-7 Sunday-first for expo. The
+                // same off-by-one as goal reminders, so it converts the same way.
+                weekday: Math.min(Math.max(weekday, 0), 6) + 1,
+                hour: Math.min(Math.max(hour, 0), 23),
+                minute: 0,
+                ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : {}),
+            },
+        });
+        return { scheduled: 1, cancelled, permitted: true };
+    } catch (err) {
+        console.warn('Could not schedule the weekly check-in:', err?.message || err);
+        return { scheduled: 0, cancelled, permitted: true };
+    }
 }
 
 /**
@@ -286,4 +337,5 @@ export const NOTIFICATION_KINDS = {
     GOAL_REMINDER: GOAL_REMINDER_KIND,
     GOAL_MILESTONE: GOAL_MILESTONE_KIND,
     CARD_DUE: CARD_DUE_KIND,
+    CHECKIN: CHECKIN_KIND,
 };

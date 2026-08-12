@@ -1119,6 +1119,9 @@ const GOAL_COLUMNS = `
     g.reminder_cadence, g.reminder_day, g.reminder_hour,
     g.reminder_amount::float AS reminder_amount,
     g.milestones_notified, g.status, g.achieved_at, g.created_at,
+    -- When anything last went in. Only meaningful for manual goals; the check-in
+    -- nudge uses it to tell "stalled" from "just started".
+    c.last_at AS last_contribution_at,
     a.name AS account_name, a.mask AS account_mask,
     -- The client addresses accounts by their Plaid id, the same way flags
     -- address transactions: it is what GET /accounts hands it. The numeric id
@@ -1138,7 +1141,8 @@ const GOAL_FROM = `
     FROM user_goals g
     LEFT JOIN accounts a ON a.id = g.account_id AND a.user_id = g.user_id
     LEFT JOIN LATERAL (
-        SELECT SUM(amount) AS total FROM goal_contributions WHERE goal_id = g.id
+        SELECT SUM(amount) AS total, MAX(occurred_on) AS last_at
+        FROM goal_contributions WHERE goal_id = g.id
     ) c ON TRUE
     CROSS JOIN LATERAL (
         SELECT CASE
@@ -1380,6 +1384,86 @@ const markGoalMilestones = async (userId, goalId, milestones) => {
     );
     if (!result.rows.length) return null;
     return getGoalById(userId, goalId);
+};
+
+// ============ CHECK-IN NUDGES ============
+
+/** The debts a user entered by hand. Plaid-derived debts are not in this table. */
+const getCustomDebts = async (userId) => {
+    const result = await pool.query(
+        `SELECT id, name, debt_type, balance::float AS balance, apr::float AS apr,
+                min_payment::float AS min_payment, created_at
+         FROM custom_debts WHERE user_id = $1 ORDER BY created_at DESC`,
+        [userId]
+    );
+    return result.rows;
+};
+
+/**
+ * Everything the nudge selector needs about what this user has already been
+ * shown. Nothing about what a nudge SAYS is stored — that is computed on read
+ * from live goals and debts, so it cannot go stale.
+ */
+const getNudgeState = async (userId) => {
+    const [prefs, history] = await Promise.all([
+        pool.query(
+            `SELECT checkin_last_shown_at, checkin_enabled
+             FROM user_preferences WHERE user_id = $1`,
+            [userId]
+        ),
+        pool.query(
+            'SELECT nudge_key, last_shown_at FROM nudge_history WHERE user_id = $1',
+            [userId]
+        ),
+    ]);
+
+    const seen = {};
+    for (const row of history.rows) seen[row.nudge_key] = row.last_shown_at;
+
+    return {
+        // No preferences row yet means a user who has never changed anything,
+        // which is opted in — the column default.
+        lastShownAt: prefs.rows[0]?.checkin_last_shown_at || null,
+        enabled: prefs.rows[0]?.checkin_enabled !== false,
+        seen,
+    };
+};
+
+/**
+ * Record that a nudge was actually shown.
+ *
+ * Called when the sheet renders, never when it is fetched — a background
+ * request that nobody saw must not spend the user's one interruption a week.
+ * Same rule as POST /insights/spotlight/seen.
+ */
+const recordNudgeShown = async (userId, nudgeKey) => {
+    await pool.query(
+        `INSERT INTO user_preferences (user_id, checkin_last_shown_at)
+         VALUES ($1, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET checkin_last_shown_at = NOW()`,
+        [userId]
+    );
+
+    await pool.query(
+        `INSERT INTO nudge_history (user_id, nudge_key, last_shown_at, shown_count)
+         VALUES ($1, $2, NOW(), 1)
+         ON CONFLICT (user_id, nudge_key) DO UPDATE
+            SET last_shown_at = NOW(),
+                -- The SET target must NOT be table-qualified; the reference on
+                -- the right must be. Qualifying the left reads as a column
+                -- named "nudge_history" and the whole statement 500s.
+                shown_count = nudge_history.shown_count + 1`,
+        [userId, nudgeKey]
+    );
+};
+
+const setCheckinEnabled = async (userId, enabled) => {
+    await pool.query(
+        `INSERT INTO user_preferences (user_id, checkin_enabled)
+         VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET checkin_enabled = EXCLUDED.checkin_enabled`,
+        [userId, enabled]
+    );
 };
 
 // ============ CARD PAYMENT DUE DATES ============
@@ -1856,6 +1940,12 @@ module.exports = {
     getGoalContributions,
     deleteGoalContribution,
     markGoalMilestones,
+
+    // Check-in nudges
+    getCustomDebts,
+    getNudgeState,
+    recordNudgeShown,
+    setCheckinEnabled,
 
     // Card payment due dates
     getCardDueDates,

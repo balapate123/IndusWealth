@@ -23,9 +23,11 @@ import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import GoalCard from '../components/GoalCard';
 import InsightSpotlight from '../components/InsightSpotlight';
+import CheckinNudge from '../components/CheckinNudge';
 import useTransactionFlags from '../hooks/useTransactionFlags';
 import useGoals from '../hooks/useGoals';
 import useInsightSpotlight from '../hooks/useInsightSpotlight';
+import useCheckinNudge from '../hooks/useCheckinNudge';
 import { presentMilestones } from '../services/notifications';
 import api from '../services/api';
 import cache from '../services/cache';
@@ -252,6 +254,22 @@ const HomeScreen = ({ navigation }) => {
     // connected a bank has nothing to be reminded about, and the first thing
     // they should meet is the connect flow, not a sheet over the top of it.
     const spotlight = useInsightSpotlight({ enabled: !loading && accounts.length > 0 });
+
+    // The spotlight has first claim on the interruption. Two pop-ups on one app
+    // open is not two chances to help, it is an app that interrupts twice.
+    const checkin = useCheckinNudge({
+        enabled: !loading,
+        suppressed: spotlight.visible || !!spotlight.spotlight,
+    });
+
+    const handleCheckinAct = useCallback((nudge) => {
+        checkin.dismiss();
+        if (nudge?.action?.type === 'goal') {
+            navigation.navigate('GoalDetail', { goalId: nudge.action.goalId });
+        } else if (nudge?.action?.type === 'debt') {
+            navigation.navigate('Debt');
+        }
+    }, [checkin, navigation]);
 
     const handleSpotlightAct = useCallback((action, insight) => {
         spotlight.act(insight);
@@ -802,6 +820,15 @@ const HomeScreen = ({ navigation }) => {
             onAct={handleSpotlightAct}
             onSnooze={spotlight.snooze}
             onDismiss={spotlight.dismiss}
+        />
+
+        <CheckinNudge
+            nudge={checkin.nudge}
+            visible={checkin.visible}
+            onMarkSeen={checkin.markSeen}
+            onAct={handleCheckinAct}
+            onDismiss={checkin.dismiss}
+            onTurnOff={() => checkin.setEnabled(false)}
         />
         </>
     );
