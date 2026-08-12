@@ -29,7 +29,6 @@
         "EXPO_PUBLIC_API_URL": "https://induswealth.onrender.com"
       }
     },
-    "_comment_production_apk": "Installable build against the PRODUCTION backend. `production` emits an .aab, which is a Play upload format and cannot be sideloaded, and `preview` is an installable .apk but points at staging — neither one puts the real app on a phone. This is the combination that does. No autoIncrement: version codes are the Play track's, and burning them on internal installs makes the next store upload confusing.",
     "production-apk": {
       "distribution": "internal",
       "android": {
