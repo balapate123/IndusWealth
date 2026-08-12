@@ -32,6 +32,7 @@ import {
     EmptyState,
     LoadingState,
 } from '../components/ui';
+import CardDueDates from '../components/CardDueDates';
 import api from '../services/api';
 import CustomAlert from '../components/CustomAlert';
 import { buildPayoffChart, CHART_HEIGHT, CHART_PAD } from '../utils/payoffChart';
@@ -1035,6 +1036,11 @@ const DebtAttackScreen = () => {
                         />
                     </Card>
                 )}
+
+                {/* Rendered unconditionally — the empty state is the entry
+                    point. A section that only appears once you already use the
+                    feature is how Goals ended up unreachable. */}
+                <CardDueDates linkedAccounts={linkedAccounts} customDebts={debts} />
             </Screen>
 
             {renderFormSheet(false)}

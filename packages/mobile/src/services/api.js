@@ -531,6 +531,17 @@ export const api = {
         apiRequest(`/flags/${flagId}/analytics${days ? `?days=${days}` : ''}`),
 
     // Savings goals
+    // Credit card payment due dates. User-entered — Plaid's `liabilities`
+    // product is not enabled, so there is no due date to read. saveCardDueDate
+    // is an upsert: there is at most one reminder per card, so a client that
+    // lost track of whether one exists cannot create a duplicate.
+    getCardDueDates: () => apiRequest('/card-due-dates'),
+
+    saveCardDueDate: (dueDate) =>
+        apiRequest('/card-due-dates', { method: 'PUT', body: JSON.stringify(dueDate) }),
+
+    deleteCardDueDate: (id) => apiRequest(`/card-due-dates/${id}`, { method: 'DELETE' }),
+
     getGoals: (status = 'active') => apiRequest(`/goals?status=${status}`),
 
     getGoal: (goalId) => apiRequest(`/goals/${goalId}`),
