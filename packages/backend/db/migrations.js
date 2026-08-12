@@ -36,4 +36,5 @@ module.exports = [
     'add_account_credit_limit.sql',
     'add_goals.sql',
     'add_insight_tracking.sql',
+    'add_card_due_dates.sql',
 ];

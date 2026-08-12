@@ -1382,6 +1382,134 @@ const markGoalMilestones = async (userId, goalId, milestones) => {
     return getGoalById(userId, goalId);
 };
 
+// ============ CARD PAYMENT DUE DATES ============
+
+/**
+ * Columns for a due-date reminder, resolved against whichever target it names.
+ *
+ * `needs_relink` distinguishes "this card was disconnected" from "this reminder
+ * is fine", the same signal goals carry. The reminder itself is kept either
+ * way — it is keyed on the Plaid string id, so reconnecting the same card finds
+ * its due date again rather than making the user re-enter it.
+ */
+const CARD_DUE_COLUMNS = `
+    d.id, d.target_type, d.plaid_account_id, d.custom_debt_id,
+    d.due_day, d.lead_days, d.reminder_hour, d.enabled, d.created_at,
+    COALESCE(a.name, cd.name) AS card_name,
+    a.mask AS account_mask,
+    COALESCE(a.current_balance, cd.balance)::float AS balance,
+    a.credit_limit::float AS credit_limit,
+    cd.min_payment::float AS min_payment,
+    (d.target_type = 'plaid_account' AND a.id IS NULL) AS needs_relink`;
+
+// `user_id` on both joins is the authorisation: a row naming an id that is not
+// this user's joins to nothing and reads as unlinked, never as someone else's
+// balance. Same rule as GOAL_FROM.
+const CARD_DUE_FROM = `
+    FROM card_due_dates d
+    LEFT JOIN accounts a
+        ON a.user_id = d.user_id AND a.plaid_account_id = d.plaid_account_id
+    LEFT JOIN custom_debts cd
+        ON cd.id = d.custom_debt_id AND cd.user_id = d.user_id`;
+
+const getCardDueDates = async (userId) => {
+    const result = await pool.query(
+        `SELECT ${CARD_DUE_COLUMNS} ${CARD_DUE_FROM}
+         WHERE d.user_id = $1
+         ORDER BY d.due_day, LOWER(COALESCE(a.name, cd.name, ''))`,
+        [userId]
+    );
+    return result.rows;
+};
+
+const getCardDueDateById = async (userId, id) => {
+    const result = await pool.query(
+        `SELECT ${CARD_DUE_COLUMNS} ${CARD_DUE_FROM}
+         WHERE d.user_id = $1 AND d.id = $2`,
+        [userId, id]
+    );
+    return result.rows[0] || null;
+};
+
+const countCardDueDates = async (userId) => {
+    const result = await pool.query(
+        'SELECT COUNT(*)::int AS n FROM card_due_dates WHERE user_id = $1',
+        [userId]
+    );
+    return result.rows[0].n;
+};
+
+/** Confirm a custom debt belongs to this user before a reminder can name it. */
+const _resolveOwnedCustomDebt = async (userId, customDebtId) => {
+    const result = await pool.query(
+        'SELECT id, name FROM custom_debts WHERE user_id = $1 AND id = $2',
+        [userId, customDebtId]
+    );
+    return result.rows[0] || null;
+};
+
+/**
+ * Create or update the reminder for one card.
+ *
+ * Upsert rather than separate create/update endpoints: there is at most one
+ * reminder per card, so "set the due date for this card" is the only operation
+ * the UI ever needs, and a client that lost track of whether a row exists
+ * cannot produce a duplicate.
+ *
+ * The ON CONFLICT targets have to repeat the partial indexes' WHERE clauses —
+ * Postgres matches a partial index by its predicate, and without them this
+ * silently falls back to raising the violation instead of updating.
+ */
+const upsertCardDueDate = async (userId, fields) => {
+    const {
+        targetType,
+        plaidAccountId = null,
+        customDebtId = null,
+        dueDay,
+        leadDays = 3,
+        reminderHour = 9,
+        enabled = true,
+    } = fields;
+
+    const conflict = targetType === 'plaid_account'
+        ? '(user_id, plaid_account_id) WHERE plaid_account_id IS NOT NULL'
+        : '(user_id, custom_debt_id) WHERE custom_debt_id IS NOT NULL';
+
+    const result = await pool.query(
+        `INSERT INTO card_due_dates
+            (user_id, target_type, plaid_account_id, custom_debt_id,
+             due_day, lead_days, reminder_hour, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT ${conflict} DO UPDATE
+            SET due_day = EXCLUDED.due_day,
+                lead_days = EXCLUDED.lead_days,
+                reminder_hour = EXCLUDED.reminder_hour,
+                enabled = EXCLUDED.enabled,
+                updated_at = NOW()
+         RETURNING id`,
+        [
+            userId,
+            targetType,
+            targetType === 'plaid_account' ? String(plaidAccountId) : null,
+            targetType === 'custom_debt' ? customDebtId : null,
+            dueDay,
+            leadDays,
+            reminderHour,
+            enabled,
+        ]
+    );
+
+    return getCardDueDateById(userId, result.rows[0].id);
+};
+
+const deleteCardDueDate = async (userId, id) => {
+    const result = await pool.query(
+        'DELETE FROM card_due_dates WHERE user_id = $1 AND id = $2 RETURNING id',
+        [userId, id]
+    );
+    return result.rows.length > 0;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Insight tracking — recurrence and cost of inaction
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1728,6 +1856,16 @@ module.exports = {
     getGoalContributions,
     deleteGoalContribution,
     markGoalMilestones,
+
+    // Card payment due dates
+    getCardDueDates,
+    getCardDueDateById,
+    countCardDueDates,
+    // Ownership resolvers — scoping to user_id is the authorisation for both.
+    _resolveOwnedAccount,
+    _resolveOwnedCustomDebt,
+    upsertCardDueDate,
+    deleteCardDueDate,
     // Insight tracking operations
     recordInsightSightings,
     markInsightsResolved,

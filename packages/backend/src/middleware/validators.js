@@ -8,6 +8,11 @@ const {
     REMINDER_CADENCES,
     MILESTONES,
 } = require('../services/goals');
+const {
+    TARGET_TYPES: CARD_TARGET_TYPES,
+    MAX_DUE_DAY,
+    MAX_LEAD_DAYS,
+} = require('../services/cardDueDates');
 
 /**
  * Middleware to check validation results and return errors.
@@ -396,8 +401,54 @@ const validateGoalMilestones = [
     handleValidationErrors,
 ];
 
+/**
+ * Setting the due date for one card.
+ *
+ * dueDay is capped at 28 here as well as in the CHECK constraint. The database
+ * is the guarantee; this is what turns a 31 into a readable message instead of
+ * a 500 from a constraint violation.
+ */
+const validateCardDueDate = [
+    body('targetType').exists().withMessage('targetType is required')
+        .bail()
+        .isIn(CARD_TARGET_TYPES).withMessage(`targetType must be one of: ${CARD_TARGET_TYPES.join(', ')}`),
+    // The Plaid account id the client holds, not our numeric primary key.
+    body('accountId').optional({ nullable: true })
+        .isString().withMessage('accountId must be an account id')
+        .bail()
+        .isLength({ min: 1, max: 255 }).withMessage('accountId must be an account id'),
+    body('customDebtId').optional({ nullable: true })
+        .isInt({ min: 1 }).withMessage('customDebtId must be a debt id').toInt(),
+    body('dueDay').exists().withMessage('dueDay is required')
+        .bail()
+        .isInt({ min: 1, max: MAX_DUE_DAY })
+        .withMessage(`dueDay must be between 1 and ${MAX_DUE_DAY} — later days do not exist in every month`)
+        .toInt(),
+    body('leadDays').optional().isInt({ min: 0, max: MAX_LEAD_DAYS })
+        .withMessage(`leadDays must be between 0 and ${MAX_LEAD_DAYS}`).toInt(),
+    body('reminderHour').optional().isInt({ min: 0, max: 23 })
+        .withMessage('reminderHour must be between 0 and 23').toInt(),
+    body('enabled').optional().isBoolean().withMessage('enabled must be a boolean').toBoolean(),
+    // Exactly one target, matching the declared type — the same rule the
+    // table's CHECK enforces, stated here so the client gets a message rather
+    // than a constraint name.
+    body().custom((value) => {
+        if (value?.targetType === 'plaid_account') {
+            if (!value?.accountId) throw new Error('A card reminder needs an accountId');
+            if (value?.customDebtId) throw new Error('Provide accountId or customDebtId, not both');
+        }
+        if (value?.targetType === 'custom_debt') {
+            if (!value?.customDebtId) throw new Error('A custom debt reminder needs a customDebtId');
+            if (value?.accountId) throw new Error('Provide accountId or customDebtId, not both');
+        }
+        return true;
+    }),
+    handleValidationErrors,
+];
+
 module.exports = {
     handleValidationErrors,
+    validateCardDueDate,
     validateFlagCreate,
     validateFlagUpdate,
     validateFlagAssignment,

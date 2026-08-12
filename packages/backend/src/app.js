@@ -153,6 +153,7 @@ app.use('/insights', require('./routes/insights'));
 app.use('/educational', require('./routes/educational'));
 app.use('/etfs', require('./routes/etfs'));
 app.use('/goals', require('./routes/goals'));
+app.use('/card-due-dates', require('./routes/cardDueDates'));
 
 // Sync curated articles on startup (non-blocking), then check a batch of links.
 // The verifier runs after the sync so freshly-inserted rows are eligible, and is
