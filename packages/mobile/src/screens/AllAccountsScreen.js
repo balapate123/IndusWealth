@@ -87,11 +87,19 @@ const makeStyles = (t) => StyleSheet.create({
         justifyContent: 'center',
     },
     accountInfo: { flex: 1 },
-    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     balanceBlock: { alignItems: 'flex-end' },
+    rowAction: { paddingVertical: 4, paddingLeft: 2 },
     actions: { gap: SPACING.SMALL, marginTop: SPACING.MEDIUM, marginHorizontal: SPACING.MEDIUM },
     dialogIcon: { alignItems: 'center', marginBottom: SPACING.MEDIUM },
     dialogActions: { flexDirection: 'row', gap: SPACING.SMALL + 2, marginTop: SPACING.MEDIUM },
+    // Separates renaming from removing, so the destructive action is not just
+    // the next button in the same stack.
+    sheetDanger: {
+        marginTop: SPACING.LARGE,
+        paddingTop: SPACING.MEDIUM,
+        borderTopWidth: 1,
+        borderTopColor: t.HAIRLINE,
+    },
 });
 
 const AllAccountsScreen = ({ navigation }) => {
@@ -107,13 +115,15 @@ const AllAccountsScreen = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [showDisconnectModal, setShowDisconnectModal] = useState(false);
     const [disconnecting, setDisconnecting] = useState(false);
-    const [accountToDelete, setAccountToDelete] = useState(null);
-    const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
-    const [deletingAccount, setDeletingAccount] = useState(false);
-    const [showEditAliasModal, setShowEditAliasModal] = useState(false);
-    const [accountToEdit, setAccountToEdit] = useState(null);
+    // One sheet for the account being managed, with a mode rather than a second
+    // sheet. Removing is destructive so it still needs its own confirmation,
+    // but dismissing one Modal while presenting another is the race where the
+    // replacement silently never appears.
+    const [sheetAccount, setSheetAccount] = useState(null);
+    const [sheetMode, setSheetMode] = useState('edit'); // 'edit' | 'confirmRemove'
     const [aliasInput, setAliasInput] = useState('');
     const [savingAlias, setSavingAlias] = useState(false);
+    const [deletingAccount, setDeletingAccount] = useState(false);
 
     const [alertVisible, setAlertVisible] = useState(false);
     const [alertConfig, setAlertConfig] = useState({ title: '', message: '', buttons: [] });
@@ -185,32 +195,31 @@ const AllAccountsScreen = ({ navigation }) => {
         }
     };
 
-    const handleDeleteAccount = (account) => {
-        setAccountToDelete(account);
-        setShowDeleteAccountModal(true);
+    const openAccountSheet = (account) => {
+        setSheetAccount(account);
+        setSheetMode('edit');
+        setAliasInput(account.alias || '');
     };
 
-    const handleEditAlias = (account) => {
-        setAccountToEdit(account);
-        setAliasInput(account.alias || '');
-        setShowEditAliasModal(true);
+    const closeAccountSheet = () => {
+        setSheetAccount(null);
+        setSheetMode('edit');
+        setAliasInput('');
     };
 
     const saveAlias = async () => {
-        if (!accountToEdit) return;
+        if (!sheetAccount) return;
 
         setSavingAlias(true);
         try {
-            const accountId = accountToEdit.id;
+            const accountId = sheetAccount.id;
             const response = await api.updateAccountAlias(accountId, aliasInput.trim());
 
             if (response?.success) {
                 setAccounts((prev) => prev.map((a) =>
                     a.id === accountId ? { ...a, alias: aliasInput.trim() } : a
                 ));
-                setShowEditAliasModal(false);
-                setAccountToEdit(null);
-                setAliasInput('');
+                closeAccountSheet();
             }
         } catch (error) {
             console.error('Error saving alias:', error);
@@ -221,23 +230,23 @@ const AllAccountsScreen = ({ navigation }) => {
     };
 
     const confirmDeleteAccount = async () => {
-        if (!accountToDelete) return;
+        if (!sheetAccount) return;
 
         setDeletingAccount(true);
         try {
-            const accountId = accountToDelete.plaid_account_id || accountToDelete.id;
+            const accountId = sheetAccount.plaid_account_id || sheetAccount.id;
             const response = await api.disconnectAccount(accountId);
             if (response?.success) {
-                setAccounts((prev) => prev.filter((a) => a.id !== accountToDelete.id));
-                setTotalBalance((prev) => prev - (accountToDelete.balance || 0));
-                if (accountToDelete.type === 'depository') {
-                    setLiquidCash((prev) => prev - (accountToDelete.balance || 0));
-                }
-                setShowDeleteAccountModal(false);
-                setAccountToDelete(null);
+                closeAccountSheet();
+                // Refetch rather than patch the four totals by hand. Only assets
+                // and liquid cash were being adjusted, so removing a credit card
+                // left "You owe" and "Net worth" stating figures that included
+                // an account no longer in the list.
+                await loadAccounts();
             }
         } catch (error) {
             console.error('Error removing account:', error);
+            showAlert('Error', 'Failed to remove the account. Please try again.');
         } finally {
             setDeletingAccount(false);
         }
@@ -265,19 +274,9 @@ const AllAccountsScreen = ({ navigation }) => {
                     onPress={() => navigation.navigate('AccountTransactions', { account })}
                     activeOpacity={0.7}
                 >
-                    <View style={styles.nameRow}>
-                        <Text variant="bodyMed" numberOfLines={1}>
-                            {account.alias || account.name}
-                        </Text>
-                        <TouchableOpacity
-                            onPress={() => handleEditAlias(account)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            accessibilityRole="button"
-                            accessibilityLabel="Rename account"
-                        >
-                            <Ionicons name="pencil" size={13} color={theme.TEXT_MUTED} />
-                        </TouchableOpacity>
-                    </View>
+                    <Text variant="bodyMed" numberOfLines={1}>
+                        {account.alias || account.name}
+                    </Text>
                     <Text variant="meta" tone="muted">
                         {account.subtype || account.type}
                         {account.mask ? ` · ••${account.mask}` : ''}
@@ -290,13 +289,18 @@ const AllAccountsScreen = ({ navigation }) => {
                     </Text>
                 </View>
 
+                {/* The one control on the row. It used to be a bare ✕, which put
+                    the irreversible action a single tap from the balance, and
+                    renaming sat on a pencil wedged between the name and the
+                    number — the thing that pushed long names into the balance. */}
                 <TouchableOpacity
-                    onPress={() => handleDeleteAccount(account)}
+                    style={styles.rowAction}
+                    onPress={() => openAccountSheet(account)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     accessibilityRole="button"
-                    accessibilityLabel="Remove account"
+                    accessibilityLabel={`Edit ${account.alias || account.name}`}
                 >
-                    <Ionicons name="close-circle-outline" size={20} color={theme.TEXT_MUTED} />
+                    <Ionicons name="create-outline" size={19} color={theme.TEXT_MUTED} />
                 </TouchableOpacity>
             </View>
         );
@@ -427,68 +431,80 @@ const AllAccountsScreen = ({ navigation }) => {
                 </View>
             </BottomSheet>
 
-            {/* Remove one account */}
+            {/* Edit one account — rename, or step through to removing it */}
             <BottomSheet
-                visible={showDeleteAccountModal}
-                onClose={() => setShowDeleteAccountModal(false)}
+                visible={!!sheetAccount}
+                onClose={closeAccountSheet}
                 scroll={false}
             >
-                <SectionTitle
-                    title="Remove this account?"
-                    subtitle={accountToDelete
-                        ? `${accountToDelete.alias || accountToDelete.name} will be removed along with its transactions.`
-                        : undefined}
-                />
-                <View style={styles.dialogActions}>
-                    <Button
-                        title="Cancel"
-                        variant="secondary"
-                        onPress={() => setShowDeleteAccountModal(false)}
-                        disabled={deletingAccount}
-                        style={{ flex: 1 }}
-                    />
-                    <Button
-                        title="Remove"
-                        variant="danger"
-                        onPress={confirmDeleteAccount}
-                        loading={deletingAccount}
-                        style={{ flex: 1 }}
-                    />
-                </View>
-            </BottomSheet>
+                {sheetMode === 'edit' ? (
+                    <>
+                        <SectionTitle
+                            title="Edit account"
+                            // The name the bank gave it, which is the only way to
+                            // tell two accounts apart once one has been renamed.
+                            subtitle={sheetAccount?.name}
+                        />
+                        <Input
+                            label="Display name"
+                            value={aliasInput}
+                            onChangeText={setAliasInput}
+                            placeholder="e.g. Everyday chequing"
+                            autoCapitalize="words"
+                        />
+                        <View style={styles.dialogActions}>
+                            <Button
+                                title="Cancel"
+                                variant="secondary"
+                                onPress={closeAccountSheet}
+                                disabled={savingAlias}
+                                style={{ flex: 1 }}
+                            />
+                            <Button
+                                title="Save"
+                                onPress={saveAlias}
+                                loading={savingAlias}
+                                style={{ flex: 1 }}
+                            />
+                        </View>
 
-            {/* Rename */}
-            <BottomSheet
-                visible={showEditAliasModal}
-                onClose={() => setShowEditAliasModal(false)}
-                scroll={false}
-            >
-                <SectionTitle
-                    title="Rename account"
-                    subtitle={accountToEdit ? accountToEdit.name : undefined}
-                />
-                <Input
-                    label="Display name"
-                    value={aliasInput}
-                    onChangeText={setAliasInput}
-                    placeholder="e.g. Everyday chequing"
-                    autoCapitalize="words"
-                />
-                <View style={styles.dialogActions}>
-                    <Button
-                        title="Cancel"
-                        variant="secondary"
-                        onPress={() => setShowEditAliasModal(false)}
-                        disabled={savingAlias}
-                        style={{ flex: 1 }}
-                    />
-                    <Button
-                        title="Save"
-                        onPress={saveAlias}
-                        loading={savingAlias}
-                        style={{ flex: 1 }}
-                    />
-                </View>
+                        <View style={styles.sheetDanger}>
+                            <Button
+                                title="Remove account"
+                                icon="trash-outline"
+                                variant="danger"
+                                onPress={() => setSheetMode('confirmRemove')}
+                                disabled={savingAlias}
+                                block
+                            />
+                        </View>
+                    </>
+                ) : (
+                    <>
+                        <SectionTitle
+                            title="Remove this account?"
+                            subtitle={sheetAccount
+                                ? `${sheetAccount.alias || sheetAccount.name} will be removed along with its transactions. You can reconnect it later.`
+                                : undefined}
+                        />
+                        <View style={styles.dialogActions}>
+                            <Button
+                                title="Back"
+                                variant="secondary"
+                                onPress={() => setSheetMode('edit')}
+                                disabled={deletingAccount}
+                                style={{ flex: 1 }}
+                            />
+                            <Button
+                                title="Remove"
+                                variant="danger"
+                                onPress={confirmDeleteAccount}
+                                loading={deletingAccount}
+                                style={{ flex: 1 }}
+                            />
+                        </View>
+                    </>
+                )}
             </BottomSheet>
 
             <CustomAlert
