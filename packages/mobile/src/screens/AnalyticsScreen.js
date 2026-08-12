@@ -21,12 +21,14 @@ import {
     SegmentedControl,
     SectionTitle,
     BarTrack,
+    Treemap,
     EmptyState,
     LoadingState,
 } from '../components/ui';
 import api from '../services/api';
 import cache from '../services/cache';
 import { categorizeTransaction, getCategoryMeta } from '../utils/categorization';
+import { DEFAULT_MAX_TILES, OTHER_KEY } from '../utils/treemap';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -43,8 +45,9 @@ const TIME_PERIODS = [
     { label: '2Y', value: 730 },
 ];
 
-const MAX_BAR_SEGMENTS = 8;
 const COLLAPSED_CATEGORY_COUNT = 8;
+// Tall enough that the smallest of eight tiles still reads as a rectangle.
+const TREEMAP_HEIGHT = 200;
 
 const formatCurrency = (amount) => {
     const num = parseFloat(amount || 0);
@@ -116,15 +119,8 @@ const makeStyles = (t) => StyleSheet.create({
         borderRadius: RADIUS.SMALL,
     },
 
-    // Stacked bar
-    stackedBar: {
-        flexDirection: 'row',
-        height: 22,
-        marginBottom: SPACING.SMALL + 2,
-    },
-    // The 2px gap is what keeps two adjacent segments legible when they land on
-    // the same ramp hue — colour is the only encoding available in a stacked bar.
-    barSegment: { height: '100%', marginRight: 2 },
+    // Category treemap
+    treemap: { marginBottom: SPACING.SMALL + 2 },
     barCaption: { minHeight: 20, justifyContent: 'center' },
 
     // Category list
@@ -342,6 +338,35 @@ const AnalyticsScreen = ({ navigation }) => {
         });
     }, [analytics?.charts?.categoryBreakdown, theme]);
 
+    // The chart folds its own long tail — see utils/treemap. Doing it here too
+    // would fold twice and leave "N more categories" nested inside "Other".
+    const treemapItems = useMemo(
+        () => categoryData.map((cat) => ({
+            key: cat.category,
+            label: cat.category,
+            value: cat.amount,
+            color: cat.color,
+        })),
+        [categoryData]
+    );
+
+    // Caption for whichever tile is selected. The folded tile has no row in
+    // categoryData, so it is resolved against the same slice the layout used.
+    const activeSegmentData = useMemo(() => {
+        if (!activeSegment) return null;
+
+        if (activeSegment === OTHER_KEY) {
+            const tail = categoryData.slice(DEFAULT_MAX_TILES);
+            return {
+                category: `${tail.length} more categories`,
+                amount: tail.reduce((sum, cat) => sum + cat.amount, 0),
+                color: theme.CATEGORY_OTHER,
+            };
+        }
+
+        return categoryData.find((cat) => cat.category === activeSegment) || null;
+    }, [activeSegment, categoryData, theme]);
+
     const netWorthTrend = analytics?.charts?.netWorthTrend || [];
 
     const chartPoints = useMemo(() => {
@@ -413,22 +438,7 @@ const AnalyticsScreen = ({ navigation }) => {
     const topMerchant = analytics?.topMerchant;
     const aiTip = analytics?.aiTip;
 
-    // Group the long tail into one segment so small categories stay tappable
-    let segments = categoryData;
-    if (categoryData.length > MAX_BAR_SEGMENTS) {
-        const rest = categoryData.slice(MAX_BAR_SEGMENTS - 1);
-        segments = [
-            ...categoryData.slice(0, MAX_BAR_SEGMENTS - 1),
-            {
-                category: `${rest.length} more categories`,
-                amount: rest.reduce((sum, cat) => sum + cat.amount, 0),
-                percentage: rest.reduce((sum, cat) => sum + cat.percentage, 0),
-                color: theme.CATEGORY_OTHER,
-            },
-        ];
-    }
     const categoryTotal = categoryData.reduce((sum, cat) => sum + cat.amount, 0);
-    const activeSegmentData = segments.find((c) => c.category === activeSegment);
 
     const visibleCategories = showAllCategories
         ? categoryData
@@ -612,30 +622,15 @@ const AnalyticsScreen = ({ navigation }) => {
                         <EmptyState icon="bar-chart-outline" message="No spending data in this period" />
                     ) : (
                         <>
-                            <View style={styles.stackedBar}>
-                                {segments.map((cat, index) => (
-                                    <TouchableOpacity
-                                        key={cat.category}
-                                        style={[
-                                            styles.barSegment,
-                                            {
-                                                flex: Math.max(cat.percentage, 1),
-                                                backgroundColor: cat.color,
-                                                opacity: activeSegment && activeSegment !== cat.category ? 0.35 : 1,
-                                                borderTopLeftRadius: index === 0 ? 6 : 0,
-                                                borderBottomLeftRadius: index === 0 ? 6 : 0,
-                                                borderTopRightRadius: index === segments.length - 1 ? 6 : 0,
-                                                borderBottomRightRadius: index === segments.length - 1 ? 6 : 0,
-                                                marginRight: index === segments.length - 1 ? 0 : 2,
-                                            },
-                                        ]}
-                                        onPress={() => setActiveSegment(activeSegment === cat.category ? null : cat.category)}
-                                        activeOpacity={0.8}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={`${cat.category}, ${formatCompactCurrency(cat.amount)}`}
-                                    />
-                                ))}
-                            </View>
+                            <Treemap
+                                data={treemapItems}
+                                width={CHART_WIDTH}
+                                height={TREEMAP_HEIGHT}
+                                activeKey={activeSegment}
+                                onSelect={setActiveSegment}
+                                formatValue={formatCompactCurrency}
+                                style={styles.treemap}
+                            />
 
                             <View style={styles.barCaption}>
                                 {activeSegmentData ? (
@@ -644,7 +639,7 @@ const AnalyticsScreen = ({ navigation }) => {
                                     </Text>
                                 ) : (
                                     <Text variant="meta" tone="muted">
-                                        Tap a segment · total {formatCurrency(categoryTotal)}
+                                        Tap a tile · total {formatCurrency(categoryTotal)}
                                     </Text>
                                 )}
                             </View>

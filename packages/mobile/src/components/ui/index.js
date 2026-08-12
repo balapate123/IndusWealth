@@ -19,6 +19,7 @@ export { default as SegmentedControl } from './SegmentedControl';
 export { default as ChangeBadge } from './ChangeBadge';
 export { default as ListRow } from './ListRow';
 export { default as BarTrack } from './BarTrack';
+export { default as Treemap } from './Treemap';
 
 export { Chip, ChipRow } from './Chip';
 export { SectionTitle, Overline } from './SectionTitle';
