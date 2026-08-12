@@ -152,16 +152,40 @@ class PlaidService {
         }
     }
 
+    /**
+     * Exchange a public token for the pair we need to keep.
+     *
+     * Returns the item id as well as the access token. The item id used to be
+     * discarded here, which left `users.plaid_item_id` NULL for every user —
+     * and that column is how an inbound webhook finds whose data to sync. With
+     * it null, every INITIAL_UPDATE and HISTORICAL_UPDATE was dropped as
+     * "an item with no matching user", so a freshly linked account only ever
+     * synced when GET /transactions decided its 24-hour cache was stale.
+     */
     async exchangePublicToken(publicToken) {
         try {
             const response = await client.itemPublicTokenExchange({
                 public_token: publicToken,
             });
-            return response.data.access_token;
+            return {
+                accessToken: response.data.access_token,
+                itemId: response.data.item_id,
+            };
         } catch (error) {
             console.error('Error exchanging public token:', error.response ? error.response.data : error.message);
             throw error;
         }
+    }
+
+    /**
+     * The item id behind an access token. Only needed to repair connections
+     * made before the exchange started storing it — a new link gets the id
+     * straight from exchangePublicToken without this extra call.
+     */
+    async getItemId(accessToken) {
+        if (!accessToken) return null;
+        const response = await client.itemGet({ access_token: accessToken });
+        return response.data.item?.item_id || null;
     }
 
     async getLiabilities(accessToken) {

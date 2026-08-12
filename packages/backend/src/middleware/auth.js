@@ -184,6 +184,9 @@ const authenticateToken = async (req, res, next) => {
             email: decoded.email,
             name: decoded.name,
             plaidAccessToken: user.plaid_access_token,
+            // Carried so a sync can tell an already-recorded connection from one
+            // still missing its item id, and skip the recovery call.
+            plaidItemId: user.plaid_item_id,
         };
 
         logger.debug('User authenticated', { ...ctx, userId: req.user.id });

@@ -84,7 +84,11 @@ router.get('/', authenticateToken, async (req, res, next) => {
             // Shared with the Plaid webhook, which syncs the same way when Plaid
             // reports new data. Never throws — a Plaid failure comes back as a
             // status and we carry on serving what is already stored.
-            const result = await syncTransactions(userId, accessToken, { forceRefresh, ctx });
+            const result = await syncTransactions(userId, accessToken, {
+                forceRefresh,
+                itemId: req.user.plaidItemId,
+                ctx,
+            });
             plaidStatus = result.plaidStatus;
             if (result.ok) dataSource = DATA_SOURCES.PLAID_API;
         } else {

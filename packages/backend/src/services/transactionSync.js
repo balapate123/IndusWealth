@@ -20,10 +20,26 @@ const logger = createLogger('TX_SYNC');
  *
  * @returns {{ok: boolean, plaidStatus: string, count: number, errorCode?: string}}
  */
-const syncTransactions = async (userId, accessToken, { forceRefresh = false, ctx = {} } = {}) => {
+const syncTransactions = async (userId, accessToken, { forceRefresh = false, itemId = null, ctx = {} } = {}) => {
     if (!accessToken) {
         logger.info('No Plaid access token available', { ...ctx, userId });
         return { ok: false, plaidStatus: PLAID_STATUS.NO_TOKEN, count: 0 };
+    }
+
+    // Repair a connection linked before the exchange stored its item id.
+    // Without one the webhook cannot find this user, so the account is stuck
+    // waiting on the 24-hour cache for every update. One extra Plaid call, once
+    // per connection ever — the UPDATE is guarded on the column being NULL.
+    if (!itemId) {
+        try {
+            const recoveredItemId = await plaidService.getItemId(accessToken);
+            if (await db.setPlaidItemIdIfMissing(userId, recoveredItemId)) {
+                logger.info('Backfilled missing Plaid item id', { ...ctx, userId });
+            }
+        } catch (itemError) {
+            // Not fatal: the sync below is what the caller actually wants.
+            logger.warn('Could not recover Plaid item id', { ...ctx, userId, error: itemError.message });
+        }
     }
 
     try {
@@ -43,7 +59,18 @@ const syncTransactions = async (userId, accessToken, { forceRefresh = false, ctx
         }
 
         await db.upsertTransactions(userId, transactions);
-        await db.updateSyncTime(userId, 'last_transaction_sync');
+
+        // A pull that returned nothing is not evidence the cache is fresh, so
+        // it must not start the 24-hour clock. Plaid has the Item ready before
+        // the backfill has landed, and stamping here left a just-linked account
+        // showing an empty list for a day. Only affects a linked account with
+        // no transactions yet — a narrow, self-correcting state, and
+        // /transactions/get is not billed per call.
+        if (transactions.length > 0) {
+            await db.updateSyncTime(userId, 'last_transaction_sync');
+        } else {
+            logger.info('Plaid returned no transactions — leaving cache stale so the next request retries', { ...ctx, userId });
+        }
         await watchdogService.invalidateCache(userId);
 
         if (forceRefresh) {
@@ -102,7 +129,9 @@ const syncByItemId = async (itemId, ctx = {}) => {
             return null;
         }
 
-        return await syncTransactions(user.id, user.plaid_access_token, { ctx });
+        // The item id is how we found this user, so it is known to be stored —
+        // pass it so the backfill above is skipped.
+        return await syncTransactions(user.id, user.plaid_access_token, { itemId, ctx });
     } finally {
         inFlight.delete(itemId);
     }

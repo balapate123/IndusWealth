@@ -125,6 +125,24 @@ const getUserByPlaidItemId = async (itemId) => {
     return user;
 };
 
+/**
+ * Fill in a missing Plaid item id without touching one already stored.
+ *
+ * Connections made before the exchange saved the item id have NULL here, and a
+ * NULL is unreachable by the webhook lookup. The `IS NULL` guard makes this a
+ * repair rather than an overwrite: it can run on every sync and will only ever
+ * write once per connection.
+ */
+const setPlaidItemIdIfMissing = async (userId, itemId) => {
+    if (!itemId) return false;
+    const result = await pool.query(
+        `UPDATE users SET plaid_item_id = $1, updated_at = NOW()
+         WHERE id = $2 AND plaid_item_id IS NULL`,
+        [itemId, userId]
+    );
+    return result.rowCount > 0;
+};
+
 const updateUserPlaidToken = async (userId, accessToken, itemId) => {
     const encryptedToken = encrypt(accessToken);
     await pool.query(
@@ -1900,6 +1918,7 @@ module.exports = {
     getUserById,
     getUserByPlaidItemId,
     updateUserPlaidToken,
+    setPlaidItemIdIfMissing,
     // Sync operations
     getLastSyncTime,
     updateSyncTime,

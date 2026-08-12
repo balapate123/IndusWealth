@@ -103,12 +103,15 @@ router.post('/exchange_public_token', authenticateToken, async (req, res, next) 
             throw new ValidationError('Public token is required', { field: 'public_token' });
         }
 
-        const accessToken = await plaidService.exchangePublicToken(public_token);
+        const { accessToken, itemId } = await plaidService.exchangePublicToken(public_token);
 
-        // Automatically save the connection for the user
-        await db.updateUserPlaidToken(userId, accessToken, null);
+        // Automatically save the connection for the user. The item id must be
+        // stored: it is the only key an inbound Plaid webhook carries, so
+        // passing null here (as this did) silently disabled webhook syncing
+        // for every account ever linked.
+        await db.updateUserPlaidToken(userId, accessToken, itemId);
 
-        logger.info('Token exchanged and saved', ctx);
+        logger.info('Token exchanged and saved', { ...ctx, hasItemId: !!itemId });
 
         successResponse(res, {
             message: 'Bank connected successfully'
