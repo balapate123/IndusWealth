@@ -6,6 +6,8 @@ import {
     formatAmount,
     assertTriggerTypesMatch,
 } from '../utils/goalReminders';
+import { buildCardReminders, CARD_DUE_KIND } from '../utils/cardDueReminders';
+import { createSyncQueue } from '../utils/syncQueue';
 
 /**
  * Local goal reminders.
@@ -33,6 +35,7 @@ import {
 const GOAL_REMINDER_KIND = 'goal_reminder';
 const GOAL_MILESTONE_KIND = 'goal_milestone';
 const ANDROID_CHANNEL_ID = 'goal-reminders';
+const CARD_CHANNEL_ID = 'card-payments';
 
 /**
  * Install the foreground handler and the Android channel.
@@ -65,6 +68,15 @@ export async function configureNotifications() {
             // A savings nudge does not deserve to buzz someone's pocket.
             enableVibrate: false,
         });
+
+        // Its own channel, so someone can silence savings nudges without also
+        // silencing the one notification that costs money to miss. Payments do
+        // get to vibrate, for the same reason.
+        await Notifications.setNotificationChannelAsync(CARD_CHANNEL_ID, {
+            name: 'Card payment due dates',
+            importance: Notifications.AndroidImportance.HIGH,
+            enableVibrate: true,
+        });
     }
 }
 
@@ -92,38 +104,42 @@ export async function getNotificationPermission() {
     return { granted: Boolean(status.granted), canAskAgain: Boolean(status.canAskAgain) };
 }
 
-/** Only the reminders this app scheduled — never anything it did not. */
-async function scheduledGoalReminders() {
+/** Only the reminders this app scheduled, of one kind — never anything else. */
+async function scheduledOfKind(kind) {
     const all = await Notifications.getAllScheduledNotificationsAsync();
-    return all.filter((n) => n?.content?.data?.kind === GOAL_REMINDER_KIND);
+    return all.filter((n) => n?.content?.data?.kind === kind);
 }
 
-export async function cancelAllGoalReminders() {
-    const ours = await scheduledGoalReminders();
+async function cancelKind(kind) {
+    const ours = await scheduledOfKind(kind);
     await Promise.all(ours.map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)));
     return ours.length;
 }
 
+export async function cancelAllGoalReminders() {
+    return cancelKind(GOAL_REMINDER_KIND);
+}
+
+export async function cancelAllCardReminders() {
+    return cancelKind(CARD_DUE_KIND);
+}
+
 /**
- * Serialises syncGoalReminders. Never reset — the chain is the lock.
+ * Serialises every reminder sync. See utils/syncQueue.js for why it must be.
  *
- * Cancel-then-reschedule is not safe to run concurrently: two overlapping runs
- * interleave as cancel, cancel, schedule, schedule and leave every reminder on
- * the device twice. That is reachable in normal use — deleting a goal triggers a
- * reload, and navigating straight back to Home triggers another before the first
- * has finished. Chaining is sufficient here: the work is short and idempotent,
- * and the last caller's list is the one that ends up scheduled.
+ * Goal and card syncs share one queue even though they cancel disjoint sets:
+ * both read the full pending list via getAllScheduledNotificationsAsync, and
+ * over-serialising two short operations costs nothing next to the class of bug
+ * it rules out.
  */
-let reminderSyncQueue = Promise.resolve();
+const enqueue = createSyncQueue();
 
 export function syncGoalReminders(goals = []) {
-    // Both handlers run the sync, so one failed run cannot wedge the queue.
-    const run = reminderSyncQueue.then(
-        () => _syncGoalReminders(goals),
-        () => _syncGoalReminders(goals)
-    );
-    reminderSyncQueue = run.catch(() => {});
-    return run;
+    return enqueue(() => _syncGoalReminders(goals));
+}
+
+export function syncCardDueReminders(cards = []) {
+    return enqueue(() => _syncCardDueReminders(cards));
 }
 
 /**
@@ -167,6 +183,49 @@ async function _syncGoalReminders(goals = []) {
         } catch (err) {
             // One bad goal must not stop the rest from being scheduled.
             console.warn(`Could not schedule a reminder for goal ${goal?.id}:`, err?.message || err);
+        }
+    }
+
+    return { scheduled, cancelled, permitted: true };
+}
+
+/**
+ * Make the device's scheduled card reminders match the server's due dates.
+ *
+ * Same shape as the goal sync — rebuild from server state rather than diff — and
+ * on the same queue. Call through syncCardDueReminders, never directly.
+ *
+ * A card whose account was disconnected keeps its reminder: the due date has
+ * not changed just because the connection dropped, and dropping it silently
+ * would be the worst possible failure for a payment reminder.
+ *
+ * @returns {{scheduled: number, cancelled: number, permitted: boolean}}
+ */
+async function _syncCardDueReminders(cards = []) {
+    const { granted } = await getNotificationPermission();
+
+    if (!granted) {
+        const cancelled = await cancelAllCardReminders();
+        return { scheduled: 0, cancelled, permitted: false };
+    }
+
+    const cancelled = await cancelAllCardReminders();
+    let scheduled = 0;
+
+    for (const card of cards) {
+        for (const reminder of buildCardReminders(card)) {
+            try {
+                await Notifications.scheduleNotificationAsync({
+                    content: reminder.content,
+                    trigger: Platform.OS === 'android'
+                        ? { ...reminder.trigger, channelId: CARD_CHANNEL_ID }
+                        : reminder.trigger,
+                });
+                scheduled++;
+            } catch (err) {
+                // One bad card must not stop the rest from being scheduled.
+                console.warn(`Could not schedule a due-date reminder for card ${card?.id}:`, err?.message || err);
+            }
         }
     }
 
@@ -226,4 +285,5 @@ export async function presentMilestones(crossings = []) {
 export const NOTIFICATION_KINDS = {
     GOAL_REMINDER: GOAL_REMINDER_KIND,
     GOAL_MILESTONE: GOAL_MILESTONE_KIND,
+    CARD_DUE: CARD_DUE_KIND,
 };
