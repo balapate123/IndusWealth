@@ -201,6 +201,13 @@ CATEGORY DESCRIPTIONS:
 - Alcohol & Bars: LCBO, bars, pubs, liquor stores
 - Software & Tech: Software, apps, tech purchases
 - Taxes & Government: CRA payments, Receiver General, income/property tax payments and refunds, government fees
+- Coffee & Snacks: Coffee shops, donut shops, ice cream
+- Travel: Airlines, hotels, car rentals, vacation bookings
+- Personal Care: Hair salons, barbers, nail salons, spas, dry cleaning
+- Education: Tuition, schools, textbooks, online courses
+- Insurance: Auto, home, life and health insurance premiums
+- Utilities: Hydro, water, natural gas, internet, phone, cable
+- Bank Fees: Monthly account fees, overdraft, NSF
 
 IMPORTANT RULES:
 1. Choose the BEST matching category (exactly as listed above)

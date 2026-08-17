@@ -34,7 +34,8 @@
 | | `src/services/encryption.js` | AES-256-GCM (Plaid tokens) |
 | | `src/services/ai_insights.js` | Gemini AI insights generation |
 | | `src/services/ai_categorization.js` | AI transaction categorization |
-| | `src/services/categorization.js` | Rule-based categorization |
+| | `src/services/categorization.js` | Rule-based categorization (keyword index, longest match wins) |
+| | `src/services/category_map.js` | **The canonical category vocabulary.** Plaid's legacy taxonomy → our names + `mergeCanonicalRows` for SQL aggregates |
 | | `src/services/debt_calculator.js` | Snowball/Avalanche algorithms |
 | | `src/services/watchdog.js` | Recurring expense logic |
 | | `src/services/educational_content.js` | Article management |
@@ -116,6 +117,7 @@
 | Constants | `src/constants/theme.js` | Dark theme + gold accents |
 | | `src/constants/insights.js` | Insight type enum → icon/label/ramp slot; must mirror `insight_identity.js` |
 | Utils | `src/utils/categorization.js` | Client-side category helpers |
+| | `src/utils/categoryMap.js` | **Generated** from the backend map — never edit by hand; run `packages/backend/scripts/gen-mobile-category-map.js` |
 | | `src/utils/goalReminders.js` | Pure reminder logic (trigger building, copy, cadence text) — no expo/RN imports so it is testable off-device |
 | | `src/utils/cardDueReminders.js` | Pure due-date scheduling incl. the **lead-day wraparound** |
 | | `src/utils/treemap.js` | Pure squarified treemap layout + top-7/Other folding |
@@ -131,6 +133,18 @@
 - Hue is **category identity** via `categoryColor()`, never rank — filtering or re-sorting must not repaint the survivors.
 - Folds to **top 7 + Other**, per the ramp rule in `tokens.js` — unless the tail is a single category, where "Other" would be a rename.
 - Labels use `TEXT_ON_CATEGORY`. **White-on-fill fails on every hue in the dark ramp** (2.84–3.49:1); the token flips per mode and clears 6:1 there. Three light-ramp hues sit near 4.1:1, which is why the category rows below the chart matter — they are the readable copy of the same numbers, alongside a per-tile a11y label.
+
+### Transaction Categories (one vocabulary)
+There were two, and the app showed both at once: our keyword patterns produced `Restaurants` / `Entertainment`, and whenever no keyword matched we returned **Plaid's raw top-level string verbatim** — `Food and Drink`, `Recreation`. Every aggregate groups by that string, so one real category occupied two rows, split on whether a merchant happened to be in a keyword list. McDonald's (keyword) and Chipotle (no keyword) are both dinner and both were filed differently.
+- **`services/category_map.js` owns the vocabulary.** `CANONICAL_CATEGORIES` is closed; `canonicalizeCategory()` folds Plaid's legacy array into it. Nothing may emit a category name that did not come from there.
+- **All three of Plaid's levels are consulted, most specific first**, so `Food and Drink > Restaurants > Coffee Shop` is `Coffee & Snacks` rather than collapsing to its parent. An unmapped subcategory falls back to its parent, never to `Other`.
+- **Every one of Plaid's 13 legacy top-levels is mapped**, which is what makes `Other` unreachable for real Plaid data. A test asserts this — if Plaid adds a top level, it fails rather than quietly dumping a bucket into `Other`.
+- **Our own names round-trip unchanged.** `analytics.js` writes `[categoryInfo.category]` back onto the transaction and re-reads it, so a canonical name must survive a second pass.
+- **SQL aggregates group on the full path and merge in JS**, never `GROUP BY category[1]`. An `ORDER BY … LIMIT n` in the query ranks the *raw* vocabulary: two halves of one category can each place 8th and both fall outside a top-6 that their sum belongs at the top of.
+- **Keywords match longest-first, not in declaration order.** `Transportation` is declared before `Restaurants`, so `UBER EATS` matched the 4-character `UBER` and food delivery was filed as a commute. Ties keep declaration order, so existing overlaps (TIM HORTONS) resolve as they always did.
+- **The same keyword must not appear in two categories.** `LCBO`/`WINE`/`BAR`/`PUB`/`LIQUOR` sat in both `Entertainment` and `Alcohol & Bars`; the backend picked Entertainment (declared first) while mobile — which never had the duplicates — said Alcohol & Bars, so one purchase had two names depending on which side of the wire you read.
+- **`packages/mobile/src/utils/categoryMap.js` is generated**, and `tests/category_map.test.mjs` loads the backend module and deep-compares both the map and the keyword tables. That parity test is what caught the Entertainment/Alcohol drift above.
+- `getCategoryMeta()` canonicalizes before lookup so a **stale AsyncStorage page** holding raw Plaid names still renders the right icon instead of a gray wallet.
 
 ### Transaction Flags
 User-defined groupings ("Home", "Trip to Montreal"), **distinct from `category`** — a category is inferred by Plaid/AI and single-valued; a flag is chosen by the user and a transaction can carry several.

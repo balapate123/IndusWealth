@@ -8,6 +8,8 @@
  * Layer 4: Fresh AI categorization (background async)
  */
 
+const { canonicalizeCategory } = require('./category_map');
+
 // Lazy load AI features to prevent crashes if GEMINI_API_KEY is missing
 let aiCategorization = null;
 let dbHelpers = null;
@@ -58,6 +60,11 @@ const CATEGORY_PATTERNS = {
         icon: 'bus-outline',
         color: '#5C6BC0'
     },
+    'Travel': {
+        keywords: ['AIR CANADA', 'WESTJET', 'FLAIR AIRLINES', 'PORTER AIRLINES', 'EXPEDIA', 'BOOKING.COM', 'AIRBNB', 'VRBO', 'MARRIOTT', 'HILTON', 'HOTEL', 'HOSTEL', 'AIRLINE', 'AIRPORT'],
+        icon: 'airplane-outline',
+        color: '#FF9500'
+    },
 
     // Food & Drink
     'Groceries': {
@@ -77,13 +84,20 @@ const CATEGORY_PATTERNS = {
     },
 
     // Entertainment
+    // LCBO / WINE / BAR / PUB / LIQUOR are deliberately NOT here — they belong
+    // to 'Alcohol & Bars' and listing them in both put the same purchase in two
+    // categories depending on which package resolved it: this table is declared
+    // before Alcohol & Bars, so the backend said Entertainment while mobile
+    // (which never had the duplicates) said Alcohol & Bars.
     'Entertainment': {
-        keywords: ['CINEPLEX', 'FAMOUS PLAYER', 'RESIDENT ADVISOR', 'THEATRE', 'CONCERT', 'TICKETMASTER', 'MOVIES', 'LCBO', 'WINE', 'BAR', 'PUB', 'LIQUOR', 'GAMING'],
+        keywords: ['CINEPLEX', 'FAMOUS PLAYER', 'RESIDENT ADVISOR', 'THEATRE', 'CONCERT', 'TICKETMASTER', 'MOVIES', 'GAMING'],
         icon: 'film-outline',
         color: '#AF52DE'
     },
     'Subscriptions': {
-        keywords: ['NETFLIX', 'SPOTIFY', 'AUDIBLE', 'DISNEY+', 'AMAZON PRIME', 'APPLE MUSIC', 'YOUTUBE', 'CRAVE', 'XBOX GAME', 'MICROSOFT*XBOX', 'HBO MAX', 'HULU', 'PEACE', 'CLAUDE', 'ANTH'],
+        // 'PEACOCK', not 'PEACE' — the truncated form matched any merchant
+        // containing the substring, e.g. PEACE BRIDGE DUTY FREE.
+        keywords: ['NETFLIX', 'SPOTIFY', 'AUDIBLE', 'DISNEY+', 'AMAZON PRIME', 'APPLE MUSIC', 'YOUTUBE', 'CRAVE', 'XBOX GAME', 'MICROSOFT*XBOX', 'HBO MAX', 'HULU', 'PEACOCK', 'CLAUDE', 'ANTH'],
         icon: 'play-circle-outline',
         color: '#5856D6'
     },
@@ -94,8 +108,13 @@ const CATEGORY_PATTERNS = {
         icon: 'bag-outline',
         color: '#FF2D92'
     },
+    'Personal Care': {
+        keywords: ['SALON', 'BARBER', 'GREAT CLIPS', 'SPORT CLIPS', 'NAIL BAR', 'NAILS', 'HAIRCUT', 'DRY CLEAN', 'LAUNDROMAT'],
+        icon: 'cut-outline',
+        color: '#FF66C4'
+    },
     'Health & Pharmacy': {
-        keywords: ['REXALL', 'SHOPPERS DRUG', 'PHARMACY', 'WELLNESS', 'MEDICAL', 'DOCTOR', 'CLINIC', 'HOSPITAL'],
+        keywords: ['REXALL', 'SHOPPERS DRUG', 'PHARMACY', 'WELLNESS', 'MEDICAL', 'DOCTOR', 'CLINIC', 'HOSPITAL', 'DENTAL', 'DENTIST', 'OPTOMETRIST'],
         icon: 'medical-outline',
         color: '#00C7BE'
     },
@@ -103,6 +122,16 @@ const CATEGORY_PATTERNS = {
         keywords: ['FIT4LESS', 'GOODLIFE', 'GYM', 'FITNESS', 'PLANET FITNESS', 'EQUINOX', 'YOGA'],
         icon: 'barbell-outline',
         color: '#30D158'
+    },
+    'Education': {
+        keywords: ['TUITION', 'UNIVERSITY', 'COLLEGE', 'SCHOOL', 'COURSERA', 'UDEMY', 'TEXTBOOK', 'STUDENT LOAN'],
+        icon: 'school-outline',
+        color: '#0A84FF'
+    },
+    'Insurance': {
+        keywords: ['INSURANCE', 'BELAIRDIRECT', 'INTACT INS', 'AVIVA', 'ALLSTATE', 'DESJARDINS INS', 'TD INSURANCE'],
+        icon: 'shield-checkmark-outline',
+        color: '#7C8B3F'
     },
 
     // Financial
@@ -173,6 +202,24 @@ const CATEGORY_PATTERNS = {
 };
 
 /**
+ * Every keyword flattened and sorted longest-first, so the most specific match
+ * wins regardless of which category declared it.
+ *
+ * Scanning category-by-category made the result depend on object key order:
+ * 'Transportation' is declared before 'Restaurants', so "UBER EATS" matched the
+ * 4-character 'UBER' and a food delivery was filed as a commute. Ties keep
+ * declaration order, so an overlap like TIM HORTONS (Restaurants and Coffee &
+ * Snacks both claim it) still resolves the way it always has.
+ */
+const KEYWORD_INDEX = Object.entries(CATEGORY_PATTERNS)
+    .flatMap(([categoryName, config]) =>
+        config.keywords.map((keyword) => ({ keyword: keyword.toUpperCase(), categoryName, config }))
+    )
+    .sort((a, b) => b.keyword.length - a.keyword.length);
+
+const DEFAULT_META = { icon: 'wallet-outline', color: '#8E8E93' };
+
+/**
  * Categorize a transaction using 4-layer hybrid approach
  * @param {Object} transaction - Transaction object with name, category fields
  * @returns {Promise<Object>} - { category, icon, color, source, needsAI }
@@ -183,39 +230,33 @@ const categorizeTransaction = async (transaction) => {
     const merchantName = (transaction.merchant_name || '').toUpperCase();
     const searchText = `${name} ${merchantName}`;
 
-    for (const [categoryName, config] of Object.entries(CATEGORY_PATTERNS)) {
-        for (const keyword of config.keywords) {
-            if (searchText.includes(keyword.toUpperCase())) {
-                return {
-                    category: categoryName,
-                    icon: config.icon,
-                    color: config.color,
-                    source: 'pattern',
-                    needsAI: false
-                };
-            }
+    for (const { keyword, categoryName, config } of KEYWORD_INDEX) {
+        if (searchText.includes(keyword)) {
+            return {
+                category: categoryName,
+                icon: config.icon,
+                color: config.color,
+                source: 'pattern',
+                needsAI: false
+            };
         }
     }
 
-    // Layer 2: Use Plaid category if available
+    // Layer 2: Fold Plaid's taxonomy into ours.
+    //
+    // This used to return Plaid's top-level string verbatim, which is what put
+    // two vocabularies into one list: a keyword hit produced "Restaurants" and
+    // a miss produced "Food and Drink", so the same category appeared twice.
+    // canonicalizeCategory reads the full array, so a coffee shop resolves to
+    // Coffee & Snacks rather than collapsing to its parent.
     if (transaction.category && transaction.category.length > 0 && transaction.category[0]) {
-        const plaidCategory = transaction.category[0];
-        // Map common Plaid categories to our icons/colors
-        const plaidMapping = {
-            'Food and Drink': { icon: 'fast-food-outline', color: '#FF6B6B' },
-            'Travel': { icon: 'airplane-outline', color: '#FF9500' },
-            'Shops': { icon: 'bag-outline', color: '#FF2D92' },
-            'Transfer': { icon: 'paper-plane-outline', color: '#007AFF' },
-            'Payment': { icon: 'card-outline', color: '#64D2FF' },
-            'Recreation': { icon: 'game-controller-outline', color: '#AF52DE' },
-            'Service': { icon: 'pricetag-outline', color: '#FF3B30' },
-            'Bank Fees': { icon: 'pricetag-outline', color: '#F44336' },
-        };
+        const canonical = canonicalizeCategory(transaction.category);
+        const meta = CATEGORY_PATTERNS[canonical] || DEFAULT_META;
 
         return {
-            category: plaidCategory,
-            icon: plaidMapping[plaidCategory]?.icon || 'wallet-outline',
-            color: plaidMapping[plaidCategory]?.color || '#8E8E93',
+            category: canonical,
+            icon: meta.icon,
+            color: meta.color,
             source: 'plaid',
             needsAI: false
         };

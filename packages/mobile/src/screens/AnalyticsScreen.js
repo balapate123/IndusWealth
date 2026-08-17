@@ -65,15 +65,6 @@ const formatCompactCurrency = (amount) => {
     return `$${num.toFixed(0)}`;
 };
 
-// Normalize category names for comparison (handles "Transfer" vs "Transfers", case differences)
-const normalizeCategory = (cat) => {
-    if (!cat) return '';
-    return cat.toLowerCase()
-        .replace(/s$/, '')
-        .replace(/\s+/g, '')
-        .replace(/[&]/g, 'and');
-};
-
 const makeStyles = (t) => StyleSheet.create({
     scrollContent: { paddingBottom: 120 },
 
@@ -291,7 +282,7 @@ const AnalyticsScreen = ({ navigation }) => {
             }
 
             if (transactions.length > 0) {
-                const targetCategory = normalizeCategory(category.category);
+                const targetCategory = category.category;
 
                 const dateThreshold = new Date();
                 dateThreshold.setDate(new Date().getDate() - selectedPeriod);
@@ -301,8 +292,11 @@ const AnalyticsScreen = ({ navigation }) => {
                     if (parseFloat(tx.amount) <= 0) return false;
                     if (new Date(tx.date) < dateThreshold) return false;
 
-                    const txCategoryName = tx.category?.[0] || categorizeTransaction(tx).category;
-                    return normalizeCategory(txCategoryName) === targetCategory;
+                    // Both sides are canonical now, so this is an exact match.
+                    // It used to read tx.category[0] — Plaid's raw name — and
+                    // compare it to our name through a plural-stripping
+                    // normalizer, which is why the drill-down missed rows.
+                    return categorizeTransaction(tx).category === targetCategory;
                 });
 
                 filtered.sort((a, b) => new Date(b.date) - new Date(a.date));

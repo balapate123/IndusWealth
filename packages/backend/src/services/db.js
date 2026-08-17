@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const { encrypt, decrypt } = require('./encryption');
+const { mergeCanonicalRows } = require('./category_map');
 
 // PostgreSQL connection pool
 const pool = new Pool(
@@ -745,10 +746,14 @@ const getFlagAnalytics = async (userId, options = {}) => {
              ${spent} GROUP BY 1 ORDER BY 2 DESC LIMIT 5`,
             params
         ),
+        // Grouped on the full Plaid path and merged in JS rather than sliced
+        // here: an ORDER BY ... LIMIT 6 ranks the *raw* vocabulary, so two
+        // halves of one canonical category can each place 8th and both fall
+        // outside the top 6 even though their sum belongs 2nd.
         pool.query(
-            `SELECT COALESCE(t.category[1], 'Other') AS category,
+            `SELECT COALESCE(NULLIF(array_to_string(t.category, ' > '), ''), 'Other') AS category_path,
                     SUM(t.amount)::float AS amount, COUNT(*)::int AS count
-             ${spent} GROUP BY 1 ORDER BY 2 DESC LIMIT 6`,
+             ${spent} GROUP BY 1`,
             params
         ),
         pool.query(
@@ -763,7 +768,10 @@ const getFlagAnalytics = async (userId, options = {}) => {
         totals,
         monthly: monthly.rows,
         top_merchants: merchants.rows,
-        categories: categories.rows,
+        categories: mergeCanonicalRows(categories.rows, {
+            pathKey: 'category_path',
+            sumFields: ['amount', 'count'],
+        }).slice(0, 6),
         accounts: accounts.rows,
     };
 };

@@ -31,7 +31,7 @@ const clampPeriod = (value) => {
 
 // Intent categories mapping
 const INTENT_CATEGORIES = {
-    fixedNeeds: ['Payments', 'Fees & Charges', 'Transfers', 'Health & Pharmacy'],
+    fixedNeeds: ['Payments', 'Fees & Charges', 'Transfers', 'Health & Pharmacy', 'Insurance'],
     growth: ['Investments', 'Income'],
     lifestyle: ['Restaurants', 'Entertainment', 'Shopping', 'Alcohol & Bars', 'Subscriptions', 'Fitness']
 };

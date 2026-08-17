@@ -4,6 +4,7 @@
  */
 
 const { pool } = require('./db');
+const { mergeCanonicalRows } = require('./category_map');
 
 /**
  * Main entry point: Get complete financial summary for a user
@@ -152,24 +153,29 @@ async function _getAccountsData(userId) {
  * Get spending summary by category for the analysis period
  */
 async function _getSpendingSummary(userId, days) {
-    // Get category spending
+    // Get category spending. Grouped on the full Plaid path and folded into our
+    // vocabulary in JS — grouping on category[1] handed the model both
+    // `food_and_drink` and `restaurants` as separate lines, so it reasoned about
+    // one category as if it were two.
     const categoryResult = await pool.query(
         `SELECT
-            COALESCE(category[1], 'Other') as category,
+            COALESCE(NULLIF(array_to_string(category, ' > '), ''), 'Other') as category_path,
             SUM(amount) as total,
             COUNT(*) as count
          FROM transactions
          WHERE user_id = $1
            AND amount > 0
            AND date >= CURRENT_DATE - INTERVAL '1 day' * $2
-         GROUP BY category[1]
-         ORDER BY total DESC`,
+         GROUP BY 1`,
         [userId, days]
     );
 
     const by_category = {};
     let total_spending = 0;
-    categoryResult.rows.forEach(row => {
+    mergeCanonicalRows(categoryResult.rows, {
+        pathKey: 'category_path',
+        sumFields: ['total', 'count'],
+    }).forEach(row => {
         by_category[row.category.toLowerCase().replace(/ /g, '_')] = Math.round(row.total);
         total_spending += row.total;
     });
