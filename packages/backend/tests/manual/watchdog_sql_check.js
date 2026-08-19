@@ -224,6 +224,36 @@ const TRANSACTIONS = [
     check('with the answer flagged separately', netflix.answered, true);
 
     // ---------------------------------------------------------------------
+    console.log('\nthe contract WatchdogScreen reads');
+    // Every field the screen touches, listed so a rename on either side fails
+    // loudly here instead of rendering 'undefined' beside a dollar amount.
+    const SCREEN_FIELDS = [
+        'id', 'name', 'amount', 'category', 'expenseClass', 'evidence',
+        'frequency', 'hasNegotiation', 'answered', 'status', 'dueDate',
+    ];
+    for (const field of SCREEN_FIELDS) {
+        ok(`every expense has ${field}`,
+            reloaded.expenses.every((e) => e[field] !== undefined));
+    }
+    ok('every class has a section on the screen',
+        reloaded.expenses.every((e) => ['subscription', 'bill', 'fixed'].includes(e.expenseClass)));
+    ok('the filter chips start with All', reloaded.categories[0] === 'All');
+    ok('and every other chip is canonical',
+        reloaded.categories.slice(1).every((c) => CANONICAL_CATEGORIES.includes(c)),
+        JSON.stringify(reloaded.categories));
+
+    // The screen renders Negotiate off hasNegotiation alone. A true here with no
+    // script behind it is a dead button all over again.
+    const { buildGuide } = require('../../src/services/merchant_guides');
+    for (const e of reloaded.expenses.filter((x) => x.hasNegotiation)) {
+        const row = (await pg.query(
+            'SELECT merchant_name, category FROM recurring_expenses WHERE id = $1', [e.id]
+        )).rows[0];
+        ok(`${e.name}: hasNegotiation implies a real script`, Boolean(buildGuide({
+            merchantName: row.merchant_name, action: 'negotiate', category: row.category,
+        })));
+    }
+
     console.log('\ncache invalidation');
     const cache = await pg.query('SELECT analysis_version FROM watchdog_analysis_cache');
     check('analysis_version is 2, so old caches re-run', cache.rows[0].analysis_version, 2);

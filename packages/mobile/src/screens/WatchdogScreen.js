@@ -12,25 +12,27 @@ import {
     Chip,
     ChipRow,
     SegmentedControl,
-    Overline,
     EmptyState,
     LoadingState,
 } from '../components/ui';
 import api from '../services/api';
+import { hasSeenWatchdogIntro, setWatchdogIntroSeen } from '../services/cache';
+import { getCategoryMeta } from '../utils/categorization';
 import CancellationBottomSheet from '../components/CancellationBottomSheet';
 import NegotiationBottomSheet from '../components/NegotiationBottomSheet';
 import AlertBanner from '../components/AlertBanner';
 
-const CATEGORIES = [
-    { id: 'all', name: 'All', icon: 'apps' },
-    { id: 'streaming', name: 'Streaming', icon: 'tv' },
-    { id: 'music', name: 'Music', icon: 'musical-notes' },
-    { id: 'telecom', name: 'Telecom', icon: 'call' },
-    { id: 'utilities', name: 'Utilities', icon: 'flash' },
-    { id: 'health', name: 'Health', icon: 'fitness' },
-    { id: 'software', name: 'Software', icon: 'laptop' },
-    { id: 'insurance', name: 'Insurance', icon: 'shield-checkmark' },
-    { id: 'other', name: 'Other', icon: 'construct' },
+/**
+ * The three sections, and the subheads that state each one's action model.
+ *
+ * Those nine words are the actual training for this screen. Once a section says
+ * "Here so you can plan around them", nothing else has to explain why a mortgage
+ * carries no buttons.
+ */
+const SECTIONS = [
+    { key: 'subscription', title: 'Subscriptions', subhead: 'You can cancel these.' },
+    { key: 'bill', title: 'Bills', subhead: 'You can often lower these.' },
+    { key: 'fixed', title: 'Fixed payments', subhead: 'Here so you can plan around them.' },
 ];
 
 const PERIOD_OPTIONS = [
@@ -41,8 +43,18 @@ const PERIOD_OPTIONS = [
 const makeStyles = (t) => StyleSheet.create({
     scrollContent: { paddingBottom: 110 },
 
-    // Savings card
-    savingsTop: {
+    // Intro
+    introHead: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: SPACING.SMALL,
+        marginBottom: SPACING.SMALL,
+    },
+    introBody: { marginTop: 6 },
+
+    // Totals
+    totalsTop: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -56,24 +68,29 @@ const makeStyles = (t) => StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    flagsBadge: {
+    countBadge: {
         backgroundColor: t.SURFACE_HIGH,
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: RADIUS.PILL,
     },
-    savingsAmount: { marginTop: 2 },
-    infoRow: {
+    heroAmount: { marginTop: 2 },
+    projection: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         gap: 5,
         marginTop: SPACING.SMALL,
     },
 
-    // Expense rows
-    expenseRow: {
-        paddingVertical: SPACING.SMALL + 4,
+    // Section headings
+    sectionHead: {
+        marginTop: SPACING.LARGE,
+        marginBottom: SPACING.SMALL,
+        marginHorizontal: SPACING.MEDIUM,
     },
+
+    // Rows
+    expenseRow: { paddingVertical: SPACING.SMALL + 4 },
     expenseDivider: {
         borderTopWidth: 1,
         borderTopColor: t.HAIRLINE,
@@ -100,20 +117,23 @@ const makeStyles = (t) => StyleSheet.create({
     expenseName: { flex: 1 },
     actions: {
         flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
         gap: SPACING.SMALL,
         marginTop: SPACING.SMALL + 2,
         marginLeft: 40 + SPACING.SMALL + 3,
     },
-    statusChip: {
+    statusPill: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 5,
         alignSelf: 'flex-start',
-        backgroundColor: t.SUCCESS_DIM,
         paddingHorizontal: 10,
         paddingVertical: 6,
         borderRadius: RADIUS.SMALL,
     },
+    keepingPill: { backgroundColor: t.SURFACE_HIGH },
+    watchingPill: { backgroundColor: t.INFO_DIM },
 });
 
 const WatchdogScreen = ({ navigation }) => {
@@ -121,16 +141,15 @@ const WatchdogScreen = ({ navigation }) => {
     const styles = useThemedStyles(makeStyles);
 
     const [expenses, setExpenses] = useState([]);
-    const [selectedCategory, setSelectedCategory] = useState('all');
-    const [flagsFound, setFlagsFound] = useState(0);
-    const [potentialSavings, setPotentialSavings] = useState(0);
+    const [categories, setCategories] = useState(['All']);
+    const [selectedCategory, setSelectedCategory] = useState('All');
+    const [totals, setTotals] = useState({ monthly: 0, annual: 0, projected: 0 });
+    const [alerts, setAlerts] = useState([]);
+    const [showAnnual, setShowAnnual] = useState(false);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
-    const [alerts, setAlerts] = useState([]);
-    const [totalMonthly, setTotalMonthly] = useState(0);
-    const [totalAnnual, setTotalAnnual] = useState(0);
-    const [showAnnual, setShowAnnual] = useState(false);
+    const [showIntro, setShowIntro] = useState(false);
     const [cancelSheet, setCancelSheet] = useState({ visible: false, expense: null, guide: null });
     const [negotiateSheet, setNegotiateSheet] = useState({ visible: false, expense: null, guide: null });
 
@@ -141,11 +160,13 @@ const WatchdogScreen = ({ navigation }) => {
 
             if (data?.success) {
                 setExpenses(data.expenses || []);
-                setPotentialSavings(data.analysis?.potential_savings || 0);
-                setFlagsFound(data.analysis?.flags_found || 0);
-                setTotalMonthly(data.analysis?.total_monthly || 0);
-                setTotalAnnual(data.analysis?.total_annual || 0);
+                setCategories(data.categories?.length ? data.categories : ['All']);
                 setAlerts(data.alerts || []);
+                setTotals({
+                    monthly: data.analysis?.total_monthly || 0,
+                    annual: data.analysis?.total_annual || 0,
+                    projected: data.analysis?.potential_savings || 0,
+                });
             }
         } catch (err) {
             console.error('Error fetching watchdog data:', err);
@@ -160,99 +181,134 @@ const WatchdogScreen = ({ navigation }) => {
         fetchData();
     }, [fetchData]);
 
+    useEffect(() => {
+        hasSeenWatchdogIntro().then((seen) => setShowIntro(!seen));
+    }, []);
+
+    const dismissIntro = useCallback(() => {
+        setShowIntro(false);
+        setWatchdogIntroSeen();
+    }, []);
+
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         fetchData();
     }, [fetchData]);
 
-    const handleAction = async (expenseId, action) => {
+    const handleAction = async (expense, action) => {
         try {
-            const result = await api.handleExpenseAction(expenseId, action);
+            const result = await api.handleExpenseAction(expense.id, action);
+            const guide = result?.data?.guide;
 
-            // If the action returned a guide, show the appropriate bottom sheet
-            if (result?.success && result?.data?.guide) {
-                const expense = expenses.find((e) => e.id === expenseId);
-                if (action === 'stop') {
-                    setCancelSheet({ visible: true, expense, guide: result.data.guide });
-                } else if (action === 'negotiate') {
-                    setNegotiateSheet({ visible: true, expense, guide: result.data.guide });
-                }
+            // The server always returns a guide for a cancel now -- merchant
+            // steps, category steps, or generic ones. It used to return null for
+            // anything outside twelve merchants, and this sheet only opens when a
+            // guide comes back, so the button flipped a hidden status and nothing
+            // appeared on screen.
+            if (guide && action === 'stop') {
+                setCancelSheet({ visible: true, expense, guide });
+            } else if (guide && action === 'negotiate') {
+                setNegotiateSheet({ visible: true, expense, guide });
             }
 
             fetchData();
         } catch (err) {
             console.error('Error processing action:', err);
+            setError('That did not go through. Pull to refresh and try again.');
         }
     };
 
-    const filteredExpenses = selectedCategory === 'all'
+    const filtered = selectedCategory === 'All'
         ? expenses
-        : expenses.filter((e) => e.category.toLowerCase().includes(selectedCategory));
+        : expenses.filter((e) => e.category === selectedCategory);
 
+    /**
+     * Actions come from the row's class, which is what structurally removes the
+     * dead taps: a button with no path behind it is never rendered. Negotiate
+     * appears only where the server confirmed a script exists, and a fixed
+     * payment -- a mortgage, a car loan -- gets nothing at all.
+     */
     const renderActions = (item) => {
-        switch (item.action) {
-            case 'negotiate':
-                return (
+        if (item.expenseClass === 'fixed') return null;
+
+        if (item.status === 'cancelling') {
+            return (
+                <View style={[styles.statusPill, styles.watchingPill]}>
+                    <Ionicons name="hourglass-outline" size={14} color={theme.INFO} />
+                    <Text variant="label" tone="info">
+                        Cancelling{item.dueDate ? ` · next charge ${item.dueDate}` : ''}
+                    </Text>
+                </View>
+            );
+        }
+
+        if (item.status === 'negotiating') {
+            return (
+                <View style={[styles.statusPill, styles.watchingPill]}>
+                    <Ionicons name="call-outline" size={14} color={theme.INFO} />
+                    <Text variant="label" tone="info">
+                        Negotiating{item.dueDate ? ` · next bill ${item.dueDate}` : ''}
+                    </Text>
+                </View>
+            );
+        }
+
+        // The user said they want this one. Saying so and then flagging it again
+        // next week is the thing the copy promises not to do.
+        if (item.answered) {
+            return (
+                <TouchableOpacity
+                    style={[styles.statusPill, styles.keepingPill]}
+                    onPress={() => handleAction(item, 'undo')}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Stop keeping ${item.name}`}
+                >
+                    <Ionicons name="checkmark-circle" size={14} color={theme.SUCCESS} />
+                    <Text variant="label" tone="secondary">Keeping · undo</Text>
+                </TouchableOpacity>
+            );
+        }
+
+        return (
+            <>
+                {item.expenseClass === 'subscription' && (
                     <Button
-                        title="Negotiate"
-                        variant="secondary"
-                        size="sm"
-                        onPress={() => handleAction(item.id, 'negotiate')}
-                    />
-                );
-            case 'stop':
-                return (
-                    <Button
-                        title="Stop"
+                        title="Cancel…"
                         variant="danger"
                         size="sm"
-                        icon="close-circle"
-                        onPress={() => handleAction(item.id, 'stop')}
+                        onPress={() => handleAction(item, 'stop')}
                     />
-                );
-            case 'active':
-                return (
-                    <View style={styles.statusChip}>
-                        <Ionicons name="checkmark-circle" size={14} color={theme.SUCCESS} />
-                        <Text variant="label" tone="success">Active</Text>
-                    </View>
-                );
-            default:
-                return (
-                    <>
-                        <Button
-                            title="Cancel"
-                            variant="danger"
-                            size="sm"
-                            icon="close-circle"
-                            onPress={() => handleAction(item.id, 'stop')}
-                        />
-                        <Button
-                            title="Negotiate"
-                            variant="secondary"
-                            size="sm"
-                            onPress={() => handleAction(item.id, 'negotiate')}
-                        />
-                    </>
-                );
-        }
+                )}
+                {item.hasNegotiation && (
+                    <Button
+                        title={item.expenseClass === 'bill' ? 'Lower this bill…' : 'Negotiate…'}
+                        variant="secondary"
+                        size="sm"
+                        onPress={() => handleAction(item, 'negotiate')}
+                    />
+                )}
+                <Button
+                    title="Keep"
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => handleAction(item, 'keep')}
+                />
+            </>
+        );
     };
 
-    const renderExpenseItem = (item, index) => {
-        const initial = item.name.charAt(0).toUpperCase();
-        // Merchant-supplied colour is data; otherwise fall back to the ramp so
-        // every logo tile still reads as part of one system.
-        const tint = item.logoColor || categoryColor(theme, index);
+    const renderExpense = (item, index) => {
+        const meta = getCategoryMeta(item.category);
+        // A merchant's own brand colour is data; otherwise the category's
+        // identity hue, so the tile means the same thing it means on Analytics.
+        const tint = item.logoColor || categoryColor(theme, meta.colorIndex);
+        const actions = renderActions(item);
 
         return (
             <View key={item.id} style={[styles.expenseRow, index > 0 && styles.expenseDivider]}>
                 <View style={styles.expenseTop}>
                     <View style={[styles.logo, { backgroundColor: alpha(tint, 0.16) }]}>
-                        {item.category === 'Music' ? (
-                            <Ionicons name="musical-notes" size={20} color={tint} />
-                        ) : (
-                            <Text variant="h2" color={tint}>{initial}</Text>
-                        )}
+                        <Text variant="h2" color={tint}>{item.name.charAt(0).toUpperCase()}</Text>
                     </View>
 
                     <View style={styles.expenseBody}>
@@ -262,14 +318,36 @@ const WatchdogScreen = ({ navigation }) => {
                             </Text>
                             <Text variant="num">${item.amount.toFixed(2)}</Text>
                         </View>
-                        <Text variant="meta" tone="muted">
-                            {item.dueDate ? `Due ${item.dueDate}` : item.frequency} · {item.category}
-                            {item.confidence === 'high' ? ' ●' : item.confidence === 'medium' ? ' ○' : ''}
+                        {/*
+                          * The evidence line, replacing the '●' and '○'
+                          * confidence dots that never had a legend anywhere in
+                          * the app. "Charged on the 14th, 4 months running"
+                          * needs no explaining, and it shows its working.
+                          */}
+                        <Text variant="meta" tone="muted" numberOfLines={1}>
+                            {item.evidence || item.frequency} · {item.category}
                         </Text>
                     </View>
                 </View>
 
-                <View style={styles.actions}>{renderActions(item)}</View>
+                {actions ? <View style={styles.actions}>{actions}</View> : null}
+            </View>
+        );
+    };
+
+    const renderSection = ({ key, title, subhead }) => {
+        const rows = filtered.filter((e) => (e.expenseClass || 'subscription') === key);
+        if (rows.length === 0) return null;
+
+        return (
+            <View key={key}>
+                <View style={styles.sectionHead}>
+                    <Text variant="overline" tone="muted">{title}</Text>
+                    <Text variant="meta" tone="secondary">{subhead}</Text>
+                </View>
+                <Card padded={false} style={{ paddingHorizontal: SPACING.MEDIUM - 2 }}>
+                    {rows.map(renderExpense)}
+                </Card>
             </View>
         );
     };
@@ -277,10 +355,13 @@ const WatchdogScreen = ({ navigation }) => {
     if (loading) {
         return (
             <Screen centered>
-                <LoadingState message="Analyzing your expenses..." />
+                <LoadingState message="Looking for repeating payments…" />
             </Screen>
         );
     }
+
+    const nothingAnywhere = expenses.length === 0;
+    const nothingInFilter = !nothingAnywhere && filtered.length === 0;
 
     return (
         <>
@@ -296,57 +377,110 @@ const WatchdogScreen = ({ navigation }) => {
                 onRefresh={onRefresh}
                 contentContainerStyle={styles.scrollContent}
             >
-                {/* Savings overview */}
-                <Card>
-                    <View style={styles.savingsTop}>
-                        <View style={styles.piggyIcon}>
-                            <MaterialCommunityIcons name="piggy-bank" size={26} color={theme.ACCENT} />
+                {showIntro && (
+                    <Card>
+                        <View style={styles.introHead}>
+                            <Text variant="title">What Watchdog does</Text>
+                            <TouchableOpacity
+                                onPress={dismissIntro}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                accessibilityRole="button"
+                                accessibilityLabel="Dismiss"
+                            >
+                                <Ionicons name="close" size={20} color={theme.TEXT_MUTED} />
+                            </TouchableOpacity>
                         </View>
-                        <View style={styles.flagsBadge}>
-                            <Text variant="label" tone="secondary">
-                                {flagsFound} flag{flagsFound === 1 ? '' : 's'} found
-                            </Text>
-                        </View>
-                    </View>
-
-                    <SegmentedControl
-                        options={PERIOD_OPTIONS}
-                        value={showAnnual}
-                        onChange={setShowAnnual}
-                        inset={false}
-                        style={{ marginBottom: SPACING.MEDIUM }}
-                    />
-
-                    <Text variant="overline" tone="muted">
-                        {showAnnual ? 'Total annual subscriptions' : 'Potential monthly savings'}
-                    </Text>
-                    <Text variant="hero" style={styles.savingsAmount}>
-                        ${showAnnual ? totalAnnual.toFixed(2) : potentialSavings.toFixed(2)}
-                    </Text>
-
-                    <View style={styles.infoRow}>
-                        <Ionicons name="information-circle-outline" size={14} color={theme.TEXT_MUTED} />
-                        <Text variant="meta" tone="muted" style={{ flex: 1 }}>
-                            {showAnnual
-                                ? `$${totalMonthly.toFixed(2)}/month across all subscriptions`
-                                : 'Based on your recurring expense analysis'}
+                        <Text variant="body" tone="secondary">
+                            We read your transaction history for payments that repeat —
+                            subscriptions, bills, and fixed payments like rent or a loan.
                         </Text>
-                    </View>
-                </Card>
+                        <Text variant="body" tone="secondary" style={styles.introBody}>
+                            We can&apos;t cancel or renegotiate anything for you. Only you can do
+                            that. What we can do is show you exactly what you&apos;re committed to,
+                            and how to get out of it.
+                        </Text>
+                        <Button
+                            title="Got it"
+                            variant="secondary"
+                            size="sm"
+                            onPress={dismissIntro}
+                            style={{ marginTop: SPACING.MEDIUM, alignSelf: 'flex-start' }}
+                        />
+                    </Card>
+                )}
+
+                {!nothingAnywhere && (
+                    <Card>
+                        <View style={styles.totalsTop}>
+                            <View style={styles.piggyIcon}>
+                                <MaterialCommunityIcons name="piggy-bank" size={26} color={theme.ACCENT} />
+                            </View>
+                            <View style={styles.countBadge}>
+                                <Text variant="label" tone="secondary">
+                                    {expenses.length} repeating
+                                </Text>
+                            </View>
+                        </View>
+
+                        <SegmentedControl
+                            options={PERIOD_OPTIONS}
+                            value={showAnnual}
+                            onChange={setShowAnnual}
+                            inset={false}
+                            style={{ marginBottom: SPACING.MEDIUM }}
+                        />
+
+                        {/*
+                          * The hero is what the user is actually committed to --
+                          * a measured sum. It used to be "potential monthly
+                          * savings", which counted money nobody had saved:
+                          * amounts of things marked for cancellation plus a
+                          * discount percentage parsed out of a prose string.
+                          * That number moves below, labelled as the projection
+                          * it is, and is replaced here by confirmed savings once
+                          * the watch loop can verify a charge actually stopped.
+                          */}
+                        <Text variant="overline" tone="muted">
+                            {showAnnual ? 'Committed each year' : 'Committed each month'}
+                        </Text>
+                        <Text variant="hero" style={styles.heroAmount}>
+                            ${(showAnnual ? totals.annual : totals.monthly).toFixed(2)}
+                        </Text>
+
+                        {totals.projected > 0 && (
+                            <View style={styles.projection}>
+                                <Ionicons name="trending-down-outline" size={14} color={theme.TEXT_MUTED} />
+                                <Text variant="meta" tone="muted" style={{ flex: 1 }}>
+                                    Up to ${totals.projected.toFixed(2)} a month less, if you follow
+                                    through on what you&apos;ve flagged.
+                                </Text>
+                            </View>
+                        )}
+                    </Card>
+                )}
 
                 {alerts.length > 0 && <AlertBanner alerts={alerts} />}
 
-                <ChipRow style={{ marginBottom: SPACING.MEDIUM }}>
-                    {CATEGORIES.map((category) => (
-                        <Chip
-                            key={category.id}
-                            label={category.name}
-                            icon={category.icon}
-                            active={selectedCategory === category.id}
-                            onPress={() => setSelectedCategory(category.id)}
-                        />
-                    ))}
-                </ChipRow>
+                {categories.length > 2 && (
+                    <ChipRow style={{ marginBottom: SPACING.SMALL }}>
+                        {categories.map((name) => {
+                            const meta = name === 'All' ? null : getCategoryMeta(name);
+                            return (
+                                <Chip
+                                    key={name}
+                                    label={name}
+                                    // Chip renders Ionicons only; a category whose
+                                    // glyph lives in another set goes without one
+                                    // rather than rendering a missing-glyph box.
+                                    icon={meta?.library === 'Ionicons' ? meta.icon : undefined}
+                                    color={meta ? categoryColor(theme, meta.colorIndex) : undefined}
+                                    active={selectedCategory === name}
+                                    onPress={() => setSelectedCategory(name)}
+                                />
+                            );
+                        })}
+                    </ChipRow>
+                )}
 
                 {error && (
                     <Card style={{ backgroundColor: theme.DANGER_DIM, borderColor: theme.DANGER_DIM }}>
@@ -354,28 +488,27 @@ const WatchdogScreen = ({ navigation }) => {
                     </Card>
                 )}
 
-                <Overline>Recurring expenses</Overline>
-
-                {filteredExpenses.length > 0 ? (
-                    <Card padded={false} style={{ paddingHorizontal: SPACING.MEDIUM - 2 }}>
-                        {filteredExpenses.map((item, index) => renderExpenseItem(item, index))}
-                    </Card>
-                ) : !error ? (
+                {nothingAnywhere && !error && (
                     <Card>
-                        {expenses.length === 0 ? (
-                            <EmptyState
-                                icon="shield-outline"
-                                title="Connect your bank to activate Watchdog"
-                                message="We need at least 2 months of transaction history to detect recurring expenses."
-                            />
-                        ) : (
-                            <EmptyState
-                                icon="checkmark-circle-outline"
-                                message="No flagged expenses in this category"
-                            />
-                        )}
+                        <EmptyState
+                            icon="shield-outline"
+                            title="Not enough history yet"
+                            message={
+                                'We wait until we have seen a payment at least three times before '
+                                + 'calling it recurring. Twice could be a coincidence.\n\n'
+                                + 'Keep your account connected and check back next month.'
+                            }
+                        />
                     </Card>
-                ) : null}
+                )}
+
+                {nothingInFilter && (
+                    <Card>
+                        <EmptyState icon="funnel-outline" message="Nothing in this category." />
+                    </Card>
+                )}
+
+                {SECTIONS.map(renderSection)}
             </Screen>
 
             <CancellationBottomSheet

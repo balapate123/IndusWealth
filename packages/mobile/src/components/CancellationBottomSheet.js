@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RADIUS, SPACING, alpha } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
-import { BottomSheet, Card, Text, Button } from './ui';
+import { BottomSheet, Text, Button } from './ui';
 
 const makeStyles = (t) => StyleSheet.create({
     header: {
@@ -64,8 +64,17 @@ const makeStyles = (t) => StyleSheet.create({
         borderRadius: RADIUS.MEDIUM,
         marginTop: SPACING.MEDIUM,
     },
-    altCard: { marginBottom: SPACING.SMALL },
+    // The most important copy in the feature: it arrives at the moment of
+    // intent and cannot be skipped.
+    expectation: {
+        backgroundColor: t.SURFACE_HIGH,
+        padding: SPACING.MEDIUM,
+        borderRadius: RADIUS.MEDIUM,
+        marginBottom: SPACING.SMALL,
+        gap: 6,
+    },
     confirm: { marginTop: SPACING.LARGE },
+    confirmNote: { marginTop: SPACING.SMALL, textAlign: 'center' },
 });
 
 const CancellationBottomSheet = ({ visible, expense, guide, onClose, onConfirm }) => {
@@ -102,6 +111,24 @@ const CancellationBottomSheet = ({ visible, expense, guide, onClose, onConfirm }
                 </TouchableOpacity>
             </View>
 
+            {/*
+              * We cannot cancel anything, and no app can -- there is no API for
+              * it. Saying so before the first tap is what stops "I pressed
+              * Cancel and got charged anyway", which is a one-star review and a
+              * support ticket the user is right to open.
+              */}
+            <View style={styles.expectation}>
+                <Text variant="bodyMed">
+                    You&apos;ll do this on {guide.merchantName || expense?.name}&apos;s
+                    site — we can&apos;t cancel it for you.
+                </Text>
+                <Text variant="meta" tone="secondary">
+                    {guide.estimatedTime
+                        ? `About ${guide.estimatedTime}. Come back and mark it done when you have.`
+                        : 'Come back and mark it done when you have.'}
+                </Text>
+            </View>
+
             <Text variant="title" style={styles.sectionTitle}>How to cancel</Text>
             {guide.steps?.map((step, index) => (
                 <View key={index} style={styles.stepRow}>
@@ -111,13 +138,6 @@ const CancellationBottomSheet = ({ visible, expense, guide, onClose, onConfirm }
                     <Text variant="body" style={{ flex: 1 }}>{step}</Text>
                 </View>
             ))}
-
-            {guide.estimatedTime && (
-                <View style={styles.badge}>
-                    <Ionicons name="time-outline" size={14} color={theme.ACCENT} />
-                    <Text variant="meta" tone="accent">Estimated time: {guide.estimatedTime}</Text>
-                </View>
-            )}
 
             {guide.directUrl && (
                 <Button
@@ -150,20 +170,14 @@ const CancellationBottomSheet = ({ visible, expense, guide, onClose, onConfirm }
                 </View>
             )}
 
-            {guide.alternatives?.length > 0 && (
-                <>
-                    <Text variant="title" style={styles.sectionTitle}>Alternatives</Text>
-                    {guide.alternatives.map((alt, index) => (
-                        <Card key={index} inset={false} tone="high" style={styles.altCard}>
-                            <Text variant="bodyMed">{alt.name}</Text>
-                            {alt.price !== null && (
-                                <Text variant="meta" tone="success">${alt.price}/mo</Text>
-                            )}
-                            {alt.note && <Text variant="meta" tone="muted">{alt.note}</Text>}
-                        </Card>
-                    ))}
-                </>
-            )}
+            {/*
+              * The Alternatives block is gone on purpose. It hardcoded
+              * competitor names and prices that were already going stale in a
+              * JSON file, and it was the last place in the app recommending a
+              * named product off the user's own spending -- the shape that cost
+              * us a Play Store rejection. Someone cancelling Netflix does not
+              * need us to list Crave.
+              */}
 
             <Button
                 title="I've cancelled this"
@@ -172,6 +186,9 @@ const CancellationBottomSheet = ({ visible, expense, guide, onClose, onConfirm }
                 block
                 style={styles.confirm}
             />
+            <Text variant="meta" tone="muted" style={styles.confirmNote}>
+                We&apos;ll mark it as cancelled here.
+            </Text>
         </BottomSheet>
     );
 };

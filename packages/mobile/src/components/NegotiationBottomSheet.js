@@ -55,7 +55,13 @@ const makeStyles = (t) => StyleSheet.create({
         gap: SPACING.SMALL,
         marginBottom: SPACING.SMALL,
     },
-    altCard: { marginBottom: SPACING.SMALL },
+    expectation: {
+        backgroundColor: t.SURFACE_HIGH,
+        padding: SPACING.MEDIUM,
+        borderRadius: RADIUS.MEDIUM,
+        marginBottom: SPACING.SMALL,
+        gap: 6,
+    },
     confirm: { marginTop: SPACING.LARGE },
 });
 
@@ -98,11 +104,30 @@ const NegotiationBottomSheet = ({ visible, expense, guide, onClose, onNegotiated
                 </TouchableOpacity>
             </View>
 
+            {/*
+              * Same rule as the cancel sheet: we cannot do this for them, and
+              * pretending otherwise is the whole reason the buttons felt dead.
+              */}
+            <View style={styles.expectation}>
+                <Text variant="bodyMed">
+                    You&apos;ll need to call them — we can&apos;t negotiate for you.
+                </Text>
+                <Text variant="meta" tone="secondary">
+                    Ask for &quot;retention&quot; or &quot;cancellations&quot;. Those agents can
+                    approve discounts front-line support cannot. Expect 15–20 minutes.
+                </Text>
+            </View>
+
             {guide.expectedDiscount && (
                 <View style={styles.discountBanner}>
                     <Ionicons name="trending-down" size={18} color={theme.SUCCESS} />
                     <Text variant="bodyMed" tone="success" style={{ flex: 1 }}>
-                        Expected discount: {guide.expectedDiscount}
+                        {/*
+                          * "Expected discount" is a promise we do not control.
+                          * A target is something the user can aim at and miss
+                          * without us having lied to them.
+                          */}
+                        What to aim for: {guide.expectedDiscount}
                     </Text>
                 </View>
             )}
@@ -150,18 +175,6 @@ const NegotiationBottomSheet = ({ visible, expense, guide, onClose, onNegotiated
                             <Ionicons name="checkmark-circle" size={14} color={theme.SUCCESS} />
                             <Text variant="meta" tone="secondary" style={{ flex: 1 }}>{tip}</Text>
                         </View>
-                    ))}
-                </>
-            )}
-
-            {guide.alternatives?.length > 0 && (
-                <>
-                    <Text variant="title" style={styles.sectionTitle}>Competitor options</Text>
-                    {guide.alternatives.map((alt, index) => (
-                        <Card key={index} inset={false} tone="high" style={styles.altCard}>
-                            <Text variant="bodyMed">{alt.name}</Text>
-                            {alt.note && <Text variant="meta" tone="muted">{alt.note}</Text>}
-                        </Card>
                     ))}
                 </>
             )}

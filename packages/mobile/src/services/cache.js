@@ -9,6 +9,35 @@ const CACHE_KEYS = {
     REFRESH_TOKEN: '@induswealth_refresh_token',
     LAST_FETCH: '@induswealth_last_fetch',
     PROFILE_PICTURE: '@induswealth_profile_picture',
+    WATCHDOG_INTRO_SEEN: '@induswealth_watchdog_intro_seen',
+};
+
+// ============ ONE-TIME UI FLAGS ============
+
+/**
+ * Whether the Watchdog explainer has been dismissed.
+ *
+ * Local rather than server-side: it is a UI preference, not a financial fact,
+ * and showing it once more on a new device costs nothing. Contrast the spotlight
+ * and check-in cooldowns, which are server-owned precisely so two devices cannot
+ * disagree about whether the user has been interrupted this week.
+ */
+export const hasSeenWatchdogIntro = async () => {
+    try {
+        return (await AsyncStorage.getItem(CACHE_KEYS.WATCHDOG_INTRO_SEEN)) === 'true';
+    } catch {
+        // A storage failure must not hide the screen. Showing the card again is
+        // the harmless direction.
+        return false;
+    }
+};
+
+export const setWatchdogIntroSeen = async () => {
+    try {
+        await AsyncStorage.setItem(CACHE_KEYS.WATCHDOG_INTRO_SEEN, 'true');
+    } catch {
+        // Nothing to do — it reappears next launch.
+    }
 };
 
 // ============ AUTH TOKEN ============
