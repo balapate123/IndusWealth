@@ -339,3 +339,122 @@ The point of writing it first. Each promise is now a testable rule:
    already on screen today — aliased merchants read as `Netflix`, everything else
    as `PETRO-CANADA`. Needs title-casing for unaliased names before the rewrite
    puts more of them in front of people.
+
+---
+
+# Addendum — two constraints raised in review (2026-08-19)
+
+## 14. One category vocabulary, again
+
+Watchdog carries its own category list in `merchant_categories.json` (Streaming,
+Music, Telecom, Utilities, Software, Health, Insurance, News, Other). The rest of
+the app uses `CANONICAL_CATEGORIES` in `services/category_map.js`. They disagree
+on every row that matters:
+
+| Merchant | Watchdog | Canonical |
+|---|---|---|
+| Netflix | Streaming | Subscriptions |
+| GoodLife Fitness | Health | Fitness |
+| Rogers | **Other** | Utilities |
+| Pioneer, Petro-Canada, Esso | **Other** | Gas & Fuel |
+| Intact Insurance | **Other** | Insurance |
+
+This is the third vocabulary in the app, and the same defect commit `0d42375`
+("one vocabulary, not two") fixed for transactions. A user reads one name for a
+merchant on Analytics and a different one for the same merchant here.
+
+It is also why so much reads as `Other`: `merchantToCategoryMap` only knows the
+41 display names hardcoded in that file, so every merchant outside the list falls
+through. The category filter chips on the screen are largely decorative as a
+result.
+
+**The rule.** One file is doing two jobs and they need separating:
+
+- **The category a user sees comes from `category_map.js`, always.** Watchdog
+  calls `canonicalizeCategory(tx.category)` like every other surface. Pioneer is
+  `Gas & Fuel` on Analytics and `Gas & Fuel` here.
+- **`merchant_categories.json` stops being a category list.** It becomes what it
+  actually is — an internal lookup answering "do we hold a cancellation or
+  negotiation guide for this merchant". Never displayed.
+- The **class** (Subscription / Bill / Fixed payment) derives from the canonical
+  category plus the Plaid path, not from the Watchdog list.
+- Filter chips are rebuilt from canonical names, so they match the chips
+  elsewhere in the app.
+
+A parity test belongs here, matching `tests/category_map.test.mjs`: no
+user-visible Watchdog category may be a string absent from
+`CANONICAL_CATEGORIES`.
+
+## 15. The guide key is not a display name
+
+Found while checking the above, and it is the second independent cause of the
+dead buttons:
+
+```
+normalized ROGERS   -> cancellationGuides['ROGERS']   undefined
+normalized BELL     -> undefined
+normalized TELUS    -> undefined
+normalized ADOBE    -> undefined
+normalized ENBRIDGE -> undefined
+```
+
+**Five of the twelve guides never resolve.** `cancellation_guides.json` is keyed
+on the display name `Rogers`, while `normalizeMerchantName` yields `ROGERS` —
+`merchant_aliases.json` holds `ROGERS WIRELESS` and `ROGERS CABLE` but no bare
+`ROGERS`, which is exactly what `ROGERS *MOBILE` reduces to once the `*` suffix
+is stripped.
+
+Four of those five (Rogers, Bell, Telus, Adobe) are the only merchants carrying
+negotiation scripts. **Negotiate therefore works for one merchant in the entire
+app: GoodLife Fitness.** The twelve-merchant ceiling was never the real limit;
+the effective ceiling is seven, and one for negotiation.
+
+**The rule.** A merchant key is a slug, never a display name — the discipline
+`insight_identity.js` already applies to model-authored strings. Guides get a
+`merchant_key` (`rogers`, `goodlife_fitness`), lookup is case- and
+punctuation-insensitive, and a test asserts every key in
+`cancellation_guides.json` resolves from its own aliases. That test is what stops
+this recurring the next time a merchant is added.
+
+## 16. Notifications for the watch outcome
+
+"Netflix charged you again" is the most valuable message this feature can send,
+and it is time-sensitive — disputing a charge has a window. It earns a
+notification. Four constraints shape it:
+
+**Content freezes at schedule time.** Same rule as goal reminders. When the user
+taps "I've cancelled this" we do not yet know what happens on the 14th, so the
+body can never carry the outcome. It is evergreen and points inward:
+
+> **Netflix — your next charge was due Aug 14**
+> Tap to see whether it stopped.
+
+The result is fetched on open and presented then. Identical split to
+`POST /goals/milestones/check`.
+
+**Fires on the expected date plus three days.** Charges post late. A notification
+on the exact day would resolve "it stopped" before the charge had a chance to
+land, and a false all-clear is worse than silence. Early is harmless for a
+reminder; this is a measurement.
+
+**Dated one-shot, not a repeating trigger.** Unlike goal and card reminders, a
+watch is a single future event that expires — but it holds a slot until it fires.
+
+**Budget.** iOS allows 64 pending. The current ceiling is 25 goals x2 + 10 cards
+x2 + 1 check-in = 46. Watches cap at **8 concurrent**, taking it to 54 with
+headroom left. Eight is generous; people do not cancel eight things at once.
+
+Rules carried over from what already exists:
+
+- Scheduling runs through `reminderSyncQueue` in `services/notifications.js`.
+  Cancel-then-reschedule is not concurrency-safe, and two overlapping runs
+  schedule everything twice.
+- Android gets the **card-due-date treatment** — its own channel at HIGH
+  importance. A charge you believed you had cancelled costs real money, and
+  silencing savings nudges must not silence this.
+- The server records what was actually presented, so two devices cannot both
+  announce one outcome. The failure direction is a duplicate, never a loss.
+- **Never scold.** The charged-again copy in section 9 leads with the benign
+  explanation, and the notification inherits that.
+- Nothing about the outcome is stored in the notification, only the schedule. A
+  stored outcome goes stale between write and read.
