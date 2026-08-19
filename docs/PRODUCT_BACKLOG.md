@@ -24,31 +24,29 @@ did nothing. Diagnosis, design and backend are done; the mobile screen is not.
 | `adca102` | `services/recurrence.js` — pure detector, 29 tests, 11 mutations all caught |
 | `c42180c` | Spec addendum §14–16: one vocabulary, slug guide keys, notification design |
 | `cb55c5a` | Wiring — canonical categories, slug guides, `expense_class` column, Keep sticks |
+| `4a0f1dd` | The mobile screen — three sections, class-gated buttons, evidence lines, intro card, sheet copy |
 
 Verified with `node tests/manual/watchdog_sql_check.js` (PGlite, 27 checks,
 drives the shipped service with `pool.query` redirected).
 
-### 1. The mobile screen — do this next (~1 day)
+### 1. The mobile screen — DONE (`4a0f1dd`)
 
-Everything the backend returns is invisible until this lands.
+Sections with subheads, evidence lines, class-gated buttons, `Keep` surfaced for
+the first time, canonical filter chips, both sheets opening with "we can't cancel
+it for you", competitor blocks cut, intro card.
 
-- Three sections with their subheads — *"You can cancel these" / "You can often
-  lower these" / "Here so you can plan around them"*. Those nine words are the
-  whole tutorial.
-- Evidence line (`Charged on the 14th · 4 months running`) replacing the `●`/`○`
-  confidence dots, which have never had a legend anywhere in the app.
-- Class-gated buttons: `Cancel…` / `Negotiate…` only where `hasNegotiation` /
-  nothing at all on fixed payments.
-- **Surface `Keep`.** The endpoint has always existed and the screen has never
-  rendered it. Same for `snooze` and `undo`.
-- Filter chips rebuilt from canonical categories so they match Analytics.
-- Sheet header copy — *"You'll do this on Netflix's site, we can't cancel it for
-  you"* — the single most important string in the feature.
-- Drop the `alternatives` block from both sheets; `Expected discount` becomes
-  `What to aim for`.
-- Intro card, first visit only, dismissal in AsyncStorage.
+Two things deliberately deferred to the watch loop, and they are the reason it
+should be next:
 
-### 2. The watch loop (~half day, backend)
+- **No "we'll check your next statement" anywhere.** Nothing checks yet, and
+  shipping that promise before the loop exists is the exact failure this rebuild
+  is undoing. The cancel sheet says only "We'll mark it as cancelled here".
+- **The hero number is committed spend, not confirmed savings.** Committed spend
+  is measured and true today; confirmed savings would read `$0` forever until the
+  loop lands. Swap it then — the comment in `WatchdogScreen.js` says so.
+- `snooze` is still unsurfaced. `Keep` and `undo` are wired.
+
+### 2. The watch loop — do this next (~half day, backend)
 
 What makes the buttons worth pressing.
 
