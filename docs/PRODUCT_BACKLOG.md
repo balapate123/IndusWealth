@@ -14,7 +14,8 @@ ideas look attractive and have already cost us a Play Store rejection.
 ## A. Watchdog rebuild — in flight
 
 The screen was showing gas stations as subscriptions and its two action buttons
-did nothing. Diagnosis, design and backend are done; the mobile screen is not.
+did nothing. Diagnosis, design, backend and screen are done. The watch loop --
+the part that verifies a cancellation actually worked -- is not.
 
 ### Done (on `dev`, unpushed)
 
@@ -26,8 +27,9 @@ did nothing. Diagnosis, design and backend are done; the mobile screen is not.
 | `cb55c5a` | Wiring — canonical categories, slug guides, `expense_class` column, Keep sticks |
 | `4a0f1dd` | The mobile screen — three sections, class-gated buttons, evidence lines, intro card, sheet copy |
 
-Verified with `node tests/manual/watchdog_sql_check.js` (PGlite, 27 checks,
-drives the shipped service with `pool.query` redirected).
+Verified with `node tests/manual/watchdog_sql_check.js` (PGlite, 42 checks,
+drives the shipped service with `pool.query` redirected), plus 81 backend and 48
+mobile unit tests.
 
 ### 1. The mobile screen — DONE (`4a0f1dd`)
 
