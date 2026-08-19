@@ -14,8 +14,8 @@ ideas look attractive and have already cost us a Play Store rejection.
 ## A. Watchdog rebuild — in flight
 
 The screen was showing gas stations as subscriptions and its two action buttons
-did nothing. Diagnosis, design, backend, screen and the watch loop are done.
-Notifications are not.
+did nothing. Everything on the critical path is done — detector, screen, watch
+loop, notifications. Only the loose ends in section 4 remain.
 
 ### Done (on `dev`, unpushed)
 
@@ -27,9 +27,10 @@ Notifications are not.
 | `cb55c5a` | Wiring — canonical categories, slug guides, `expense_class` column, Keep sticks |
 | `4a0f1dd` | The mobile screen — three sections, class-gated buttons, evidence lines, intro card, sheet copy |
 | `2332349` | The watch loop — did the cancellation stick, confirmed savings, outcome cards |
+| `ed1defd` | Notifications — dated one-shot per watch, evergreen body, own HIGH channel |
 
-Verified with `node tests/manual/watchdog_sql_check.js` (PGlite, 59 checks,
-drives the shipped service with `pool.query` redirected), plus 101 backend and 48
+Verified with `node tests/manual/watchdog_sql_check.js` (PGlite, 68 checks,
+drives the shipped service with `pool.query` redirected), plus 101 backend and 64
 mobile unit tests.
 
 ### 1. The mobile screen — DONE (`4a0f1dd`)
@@ -56,17 +57,18 @@ something after its due date hits it. The window is now measured from whichever
 of the action and the expected charge came later, and `openWatch` rolls a stale
 prediction forward.
 
-### 3. Notifications — do this next (~half day)
+### 3. Notifications — DONE (`ed1defd`)
 
-Design is settled in spec §16. Content freezes at schedule time, so the body can
-never carry the outcome.
+`utils/watchReminders.js` (pure), a `watchdog-outcomes` Android channel at HIGH,
+and `syncWatchReminders` through the shared queue. Dated one-shot, fires expected
++ 3 days, capped at 8 (app ceiling now 54 of 64).
 
-- Dated one-shot per watch, evergreen body, fires expected date **+ 3 days**.
-- Android HIGH-importance channel, like card due dates.
-- Cap 8 concurrent (ceiling becomes 54 of iOS's 64), through `reminderSyncQueue`.
-- Server records what was actually presented.
+`WATCH_GRACE_DAYS` in `utils/watchReminders.js` must stay equal to `GRACE_DAYS`
+in the backend's `services/watch.js`. If they drift the notification arrives
+before the outcome exists and the user opens the app to a watch still running. A
+test asserts the mobile value; nothing asserts they match each other.
 
-### 4. Loose ends
+### 4. Loose ends — all that is left
 
 - "How Watchdog works" article in Wealth Academy — the long-form home for *why
   isn't X in my list*.
