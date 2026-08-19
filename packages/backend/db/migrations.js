@@ -39,4 +39,5 @@ module.exports = [
     'add_card_due_dates.sql',
     'add_checkin_nudges.sql',
     'add_watchdog_classes.sql',
+    'add_watchdog_watches.sql',
 ];

@@ -123,9 +123,9 @@ const CancellationBottomSheet = ({ visible, expense, guide, onClose, onConfirm }
                     site — we can&apos;t cancel it for you.
                 </Text>
                 <Text variant="meta" tone="secondary">
-                    {guide.estimatedTime
-                        ? `About ${guide.estimatedTime}. Come back and mark it done when you have.`
-                        : 'Come back and mark it done when you have.'}
+                    {guide.estimatedTime ? `About ${guide.estimatedTime}. ` : ''}
+                    When you&apos;re done, tell us and we&apos;ll check your next statement
+                    to confirm it stopped.
                 </Text>
             </View>
 
@@ -187,7 +187,7 @@ const CancellationBottomSheet = ({ visible, expense, guide, onClose, onConfirm }
                 style={styles.confirm}
             />
             <Text variant="meta" tone="muted" style={styles.confirmNote}>
-                We&apos;ll mark it as cancelled here.
+                We&apos;ll watch for the next charge and tell you whether it stopped.
             </Text>
         </BottomSheet>
     );

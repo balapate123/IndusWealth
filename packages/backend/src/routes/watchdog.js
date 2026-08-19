@@ -81,6 +81,54 @@ router.post('/action', authenticateToken, validateWatchdogAction, async (req, re
     }
 });
 
+// GET /watchdog/watches/outcomes
+// Outcomes the user has not been shown yet: did the thing they cancelled
+// actually stop, did the bill they negotiated actually drop.
+//
+// Read-only on purpose. The device confirms with POST /seen only what it managed
+// to put on screen -- the goal-milestone protocol, where marking them notified
+// inside the reporting loop meant one failed app-open consumed the event forever.
+router.get('/watches/outcomes', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+
+    try {
+        const outcomes = await watchdogService.getUnpresentedOutcomes(req.user.id);
+        logger.info('Returning watch outcomes', { ...ctx, count: outcomes.length });
+
+        successResponse(res, { outcomes }, {
+            source: DATA_SOURCES.DATABASE,
+            timestamp: new Date().toISOString(),
+        });
+    } catch (error) {
+        logger.error('Failed to fetch watch outcomes', { ...ctx, error: error.message });
+        next(error);
+    }
+});
+
+// POST /watchdog/watches/:watchId/seen
+// The outcome reached the screen. Sent when it renders, never when it is
+// fetched, or a background request spends the one chance to tell them.
+router.post('/watches/:watchId/seen', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+    const watchId = parseInt(req.params.watchId, 10);
+
+    if (!Number.isInteger(watchId) || watchId < 1) {
+        return errorResponse(res, 400, 'INVALID_INPUT', 'watchId must be a positive integer', req.requestId);
+    }
+
+    try {
+        const marked = await watchdogService.markWatchPresented(req.user.id, watchId);
+        logger.info('Watch outcome marked presented', { ...ctx, watchId, marked });
+
+        // Already presented is not an error -- two devices racing is the
+        // expected case, and the second one has nothing left to do.
+        res.json({ success: true, data: { marked }, requestId: req.requestId });
+    } catch (error) {
+        logger.error('Failed to mark watch presented', { ...ctx, error: error.message });
+        next(error);
+    }
+});
+
 // GET /watchdog/summary
 // Quick stats for dashboard widget
 router.get('/summary', authenticateToken, async (req, res, next) => {

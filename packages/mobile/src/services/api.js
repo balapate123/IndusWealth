@@ -603,6 +603,14 @@ export const api = {
 
     getWatchdogSummary: () => apiRequest('/watchdog/summary'),
 
+    // Outcomes of things the user acted on: did the cancellation stick, did the
+    // bill actually drop. Read-only -- the device confirms with markWatchSeen
+    // only what it managed to put on screen, the goal-milestone protocol.
+    getWatchOutcomes: () => apiRequest('/watchdog/watches/outcomes'),
+
+    markWatchSeen: (watchId) =>
+        apiRequest(`/watchdog/watches/${watchId}/seen`, { method: 'POST' }),
+
     // Debt
     getDebtOverview: () => apiRequest('/debt'),
 

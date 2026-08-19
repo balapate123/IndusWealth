@@ -122,7 +122,7 @@ const TRANSACTIONS = [
     `);
 
     // The real migrations, in the real order.
-    for (const file of ['add_watchdog_tables.sql', 'add_watchdog_classes.sql']) {
+    for (const file of ['add_watchdog_tables.sql', 'add_watchdog_classes.sql', 'add_watchdog_watches.sql']) {
         const sql = fs.readFileSync(path.join(__dirname, '../../db', file), 'utf8');
         await pg.exec(sql);
     }
@@ -253,6 +253,84 @@ const TRANSACTIONS = [
             merchantName: row.merchant_name, action: 'negotiate', category: row.category,
         })));
     }
+
+    console.log('\nthe watch loop');
+    const watchRows = async () => (await pg.query(
+        `SELECT w.*, re.merchant_name FROM watchdog_watches w
+         JOIN recurring_expenses re ON re.id = w.recurring_expense_id
+         ORDER BY re.merchant_name`
+    )).rows;
+
+    // 'stop' on TD AUTO FINANCE and 'negotiate' on Rogers were recorded above.
+    const today = new Date().toISOString().slice(0, 10);
+    const opened = await watchRows();
+    check('acting on something opens a watch', opened.length, 2);
+    ok('and every watch expects a charge that has not happened yet',
+        opened.every((w) => new Date(w.expected_charge_date).toISOString().slice(0, 10) > today),
+        JSON.stringify(opened.map((w) => [w.merchant_name, w.expected_charge_date])));
+
+    // The fixtures are dated April to July, so a watch opened "now" would never
+    // see them. Backdate the action to put the scenario on one timeline: the
+    // user cancelled on Jul 15 and the charges below land after that.
+    await pg.query(`UPDATE watchdog_watches SET started_at = '2026-07-15'`);
+
+    // Tapping the button again must not restart the clock or double-count the
+    // saving. The partial unique index is what stops it.
+    await watchdog.recordAction(USER_ID, expenseIds['TD AUTO FINANCE'], 'stop');
+    check('tapping Cancel twice does not open a second watch', (await watchRows()).length, 2);
+
+    // Keep is a retraction, so its watch should not survive to resolve.
+    await watchdog.recordAction(USER_ID, expenseIds.Netflix, 'stop');
+    check('Netflix watch opened', (await watchRows()).length, 3);
+    await watchdog.recordAction(USER_ID, expenseIds.Netflix, 'keep');
+    check('and Keep withdraws it', (await watchRows()).length, 2);
+
+    console.log('\nresolution against real charges');
+    // The loan was cancelled and kept charging: a charge dated after the action.
+    await pg.query(
+        `INSERT INTO transactions (user_id, plaid_transaction_id, name, merchant_name, amount, date, category, pending)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,false)`,
+        [USER_ID, 'loan-after', 'TD AUTO FINANCE', 'TD AUTO FINANCE', 842.00, '2026-08-01', LOAN]
+    );
+    // Rogers came back lower, which is the negotiation working.
+    await pg.query(
+        `INSERT INTO transactions (user_id, plaid_transaction_id, name, merchant_name, amount, date, category, pending)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,false)`,
+        [USER_ID, 'rogers-after', 'ROGERS *MOBILE', 'ROGERS *MOBILE', 83.00, '2026-08-08', TEL]
+    );
+
+    await watchdog.analyzeForUser(USER_ID, true);
+    const resolvedRows = await watchRows();
+    const loanWatch = resolvedRows.find((w) => w.merchant_name === 'TD AUTO FINANCE');
+    const rogersWatch = resolvedRows.find((w) => w.merchant_name === 'ROGERS');
+
+    check('a charge after cancelling resolves as charged again', loanWatch.status, 'charged_again');
+    check('and saves nothing', parseFloat(loanWatch.saved_monthly), 0);
+    check('a smaller bill resolves as reduced', rogersWatch.status, 'reduced');
+    check('and the saving is the difference', parseFloat(rogersWatch.saved_monthly), 12);
+
+    console.log('\nconfirmed savings replaces the counterfactual');
+    const withSavings = await watchdog.analyzeForUser(USER_ID, true);
+    check('only what actually shrank counts',
+        withSavings.analysis.confirmed_savings, 12);
+    ok('and it rides on every read, cached or not',
+        withSavings.analysis.confirmed_savings !== undefined);
+
+    console.log('\noutcomes are presented once');
+    const outcomes = await watchdog.getUnpresentedOutcomes(USER_ID);
+    check('both resolved outcomes are waiting', outcomes.length, 2);
+    ok('named with the display name, not the storage key',
+        outcomes.some((o) => o.merchantName === 'Rogers'));
+
+    check('marking one presented succeeds',
+        await watchdog.markWatchPresented(USER_ID, outcomes[0].id), true);
+    check('marking it again does not', // two devices racing is expected
+        await watchdog.markWatchPresented(USER_ID, outcomes[0].id), false);
+    check('and it drops out of the queue',
+        (await watchdog.getUnpresentedOutcomes(USER_ID)).length, 1);
+
+    check('another user cannot mark it seen',
+        await watchdog.markWatchPresented(999, outcomes[1].id), false);
 
     console.log('\ncache invalidation');
     const cache = await pg.query('SELECT analysis_version FROM watchdog_analysis_cache');

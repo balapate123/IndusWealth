@@ -115,7 +115,6 @@ const NegotiationBottomSheet = ({ visible, expense, guide, onClose, onNegotiated
                 <Text variant="meta" tone="secondary">
                     Ask for &quot;retention&quot; or &quot;cancellations&quot;. Those agents can
                     approve discounts front-line support cannot. Expect 15–20 minutes.
-                    Tell us how it went and we&apos;ll watch your next bill.
                 </Text>
             </View>
 

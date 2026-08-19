@@ -35,6 +35,54 @@ const SECTIONS = [
     { key: 'fixed', title: 'Fixed payments', subhead: 'Here so you can plan around them.' },
 ];
 
+/**
+ * What each watch outcome says.
+ *
+ * The charged-again case leads with the benign explanation on purpose. The user
+ * did what we asked; a cancellation that takes an extra cycle is the merchant's
+ * doing, and there is no version of this copy that should read as their failure.
+ */
+const OUTCOME_COPY = {
+    confirmed_stopped: (o) => ({
+        tone: 'success',
+        icon: 'checkmark-circle',
+        title: `${o.merchantName} stopped.`,
+        body: `No charge on ${formatDay(o.expectedChargeDate)}. That is $${o.savedMonthly.toFixed(2)} `
+            + `a month back — $${(o.savedMonthly * 12).toFixed(2)} a year.`,
+    }),
+    charged_again: (o) => ({
+        tone: 'danger',
+        icon: 'alert-circle',
+        title: `${o.merchantName} charged you again.`,
+        body: `You marked this cancelled on ${formatDay(o.startedAt)}, and a `
+            + `$${(o.resolvedAmount ?? o.baselineAmount).toFixed(2)} charge landed. Cancellations `
+            + 'sometimes take one more billing cycle. If you have a confirmation, it may be worth '
+            + 'disputing this one.',
+    }),
+    reduced: (o) => ({
+        tone: 'success',
+        icon: 'trending-down',
+        title: `${o.merchantName} went down.`,
+        body: `Your bill dropped from $${o.baselineAmount.toFixed(2)} to `
+            + `$${(o.resolvedAmount ?? 0).toFixed(2)}. That is $${(o.savedMonthly * 12).toFixed(2)} a year.`,
+    }),
+    unchanged: (o) => ({
+        tone: 'muted',
+        icon: 'remove-circle-outline',
+        title: `${o.merchantName} has not changed.`,
+        body: `Still $${(o.resolvedAmount ?? o.baselineAmount).toFixed(2)}. Retention offers sometimes `
+            + 'land on the following cycle, so it can be worth calling once more.',
+    }),
+};
+
+/** '2026-08-14' -> 'Aug 14'. */
+const formatDay = (iso) => {
+    if (!iso) return '';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const [, m, d] = String(iso).slice(0, 10).split('-');
+    return `${months[Number(m) - 1]} ${Number(d)}`;
+};
+
 const PERIOD_OPTIONS = [
     { label: 'Monthly', value: false },
     { label: 'Annual', value: true },
@@ -75,6 +123,19 @@ const makeStyles = (t) => StyleSheet.create({
         borderRadius: RADIUS.PILL,
     },
     heroAmount: { marginTop: 2 },
+    committed: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 5,
+        marginTop: SPACING.SMALL,
+    },
+    outcomeHead: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+        marginBottom: 6,
+    },
+    outcomeBody: { marginBottom: SPACING.SMALL },
     projection: {
         flexDirection: 'row',
         alignItems: 'flex-start',
@@ -143,7 +204,8 @@ const WatchdogScreen = ({ navigation }) => {
     const [expenses, setExpenses] = useState([]);
     const [categories, setCategories] = useState(['All']);
     const [selectedCategory, setSelectedCategory] = useState('All');
-    const [totals, setTotals] = useState({ monthly: 0, annual: 0, projected: 0 });
+    const [totals, setTotals] = useState({ monthly: 0, annual: 0, projected: 0, confirmed: 0 });
+    const [outcomes, setOutcomes] = useState([]);
     const [alerts, setAlerts] = useState([]);
     const [showAnnual, setShowAnnual] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -166,6 +228,7 @@ const WatchdogScreen = ({ navigation }) => {
                     monthly: data.analysis?.total_monthly || 0,
                     annual: data.analysis?.total_annual || 0,
                     projected: data.analysis?.potential_savings || 0,
+                    confirmed: data.analysis?.confirmed_savings || 0,
                 });
             }
         } catch (err) {
@@ -183,6 +246,20 @@ const WatchdogScreen = ({ navigation }) => {
 
     useEffect(() => {
         hasSeenWatchdogIntro().then((seen) => setShowIntro(!seen));
+    }, []);
+
+    // Outcomes are fetched read-only and confirmed separately, so a request
+    // that never reaches the screen cannot consume the one chance to tell the
+    // user their cancellation failed. Same split as goal milestones.
+    useEffect(() => {
+        api.getWatchOutcomes()
+            .then((data) => setOutcomes(data?.outcomes || []))
+            .catch(() => { /* the list still works without them */ });
+    }, []);
+
+    const acknowledgeOutcome = useCallback((id) => {
+        setOutcomes((current) => current.filter((o) => o.id !== id));
+        api.markWatchSeen(id).catch(() => { /* it will be offered again */ });
     }, []);
 
     const dismissIntro = useCallback(() => {
@@ -236,7 +313,7 @@ const WatchdogScreen = ({ navigation }) => {
                 <View style={[styles.statusPill, styles.watchingPill]}>
                     <Ionicons name="hourglass-outline" size={14} color={theme.INFO} />
                     <Text variant="label" tone="info">
-                        Cancelling{item.dueDate ? ` · next charge ${item.dueDate}` : ''}
+                        Watching{item.dueDate ? ` · next charge ${item.dueDate}` : ''}
                     </Text>
                 </View>
             );
@@ -409,6 +486,39 @@ const WatchdogScreen = ({ navigation }) => {
                     </Card>
                 )}
 
+                {/*
+                  * Outcomes come first. Someone who was charged for a
+                  * subscription they cancelled has a reason to open the app that
+                  * outranks anything else on this screen.
+                  */}
+                {outcomes.map((outcome) => {
+                    const copy = OUTCOME_COPY[outcome.status]?.(outcome);
+                    if (!copy) return null;
+                    return (
+                        <Card key={outcome.id}>
+                            <View style={styles.outcomeHead}>
+                                <Ionicons
+                                    name={copy.icon}
+                                    size={18}
+                                    color={copy.tone === 'danger' ? theme.DANGER
+                                        : copy.tone === 'success' ? theme.SUCCESS : theme.TEXT_MUTED}
+                                />
+                                <Text variant="title" style={{ flex: 1 }}>{copy.title}</Text>
+                            </View>
+                            <Text variant="body" tone="secondary" style={styles.outcomeBody}>
+                                {copy.body}
+                            </Text>
+                            <Button
+                                title="Got it"
+                                variant="secondary"
+                                size="sm"
+                                onPress={() => acknowledgeOutcome(outcome.id)}
+                                style={{ alignSelf: 'flex-start' }}
+                            />
+                        </Card>
+                    );
+                })}
+
                 {!nothingAnywhere && (
                     <Card>
                         <View style={styles.totalsTop}>
@@ -431,21 +541,32 @@ const WatchdogScreen = ({ navigation }) => {
                         />
 
                         {/*
-                          * The hero is what the user is actually committed to --
-                          * a measured sum. It used to be "potential monthly
-                          * savings", which counted money nobody had saved:
-                          * amounts of things marked for cancellation plus a
-                          * discount percentage parsed out of a prose string.
-                          * That number moves below, labelled as the projection
-                          * it is, and is replaced here by confirmed savings once
-                          * the watch loop can verify a charge actually stopped.
+                          * Confirmed savings only: charges we watched stop, and
+                          * bills we watched shrink. The old hero counted money
+                          * nobody had saved -- the amounts of everything marked
+                          * for cancellation plus a discount percentage parsed out
+                          * of a prose string. That figure survives below, in
+                          * small type, labelled as the projection it is.
                           */}
-                        <Text variant="overline" tone="muted">
-                            {showAnnual ? 'Committed each year' : 'Committed each month'}
-                        </Text>
+                        <Text variant="overline" tone="muted">Confirmed savings</Text>
                         <Text variant="hero" style={styles.heroAmount}>
-                            ${(showAnnual ? totals.annual : totals.monthly).toFixed(2)}
+                            ${(showAnnual ? totals.confirmed * 12 : totals.confirmed).toFixed(2)}
                         </Text>
+                        <Text variant="meta" tone="muted">
+                            {totals.confirmed > 0
+                                ? `${showAnnual ? 'A year' : 'A month'}, from charges we watched stop.`
+                                : 'When you cancel or lower something, we confirm it here once the '
+                                  + 'charge actually stops.'}
+                        </Text>
+
+                        <View style={styles.committed}>
+                            <Ionicons name="repeat-outline" size={14} color={theme.TEXT_MUTED} />
+                            <Text variant="meta" tone="muted" style={{ flex: 1 }}>
+                                ${(showAnnual ? totals.annual : totals.monthly).toFixed(2)} committed
+                                {showAnnual ? ' each year' : ' each month'} across {expenses.length} repeating
+                                payment{expenses.length === 1 ? '' : 's'}.
+                            </Text>
+                        </View>
 
                         {totals.projected > 0 && (
                             <View style={styles.projection}>

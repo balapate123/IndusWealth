@@ -5,6 +5,9 @@ const merchantCategories = require('../data/merchant_categories.json');
 const cancellationGuides = require('../data/cancellation_guides.json');
 const { analyzeRecurrence, evidenceLine } = require('./recurrence');
 const {
+    WATCH_STATUS, RESOLVED_STATUSES, resolveWatch, confirmedMonthlySavings, firstExpectedAfter,
+} = require('./watch');
+const {
     guideKeyFor, logoColorFor, findGuide, displayNameFor, hasNegotiationScript, buildGuide,
 } = require('./merchant_guides');
 const { canonicalizeCategory, OTHER_CATEGORY } = require('./category_map');
@@ -628,6 +631,11 @@ class WatchdogService {
         // Persist alerts
         await this.persistAlerts(userId, alerts, upsertedExpenses);
 
+        // Decide what happened to anything the user has acted on. Runs here
+        // rather than on read because it needs the transactions, and they are
+        // already in memory -- the same rows the detector just grouped.
+        await this.resolveWatches(userId, transactions);
+
         // Update cache
         await pool.query(
             `INSERT INTO watchdog_analysis_cache (user_id, last_analyzed_at, last_transaction_date, transaction_count, analysis_version, updated_at)
@@ -771,6 +779,12 @@ class WatchdogService {
         );
 
         const potentialSavings = this.calculatePotentialSavings(expenses, alerts);
+
+        // Read on every load, including the cache-hit path, so a watch that
+        // resolved since the last analysis shows up immediately rather than
+        // being frozen into a cached figure. Same reasoning as decorating
+        // insights on read.
+        const confirmedSavings = await this.getConfirmedSavings(userId);
         const flagsFound = alerts.filter(a => a.severity === 'warning' || a.severity === 'critical').length;
 
         // Category breakdown
@@ -797,6 +811,9 @@ class WatchdogService {
                 total_monthly: Math.round(totalMonthly * 100) / 100,
                 total_annual: Math.round(totalMonthly * 12 * 100) / 100,
                 potential_savings: potentialSavings,
+                // What we have actually watched stop or shrink. The hero number
+                // on the screen; potential_savings is the projection beneath it.
+                confirmed_savings: confirmedSavings,
                 flags_found: flagsFound,
                 category_breakdown: categoryBreakdown,
             },
@@ -876,6 +893,22 @@ class WatchdogService {
             [userId, expenseId, action, previousStatus, notes, snoozeUntil]
         );
 
+        // Opening the watch is the point of the button. Everything above it is a
+        // status change; this is the part that will later tell the user whether
+        // what they did actually worked.
+        if (action === 'stop' || action === 'negotiate') {
+            await this.openWatch(userId, expense, action);
+        } else if (action === 'undo' || action === 'keep') {
+            // A retraction, not an outcome. subscription_actions already records
+            // that it happened; leaving the watch open would resolve a case the
+            // user withdrew.
+            await pool.query(
+                `DELETE FROM watchdog_watches
+                 WHERE recurring_expense_id = $1 AND status = $2`,
+                [expenseId, WATCH_STATUS.WATCHING]
+            );
+        }
+
         // A guide is always produced for a cancel. It used to be null for any
         // merchant outside the twelve in cancellation_guides.json -- and, because
         // the file was keyed on a display name while the detector emits an
@@ -895,6 +928,183 @@ class WatchdogService {
             action,
             guide,
         };
+    }
+
+    /**
+     * Start watching an expense the user has just acted on.
+     *
+     * ON CONFLICT DO NOTHING against the partial unique index rather than an
+     * upsert: tapping Cancel twice must not restart the clock, and it must
+     * certainly not open a second watch that counts one stopped charge into
+     * confirmed savings twice.
+     */
+    async openWatch(userId, expense, action) {
+        const today = new Date().toISOString().split('T')[0];
+        const cycleDays = FREQUENCY_DAYS[expense.frequency] || 30;
+
+        // The detector predicts the next charge from the last one it saw, which
+        // can already be in the past -- a stale sync, or someone opening the app
+        // on the 19th to cancel something billed on the 1st. Rolling forward
+        // means the date we watch for, and the date we tell them about, is one
+        // that has not happened yet.
+        const predicted = expense.next_expected
+            ? (expense.next_expected instanceof Date
+                ? expense.next_expected.toISOString().split('T')[0]
+                : String(expense.next_expected).slice(0, 10))
+            : today;
+        const expected = firstExpectedAfter(predicted, cycleDays, today);
+
+        await pool.query(
+            `INSERT INTO watchdog_watches
+                (user_id, recurring_expense_id, action, expected_charge_date, cycle_days, baseline_amount)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT DO NOTHING`,
+            [
+                userId,
+                expense.id,
+                action,
+                expected,
+                cycleDays,
+                expense.amount,
+            ]
+        );
+    }
+
+    /**
+     * Decide what happened to every open watch.
+     *
+     * Runs inside analyzeForUser, where the transactions are already in memory:
+     * the charges a watch resolves against are the same rows the detector just
+     * read.
+     */
+    async resolveWatches(userId, transactions) {
+        const open = await pool.query(
+            `SELECT w.*, re.merchant_name
+             FROM watchdog_watches w
+             JOIN recurring_expenses re ON re.id = w.recurring_expense_id
+             WHERE w.user_id = $1 AND w.status = $2`,
+            [userId, WATCH_STATUS.WATCHING]
+        );
+        if (open.rows.length === 0) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        const asDate = (v) => (v instanceof Date
+            ? v.toISOString().split('T')[0]
+            : String(v).slice(0, 10));
+
+        for (const row of open.rows) {
+            const charges = transactions
+                .filter((tx) => !tx.pending && parseFloat(tx.amount) > 0
+                    && this.normalizeMerchantName(tx.merchant_name || tx.name) === row.merchant_name)
+                .map((tx) => ({ date: asDate(tx.date), amount: parseFloat(tx.amount) }));
+
+            const previousExpected = asDate(row.expected_charge_date);
+
+            const next = resolveWatch({
+                watch: {
+                    action: row.action,
+                    status: row.status,
+                    startedAt: asDate(row.started_at),
+                    expectedChargeDate: previousExpected,
+                    baselineAmount: parseFloat(row.baseline_amount),
+                    cyclesObserved: row.cycles_observed,
+                    cycleDays: row.cycle_days,
+                },
+                charges,
+                today,
+            });
+
+            const resolved = next.status !== WATCH_STATUS.WATCHING;
+            const moved = resolved
+                || next.cyclesObserved !== row.cycles_observed
+                || next.expectedChargeDate !== previousExpected;
+            if (!moved) continue;
+
+            await pool.query(
+                `UPDATE watchdog_watches
+                 SET status = $1,
+                     resolved_amount = $2,
+                     saved_monthly = $3,
+                     cycles_observed = $4,
+                     expected_charge_date = $5,
+                     resolved_at = CASE WHEN $6::BOOLEAN THEN NOW() ELSE resolved_at END,
+                     updated_at = NOW()
+                 WHERE id = $7`,
+                [
+                    next.status,
+                    next.resolvedAmount,
+                    next.savedMonthly,
+                    next.cyclesObserved,
+                    next.expectedChargeDate,
+                    resolved,
+                    row.id,
+                ]
+            );
+        }
+    }
+
+    /**
+     * Outcomes the user has not been shown yet.
+     *
+     * Read-only, deliberately. The device confirms with markWatchPresented only
+     * what it actually managed to put on screen -- the two-phase protocol goal
+     * milestones already use, because marking them notified inside the reporting
+     * loop meant an app-open without notification permission consumed the event
+     * permanently and it could never fire again.
+     */
+    async getUnpresentedOutcomes(userId) {
+        const result = await pool.query(
+            `SELECT w.id, w.action, w.status, w.baseline_amount, w.resolved_amount,
+                    w.saved_monthly,
+                    TO_CHAR(w.started_at, 'YYYY-MM-DD') as started_at,
+                    TO_CHAR(w.expected_charge_date, 'YYYY-MM-DD') as expected_charge_date,
+                    re.merchant_name, re.category
+             FROM watchdog_watches w
+             JOIN recurring_expenses re ON re.id = w.recurring_expense_id
+             WHERE w.user_id = $1 AND w.presented_at IS NULL AND w.status <> $2
+             ORDER BY w.resolved_at ASC`,
+            [userId, WATCH_STATUS.WATCHING]
+        );
+
+        return result.rows.map((row) => ({
+            id: row.id,
+            merchantName: displayNameFor(row.merchant_name),
+            category: row.category,
+            action: row.action,
+            status: row.status,
+            baselineAmount: parseFloat(row.baseline_amount),
+            resolvedAmount: row.resolved_amount === null ? null : parseFloat(row.resolved_amount),
+            savedMonthly: parseFloat(row.saved_monthly),
+            startedAt: row.started_at,
+            expectedChargeDate: row.expected_charge_date,
+        }));
+    }
+
+    /** Record that an outcome actually reached the screen. */
+    async markWatchPresented(userId, watchId) {
+        const result = await pool.query(
+            `UPDATE watchdog_watches
+             SET presented_at = NOW(), updated_at = NOW()
+             WHERE id = $1 AND user_id = $2 AND presented_at IS NULL
+             RETURNING id`,
+            [watchId, userId]
+        );
+        return result.rows.length > 0;
+    }
+
+    /** Savings we can show the working for. */
+    async getConfirmedSavings(userId) {
+        const result = await pool.query(
+            `SELECT status, baseline_amount, resolved_amount
+             FROM watchdog_watches
+             WHERE user_id = $1 AND status = ANY($2)`,
+            [userId, RESOLVED_STATUSES]
+        );
+        return confirmedMonthlySavings(result.rows.map((r) => ({
+            status: r.status,
+            baselineAmount: parseFloat(r.baseline_amount),
+            resolvedAmount: r.resolved_amount === null ? null : parseFloat(r.resolved_amount),
+        })));
     }
 
     /**
