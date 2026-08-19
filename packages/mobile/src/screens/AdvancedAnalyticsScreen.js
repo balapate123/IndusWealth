@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions, BackHandler } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { SPACING, RADIUS, alpha, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
@@ -752,6 +753,31 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     }, [fetchData]);
 
     const categories = data?.categories || [];
+    /**
+     * Picking a category is a drill-down, but it is screen state rather than a
+     * pushed route — so back had nothing to pop and fell through to the
+     * navigator. On the tab (`AnalyticsTab`) there is no back arrow at all, so
+     * Android's hardware back went straight to the first tab and the user
+     * landed on Home from what looked like a detail view.
+     *
+     * Back now means "up one level": clear the category, land on All. Only
+     * once nothing is selected does it leave the screen.
+     */
+    const clearCategoryOnBack = useCallback(() => {
+        if (selectedCategoryName === null) return false;   // not ours — let the navigator handle it
+        setSelectedCategoryName(null);
+        return true;
+    }, [selectedCategoryName]);
+
+    // Registered only while focused, or this screen would swallow back presses
+    // belonging to whatever is on top of it.
+    useFocusEffect(
+        useCallback(() => {
+            const sub = BackHandler.addEventListener('hardwareBackPress', clearCategoryOnBack);
+            return () => sub.remove();
+        }, [clearCategoryOnBack])
+    );
+
     const selectedCategory = useMemo(
         () => categories.find((c) => c.name === selectedCategoryName) || null,
         [categories, selectedCategoryName]
@@ -771,7 +797,16 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     const header = (
         <ScreenHeader
             title={isTab ? 'Analytics' : 'Advanced Analytics'}
-            onBack={isTab ? undefined : () => navigation.goBack()}
+            /*
+             * A drill-down gets an arrow even on the tab, which normally has
+             * none: iOS has no hardware back, so without this the only way out
+             * of a category is knowing that tapping its chip again toggles it.
+             */
+            onBack={
+                selectedCategoryName !== null
+                    ? () => setSelectedCategoryName(null)
+                    : (isTab ? undefined : () => navigation.goBack())
+            }
             right={
                 <TouchableOpacity
                     style={styles.headerAction}
