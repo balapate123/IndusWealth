@@ -3,18 +3,31 @@ const { createLogger } = require('./logger');
 const merchantAliases = require('../data/merchant_aliases.json');
 const merchantCategories = require('../data/merchant_categories.json');
 const cancellationGuides = require('../data/cancellation_guides.json');
+const { analyzeRecurrence, evidenceLine } = require('./recurrence');
+const {
+    guideKeyFor, logoColorFor, findGuide, displayNameFor, hasNegotiationScript, buildGuide,
+} = require('./merchant_guides');
+const { canonicalizeCategory, OTHER_CATEGORY } = require('./category_map');
 
 const logger = createLogger('WATCHDOG');
 
 // Current algorithm version - bump to force re-analysis for all users
-const ANALYSIS_VERSION = 1;
+// Bumped to 2 for the detector rewrite: getCacheFreshness discards any cache
+// written by an older version, so every stored analysis re-runs itself on the
+// first read after deploy rather than leaving old false positives on screen.
+const ANALYSIS_VERSION = 2;
 
 // Exclusion lists
+// 'Payment' and 'Loan' used to be here, which filtered out precisely the
+// commitments this feature exists to show -- a car loan and rent are the
+// clearest recurring obligations a person has. They now land in the Fixed
+// payments section, which carries no action buttons.
+//
+// 'Transfer' stays: an e-transfer to a person is not a subscription, and the
+// merchants that matter (utilities, insurance) arrive under Service.
 const EXCLUDED_CATEGORIES = [
     'Food and Drink',
     'Transfer',
-    'Payment',
-    'Loan',
 ];
 
 const EXCLUDED_MERCHANTS = [
@@ -24,7 +37,43 @@ const EXCLUDED_MERCHANTS = [
     'TIM HORTONS', 'STARBUCKS', 'MCDONALD',
 ];
 
-// Build a reverse lookup: merchant name -> category
+/** Nominal days per cycle, for the stored interval_days column. */
+const FREQUENCY_DAYS = {
+    'bi-weekly': 14,
+    monthly: 30,
+    quarterly: 90,
+    'semi-annual': 182,
+    annual: 365,
+};
+
+/** How many of a cycle fit in a month, for the monthly totals. */
+const MONTHLY_EQUIVALENT = {
+    'bi-weekly': 2.17,
+    monthly: 1,
+    quarterly: 1 / 3,
+    'semi-annual': 1 / 6,
+    annual: 1 / 12,
+};
+
+/**
+ * The old Watchdog vocabulary, translated into canonical names.
+ *
+ * Used only when Plaid gives us no category to canonicalise. Mapping on the way
+ * out is what keeps merchant_categories.json from being a second vocabulary
+ * again -- nothing downstream ever sees 'Streaming' or 'Telecom'.
+ */
+const LEGACY_CATEGORY_TO_CANONICAL = {
+    Streaming: 'Subscriptions',
+    Music: 'Subscriptions',
+    News: 'Subscriptions',
+    Software: 'Software & Tech',
+    Telecom: 'Utilities',
+    Utilities: 'Utilities',
+    Insurance: 'Insurance',
+    Health: 'Fitness',
+};
+
+// Build a reverse lookup: merchant name -> guide category (internal only)
 const merchantToCategoryMap = {};
 for (const [category, merchants] of Object.entries(merchantCategories)) {
     for (const merchant of merchants) {
@@ -60,13 +109,6 @@ class WatchdogService {
     }
 
     /**
-     * Determine the category for a normalized merchant name.
-     */
-    classifyCategory(merchantName) {
-        return merchantToCategoryMap[merchantName] || 'Other';
-    }
-
-    /**
      * Check if a transaction should be excluded from subscription detection.
      */
     isExcluded(tx, normalizedName) {
@@ -91,43 +133,6 @@ class WatchdogService {
     }
 
     /**
-     * Classify frequency from average interval in days.
-     * Returns frequency string or 'irregular' if no pattern matches.
-     */
-    classifyFrequency(avgInterval) {
-        if (avgInterval >= 0 && avgInterval <= 10) return 'weekly';
-        if (avgInterval > 10 && avgInterval <= 18) return 'bi-weekly';
-        if (avgInterval >= 25 && avgInterval <= 35) return 'monthly';
-        if (avgInterval >= 80 && avgInterval <= 100) return 'quarterly';
-        if (avgInterval >= 340 && avgInterval <= 395) return 'annual';
-        return 'irregular';
-    }
-
-    /**
-     * Get the expected interval in days for a frequency.
-     */
-    expectedIntervalDays(frequency) {
-        switch (frequency) {
-            case 'weekly': return 7;
-            case 'bi-weekly': return 14;
-            case 'monthly': return 30;
-            case 'quarterly': return 90;
-            case 'annual': return 365;
-            default: return 30;
-        }
-    }
-
-    /**
-     * Calculate standard deviation of an array of numbers.
-     */
-    standardDeviation(values) {
-        if (values.length < 2) return 0;
-        const mean = values.reduce((a, b) => a + b, 0) / values.length;
-        const sqDiffs = values.map(v => Math.pow(v - mean, 2));
-        return Math.sqrt(sqDiffs.reduce((a, b) => a + b, 0) / values.length);
-    }
-
-    /**
      * Calculate days between two date strings.
      */
     daysBetween(dateA, dateB) {
@@ -137,93 +142,43 @@ class WatchdogService {
     }
 
     /**
-     * Analyze recurrence pattern for a group of transactions from the same merchant.
+     * The category the user sees -- canonical, the same vocabulary as every
+     * other screen in the app.
+     *
+     * Watchdog used to keep its own list (Streaming, Music, Telecom, News...)
+     * and it disagreed with Analytics on every row that mattered: Netflix was
+     * Streaming here and Subscriptions there, GoodLife was Health here and
+     * Fitness there, and Rogers, Pioneer, Esso and Intact were all 'Other'
+     * because the lookup only knew the 41 display names hardcoded in
+     * merchant_categories.json. That is the same defect commit 0d42375 fixed
+     * for transactions, in a third vocabulary.
+     *
+     * That list survives only as a fallback for when Plaid hands us nothing to
+     * canonicalise -- and its values are mapped into canonical names on the way
+     * out, so it cannot reintroduce a second vocabulary.
      */
-    analyzeRecurrencePattern(transactions) {
-        // Sort chronologically
-        const sorted = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
-        const amounts = sorted.map(t => parseFloat(t.amount));
-        const dates = sorted.map(t => t.date);
+    resolveCategory(plaidCategory, normalizedName) {
+        const canonical = canonicalizeCategory(plaidCategory);
+        if (canonical && canonical !== OTHER_CATEGORY) return canonical;
 
-        if (dates.length < 2) {
-            return { isRecurring: false };
-        }
-
-        // Calculate intervals between consecutive charges
-        const intervals = [];
-        for (let i = 1; i < dates.length; i++) {
-            intervals.push(this.daysBetween(dates[i - 1], dates[i]));
-        }
-
-        const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-        const intervalStdDev = this.standardDeviation(intervals);
-
-        // Determine frequency
-        const frequency = this.classifyFrequency(avgInterval);
-
-        if (frequency === 'irregular') {
-            return { isRecurring: false };
-        }
-
-        // Calculate amount consistency
-        const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
-        const amountVariation = Math.max(...amounts) - Math.min(...amounts);
-        const amountVariationPct = avgAmount > 0 ? amountVariation / avgAmount : 1;
-
-        // Confidence scoring
-        let amountScore = 'low';
-        if (amountVariationPct < 0.05) amountScore = 'high';
-        else if (amountVariationPct < 0.15) amountScore = 'medium';
-
-        let intervalScore = 'low';
-        if (intervalStdDev < 3) intervalScore = 'high';
-        else if (intervalStdDev < 7) intervalScore = 'medium';
-
-        let occurrenceScore = 'low';
-        if (sorted.length >= 4) occurrenceScore = 'high';
-        else if (sorted.length >= 3) occurrenceScore = 'medium';
-
-        // Check if merchant has a known alias (boosts confidence)
-        const rawName = (sorted[0].merchant_name || sorted[0].name || '').toUpperCase().trim();
-        const hasKnownAlias = !!merchantAliases[rawName];
-
-        // Final confidence: all high = high, any low caps at medium
-        let confidence = 'low';
-        const scores = [amountScore, intervalScore, occurrenceScore];
-        if (scores.every(s => s === 'high') || (hasKnownAlias && scores.filter(s => s === 'high').length >= 2)) {
-            confidence = 'high';
-        } else if (!scores.includes('low') || (hasKnownAlias && scores.filter(s => s !== 'low').length >= 2)) {
-            confidence = 'medium';
-        }
-
-        // Predict next charge date
-        const lastDate = new Date(dates[dates.length - 1]);
-        const nextExpected = new Date(lastDate);
-        nextExpected.setDate(nextExpected.getDate() + this.expectedIntervalDays(frequency));
-
-        return {
-            isRecurring: true,
-            frequency,
-            intervalDays: Math.round(avgInterval),
-            amount: amounts[amounts.length - 1],
-            amountHistory: amounts.slice(-6),
-            confidence,
-            firstSeen: dates[0],
-            lastSeen: dates[dates.length - 1],
-            nextExpected: nextExpected.toISOString().split('T')[0],
-            transactionIds: sorted.map(t => t.transaction_id || t.plaid_transaction_id).filter(Boolean),
-        };
+        const legacy = merchantToCategoryMap[normalizedName];
+        return LEGACY_CATEGORY_TO_CANONICAL[legacy] || OTHER_CATEGORY;
     }
 
     /**
-     * Detect recurring expenses from a set of transactions.
+     * Detect recurring obligations from a set of transactions.
+     *
+     * The gates themselves live in services/recurrence.js, which is pure and
+     * has no database import, so they can be asserted directly rather than
+     * inspected on a screen. What is left here is the part that genuinely needs
+     * the app around it: grouping by merchant, resolving the category, and
+     * attaching the guide.
      */
     detectRecurringExpenses(transactions) {
         const today = new Date();
         const sixMonthsAgo = new Date(today);
         sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180);
 
-        // Step 1: Filter to last 180 days, exclude pending, only charges (positive amounts)
         const recentTxns = transactions.filter(tx => {
             const txDate = new Date(tx.date);
             return txDate >= sixMonthsAgo
@@ -231,41 +186,51 @@ class WatchdogService {
                 && parseFloat(tx.amount) > 0;
         });
 
-        // Step 2: Group by normalized merchant name
+        // Group by normalized merchant name.
         const merchantGroups = {};
         for (const tx of recentTxns) {
             const rawName = tx.merchant_name || tx.name;
             const normalized = this.normalizeMerchantName(rawName);
             if (!normalized) continue;
-
-            // Check exclusions
             if (this.isExcluded(tx, normalized)) continue;
 
-            if (!merchantGroups[normalized]) {
-                merchantGroups[normalized] = [];
-            }
+            if (!merchantGroups[normalized]) merchantGroups[normalized] = [];
             merchantGroups[normalized].push(tx);
         }
 
-        // Step 3: Filter to merchants with 2+ charges
         const results = [];
         for (const [merchant, txns] of Object.entries(merchantGroups)) {
-            if (txns.length < 2) continue;
+            // The most recent transaction carries the category we classify on:
+            // Plaid re-categorises merchants over time and the newest label is
+            // the one the rest of the app is showing for this merchant today.
+            const latest = txns.reduce((a, b) => (new Date(a.date) > new Date(b.date) ? a : b));
+            const category = this.resolveCategory(latest.category, merchant);
 
-            // Step 4: Analyze each candidate
-            const analysis = this.analyzeRecurrencePattern(txns);
-            if (analysis.isRecurring) {
-                const category = this.classifyCategory(merchant);
-                const guide = cancellationGuides[merchant];
+            const analysis = analyzeRecurrence(txns, { merchantCategory: category });
+            if (!analysis.isRecurring) continue;
 
-                results.push({
-                    merchantName: merchant,
-                    rawNames: [...new Set(txns.map(t => t.merchant_name || t.name))],
-                    category,
-                    logoColor: guide?.logoColor || null,
-                    ...analysis,
-                });
-            }
+            results.push({
+                merchantName: merchant,
+                rawNames: [...new Set(txns.map(t => t.merchant_name || t.name))],
+                category,
+                expenseClass: analysis.expenseClass,
+                guideKey: guideKeyFor(merchant),
+                evidence: evidenceLine(analysis),
+                logoColor: logoColorFor(merchant),
+                frequency: analysis.frequency,
+                intervalDays: FREQUENCY_DAYS[analysis.frequency] || null,
+                amount: analysis.amount,
+                amountHistory: analysis.amountHistory,
+                confidence: analysis.confidence,
+                sameAmountRatio: analysis.sameAmountRatio,
+                dayOfMonth: analysis.dayOfMonth,
+                firstSeen: analysis.firstSeen,
+                lastSeen: analysis.lastSeen,
+                nextExpected: analysis.nextExpected,
+                transactionIds: txns
+                    .map(t => t.transaction_id || t.plaid_transaction_id)
+                    .filter(Boolean),
+            });
         }
 
         return results;
@@ -336,7 +301,7 @@ class WatchdogService {
         // 4. ANNUAL SAVINGS OPPORTUNITY
         for (const expense of expenses) {
             if (expense.frequency === 'monthly') {
-                const guide = cancellationGuides[expense.merchantName];
+                const guide = findGuide(expense.merchantName);
                 if (guide?.annualOption) {
                     const monthlySavings = expense.amount - guide.annualOption.monthlyEquivalent;
                     if (monthlySavings > 0) {
@@ -372,7 +337,7 @@ class WatchdogService {
         // Negotiation savings (estimated low end of discount range)
         for (const expense of expenses) {
             if (expense.action === 'negotiate' || expense.status === 'negotiating') {
-                const guide = cancellationGuides[expense.merchantName];
+                const guide = findGuide(expense.merchantName);
                 if (guide?.negotiation?.expectedDiscount) {
                     const match = guide.negotiation.expectedDiscount.match(/(\d+)/);
                     const discountPct = match ? parseInt(match[1], 10) / 100 : 0.15;
@@ -395,6 +360,12 @@ class WatchdogService {
      * Determine auto-suggested action for an expense.
      */
     suggestAction(expense, alerts) {
+        // The user already answered. "Kept. We'll stop flagging it." is a
+        // promise the copy makes, and re-suggesting on the next analysis breaks
+        // it -- which is what happened to every utility with a guide, because
+        // 'keep' used to be stored as 'active' and 'active' reads as "no answer".
+        if (expense.action === 'keep') return 'keep';
+
         // Check for charge after cancel
         if (expense.status === 'cancelling') {
             return 'stop';
@@ -407,7 +378,9 @@ class WatchdogService {
         }
 
         // Telecom/Utility with known negotiation path
-        if (['Telecom', 'Utilities'].includes(expense.category) && cancellationGuides[expense.merchantName]?.negotiation) {
+        // Canonical categories now, so a phone bill is 'Utilities' here exactly
+        // as it is on Analytics.
+        if (expense.category === 'Utilities' && hasNegotiationScript(expense.merchantName)) {
             return 'negotiate';
         }
 
@@ -591,8 +564,9 @@ class WatchdogService {
                     user_id, merchant_name, merchant_raw_names, amount, amount_history, currency,
                     frequency, interval_days, confidence, category, status, action,
                     first_seen, last_seen, next_expected, flags, plaid_transaction_ids, detection_metadata,
+                    expense_class, guide_key, evidence, day_of_month,
                     updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW())
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW())
                 ON CONFLICT (user_id, merchant_name) DO UPDATE SET
                     merchant_raw_names = $3,
                     amount = $4,
@@ -616,6 +590,10 @@ class WatchdogService {
                     flags = $16,
                     plaid_transaction_ids = $17,
                     detection_metadata = $18,
+                    expense_class = $19,
+                    guide_key = $20,
+                    evidence = $21,
+                    day_of_month = $22,
                     updated_at = NOW()
                 RETURNING *`,
                 [
@@ -636,7 +614,11 @@ class WatchdogService {
                     expense.nextExpected,
                     JSON.stringify(this.buildFlags(expense, alerts)),
                     expense.transactionIds,
-                    JSON.stringify({ intervalStdDev: expense.intervalStdDev }),
+                    JSON.stringify({ sameAmountRatio: expense.sameAmountRatio }),
+                    expense.expenseClass,
+                    expense.guideKey,
+                    expense.evidence,
+                    expense.dayOfMonth,
                 ]
             );
 
@@ -728,25 +710,42 @@ class WatchdogService {
             `SELECT * FROM recurring_expenses
              WHERE user_id = $1
                AND (status != 'snoozed' OR snoozed_until IS NULL OR snoozed_until <= CURRENT_DATE)
-             ORDER BY amount DESC`,
+             ORDER BY
+                CASE expense_class
+                    WHEN 'subscription' THEN 1
+                    WHEN 'bill' THEN 2
+                    ELSE 3
+                END,
+                amount DESC`,
             [userId]
         );
 
         const expenses = expensesResult.rows.map(row => ({
             id: row.id,
-            name: row.merchant_name,
+            // merchant_name is the upsert key and stays as the bank sent it;
+            // this is the presentable form.
+            name: displayNameFor(row.merchant_name),
             amount: parseFloat(row.amount),
             currency: row.currency,
             frequency: row.frequency,
             category: row.category,
+            expenseClass: row.expense_class || 'subscription',
+            evidence: row.evidence || null,
+            dayOfMonth: row.day_of_month || null,
+            guideKey: row.guide_key || null,
+            hasNegotiation: hasNegotiationScript(row.merchant_name),
             confidence: row.confidence,
             status: row.status,
-            action: row.action || null,
+            // 'keep' is stored so suggestAction can tell an answer from silence,
+            // but it reaches the device as 'active' -- the shipped build renders
+            // the Active chip off that value and there is no OTA to update it.
+            action: row.action === 'keep' ? 'active' : (row.action || null),
+            answered: row.action === 'keep',
             firstSeen: row.first_seen,
             lastSeen: row.last_seen,
             nextExpected: row.next_expected,
             dueDate: this.formatDueDate(row.next_expected),
-            logoColor: cancellationGuides[row.merchant_name]?.logoColor || null,
+            logoColor: logoColorFor(row.merchant_name),
             flags: row.flags || [],
             amountHistory: row.amount_history || [],
         }));
@@ -766,16 +765,10 @@ class WatchdogService {
 
         // Calculate analysis summary
         const activeExpenses = expenses.filter(e => e.status !== 'cancelled');
-        const totalMonthly = activeExpenses.reduce((sum, e) => {
-            switch (e.frequency) {
-                case 'weekly': return sum + e.amount * 4.33;
-                case 'bi-weekly': return sum + e.amount * 2.17;
-                case 'monthly': return sum + e.amount;
-                case 'quarterly': return sum + e.amount / 3;
-                case 'annual': return sum + e.amount / 12;
-                default: return sum + e.amount;
-            }
-        }, 0);
+        const totalMonthly = activeExpenses.reduce(
+            (sum, e) => sum + e.amount * (MONTHLY_EQUIVALENT[e.frequency] ?? 1),
+            0
+        );
 
         const potentialSavings = this.calculatePotentialSavings(expenses, alerts);
         const flagsFound = alerts.filter(a => a.severity === 'warning' || a.severity === 'critical').length;
@@ -784,11 +777,7 @@ class WatchdogService {
         const categoryBreakdown = {};
         for (const expense of activeExpenses) {
             if (!categoryBreakdown[expense.category]) categoryBreakdown[expense.category] = 0;
-            let monthlyEquiv = expense.amount;
-            if (expense.frequency === 'weekly') monthlyEquiv = expense.amount * 4.33;
-            else if (expense.frequency === 'bi-weekly') monthlyEquiv = expense.amount * 2.17;
-            else if (expense.frequency === 'quarterly') monthlyEquiv = expense.amount / 3;
-            else if (expense.frequency === 'annual') monthlyEquiv = expense.amount / 12;
+            const monthlyEquiv = expense.amount * (MONTHLY_EQUIVALENT[expense.frequency] ?? 1);
             categoryBreakdown[expense.category] += Math.round(monthlyEquiv * 100) / 100;
         }
 
@@ -853,8 +842,12 @@ class WatchdogService {
                 newAction = 'stop';
                 break;
             case 'keep':
+                // Stored as 'keep', not 'active'. analyzeForUser treats a null
+                // or 'active' action as "no answer yet" and overwrites it with a
+                // fresh suggestion, so storing 'active' here meant a kept row
+                // came straight back on the next refresh.
                 newStatus = 'active';
-                newAction = 'active';
+                newAction = 'keep';
                 break;
             case 'snooze':
                 newStatus = 'snoozed';
@@ -883,39 +876,18 @@ class WatchdogService {
             [userId, expenseId, action, previousStatus, notes, snoozeUntil]
         );
 
-        // Get guide data if applicable
-        let guide = null;
-        const merchantName = expense.merchant_name;
-        const guideData = cancellationGuides[merchantName];
-
-        if (action === 'stop' && guideData) {
-            guide = {
-                merchantName: guideData.displayName,
-                steps: guideData.cancellation.steps,
-                directUrl: guideData.cancellation.url,
-                estimatedTime: `${guideData.cancellation.estimatedMinutes} minutes`,
-                tips: guideData.cancellation.tips,
-                canPause: guideData.cancellation.canPause,
-                pauseNote: guideData.cancellation.pauseNote,
-                alternatives: guideData.alternatives,
-                negotiationScript: null,
-            };
-        } else if (action === 'negotiate' && guideData?.negotiation) {
-            guide = {
-                merchantName: guideData.displayName,
-                steps: guideData.cancellation.steps,
-                directUrl: guideData.cancellation.url,
-                estimatedTime: `${guideData.cancellation.estimatedMinutes} minutes`,
-                tips: guideData.negotiation.tips,
-                canPause: false,
-                pauseNote: null,
-                alternatives: guideData.alternatives,
-                negotiationScript: guideData.negotiation.script,
-                retentionNumber: guideData.negotiation.retentionNumber,
-                expectedDiscount: guideData.negotiation.expectedDiscount,
-                bestTimeToCall: guideData.negotiation.bestTimeToCall,
-            };
-        }
+        // A guide is always produced for a cancel. It used to be null for any
+        // merchant outside the twelve in cancellation_guides.json -- and, because
+        // the file was keyed on a display name while the detector emits an
+        // uppercase one, for five of those twelve as well. The mobile sheet only
+        // opens `if (result?.data?.guide)`, so the button flipped a hidden status
+        // and nothing appeared on screen.
+        const guide = buildGuide({
+            merchantName: expense.merchant_name,
+            displayName: displayNameFor(expense.merchant_name),
+            action,
+            category: expense.category,
+        });
 
         return {
             expenseId,

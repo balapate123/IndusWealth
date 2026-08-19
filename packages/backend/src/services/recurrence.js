@@ -41,8 +41,15 @@ const EXPENSE_CLASSES = {
  */
 const VARIABLE_AMOUNT_CLASSES = new Set([EXPENSE_CLASSES.BILL, EXPENSE_CLASSES.FIXED]);
 
-/** Merchant categories (from merchant_categories.json) that bill as utilities. */
-const BILL_MERCHANT_CATEGORIES = new Set(['Telecom', 'Utilities', 'Insurance']);
+/**
+ * Canonical categories (category_map.js) whose amounts legitimately move.
+ *
+ * These are CANONICAL_CATEGORIES names, not the old Watchdog vocabulary — there
+ * is no 'Telecom' here because a phone bill canonicalises to 'Utilities', the
+ * same name the rest of the app shows for it. Watchdog used to carry its own
+ * list and disagree with every other screen.
+ */
+const BILL_CATEGORIES = new Set(['Utilities', 'Insurance']);
 
 /** Fraction of adjacent charges that must match for a subscription to qualify. */
 const SAME_AMOUNT_THRESHOLD = 0.5;
@@ -216,7 +223,7 @@ function classifyExpense(plaidCategory, merchantCategory) {
         || joined.includes('mortgage');
     if (isFixed) return EXPENSE_CLASSES.FIXED;
 
-    if (BILL_MERCHANT_CATEGORIES.has(merchantCategory)) return EXPENSE_CLASSES.BILL;
+    if (BILL_CATEGORIES.has(merchantCategory)) return EXPENSE_CLASSES.BILL;
     if (path.includes('insurance') || path.includes('utilities')) return EXPENSE_CLASSES.BILL;
 
     return EXPENSE_CLASSES.SUBSCRIPTION;
@@ -365,7 +372,7 @@ module.exports = {
     MIN_CHARGES,
     EXPENSE_CLASSES,
     VARIABLE_AMOUNT_CLASSES,
-    BILL_MERCHANT_CATEGORIES,
+    BILL_CATEGORIES,
     SAME_AMOUNT_THRESHOLD,
     sameAmountRatio,
     dayOfMonthConsistent,
