@@ -11,11 +11,11 @@ ideas look attractive and have already cost us a Play Store rejection.
 
 ---
 
-## A. Watchdog rebuild — in flight
+## A. Watchdog rebuild — complete except one item
 
 The screen was showing gas stations as subscriptions and its two action buttons
-did nothing. Everything on the critical path is done — detector, screen, watch
-loop, notifications. Only the loose ends in section 4 remain.
+did nothing. Detector, screen, watch loop, notifications and the loose ends are
+all done. One item is open and it needs a human: the retention phone numbers.
 
 ### Done (on `dev`, unpushed)
 
@@ -28,6 +28,7 @@ loop, notifications. Only the loose ends in section 4 remain.
 | `4a0f1dd` | The mobile screen — three sections, class-gated buttons, evidence lines, intro card, sheet copy |
 | `2332349` | The watch loop — did the cancellation stick, confirmed savings, outcome cards |
 | `ed1defd` | Notifications — dated one-shot per watch, evergreen body, own HIGH channel |
+| `4b0f2c7` | Loose ends — grace-days parity test, alternatives stripped, in-app explainer, Home entry point |
 
 Verified with `node tests/manual/watchdog_sql_check.js` (PGlite, 68 checks,
 drives the shipped service with `pool.query` redirected), plus 101 backend and 64
@@ -64,21 +65,31 @@ and `syncWatchReminders` through the shared queue. Dated one-shot, fires expecte
 + 3 days, capped at 8 (app ceiling now 54 of 64).
 
 `WATCH_GRACE_DAYS` in `utils/watchReminders.js` must stay equal to `GRACE_DAYS`
-in the backend's `services/watch.js`. If they drift the notification arrives
-before the outcome exists and the user opens the app to a watch still running. A
-test asserts the mobile value; nothing asserts they match each other.
+in the backend's `services/watch.js`. `tests/watchReminders.test.mjs` now loads
+the backend module through `createRequire` and compares them, the same shape as
+the category map parity test.
 
-### 4. Loose ends — all that is left
+### 4. Loose ends — DONE (`4b0f2c7`), except one
 
-- "How Watchdog works" article in Wealth Academy — the long-form home for *why
-  isn't X in my list*.
-- Retention phone numbers: verify them the way `link_registry.js` verifies URLs,
-  or cut them and keep the scripts. Phone numbers rot like links do.
-- **Ontario fitness-contract line needs a legal check** before it ships.
-- Move Watchdog out of the Profile menu. It used to be a tab, and it is the
-  feature with the clearest dollar value.
-- Strip `alternatives` from `cancellation_guides.json` itself, not just the
-  render path.
+- ~~"How Watchdog works"~~ — an **in-app document**, not a catalog entry:
+  `curated_articles.json` holds external URLs and this needed to be ours. Lives
+  in `LegalDocScreen` under `docType: 'watchdog'`, reached from the intro card.
+- ~~Ontario fitness-contract line~~ — the legal claim is gone. It pointed at a
+  statute; it now points at the user's own agreement, which is more useful and
+  needs no review.
+- ~~Move Watchdog out of the Profile menu~~ — there are already five tabs and the
+  navigator records why Watchdog lost its slot, so a sixth was the wrong fix. It
+  now has a **summary card on Home**. Outcome cards stay on the Watchdog screen:
+  they are presented once, and two screens racing to mark the same one seen is a
+  good way to lose it.
+- ~~Strip `alternatives` from `cancellation_guides.json`~~ — removed from all
+  twelve.
+
+**Still open — needs a human.** The four retention phone numbers (Rogers, Bell,
+Telus, GoodLife) are unverified. They cannot be checked from inside the repo, and
+recording a `verified_at` we did not earn would be worse than the uncertainty.
+Either confirm them against each carrier's current published retention line, or
+cut the number and keep the script — the script is the part that works.
 
 ---
 
