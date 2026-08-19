@@ -14,8 +14,8 @@ ideas look attractive and have already cost us a Play Store rejection.
 ## A. Watchdog rebuild — in flight
 
 The screen was showing gas stations as subscriptions and its two action buttons
-did nothing. Diagnosis, design, backend and screen are done. The watch loop --
-the part that verifies a cancellation actually worked -- is not.
+did nothing. Diagnosis, design, backend, screen and the watch loop are done.
+Notifications are not.
 
 ### Done (on `dev`, unpushed)
 
@@ -26,9 +26,10 @@ the part that verifies a cancellation actually worked -- is not.
 | `c42180c` | Spec addendum §14–16: one vocabulary, slug guide keys, notification design |
 | `cb55c5a` | Wiring — canonical categories, slug guides, `expense_class` column, Keep sticks |
 | `4a0f1dd` | The mobile screen — three sections, class-gated buttons, evidence lines, intro card, sheet copy |
+| `2332349` | The watch loop — did the cancellation stick, confirmed savings, outcome cards |
 
-Verified with `node tests/manual/watchdog_sql_check.js` (PGlite, 42 checks,
-drives the shipped service with `pool.query` redirected), plus 81 backend and 48
+Verified with `node tests/manual/watchdog_sql_check.js` (PGlite, 59 checks,
+drives the shipped service with `pool.query` redirected), plus 101 backend and 48
 mobile unit tests.
 
 ### 1. The mobile screen — DONE (`4a0f1dd`)
@@ -37,31 +38,25 @@ Sections with subheads, evidence lines, class-gated buttons, `Keep` surfaced for
 the first time, canonical filter chips, both sheets opening with "we can't cancel
 it for you", competitor blocks cut, intro card.
 
-Two things deliberately deferred to the watch loop, and they are the reason it
-should be next:
+Both sheets now promise the check, and the hero is confirmed savings, because
+the watch loop below landed. `snooze` is still unsurfaced; `Keep` and `undo` are
+wired.
 
-- **No "we'll check your next statement" anywhere.** Nothing checks yet, and
-  shipping that promise before the loop exists is the exact failure this rebuild
-  is undoing. The cancel sheet says only "We'll mark it as cancelled here".
-- **The hero number is committed spend, not confirmed savings.** Committed spend
-  is measured and true today; confirmed savings would read `$0` forever until the
-  loop lands. Swap it then — the comment in `WatchdogScreen.js` says so.
-- `snooze` is still unsurfaced. `Keep` and `undo` are wired.
+### 2. The watch loop — DONE (`2332349`)
 
-### 2. The watch loop — do this next (~half day, backend)
+`services/watch.js` (pure), `watchdog_watches`, `GET /watchdog/watches/outcomes`
+plus `POST /:id/seen`, outcome cards on the screen, and `confirmed_savings`
+replacing the counterfactual in the hero slot.
 
-What makes the buttons worth pressing.
+The defect worth remembering: a watch whose predicted charge date was already in
+the past resolved as *confirmed stopped* on the next analysis having observed
+nothing — and resolving it freed the partial unique index, so a second watch
+could open on the same expense and count one saving twice. Any user cancelling
+something after its due date hits it. The window is now measured from whichever
+of the action and the expected charge came later, and `openWatch` rolls a stale
+prediction forward.
 
-- A `watching` state carrying the expected charge date.
-- Resolution: no charge → *"Netflix stopped, $16.49 a month back"*; charge →
-  *"Netflix charged you again"*, benign explanation first.
-- Replace `potential_savings` (today a counterfactual — money the user said they
-  would save) with **confirmed** savings.
-- Read-only check endpoint plus a separate confirm, the milestone two-phase
-  pattern, so an app-open without notification permission cannot consume the
-  event permanently.
-
-### 3. Notifications (~half day)
+### 3. Notifications — do this next (~half day)
 
 Design is settled in spec §16. Content freezes at schedule time, so the body can
 never carry the outcome.
