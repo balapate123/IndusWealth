@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    FlatList,
+    AccessibilityInfo,
+    Animated,
+    Easing,
     Linking,
     Modal,
     ScrollView,
@@ -10,10 +12,10 @@ import {
     View,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { alpha, categoryColor, RADIUS, SPACING } from '../constants/tokens';
+import { alpha, RADIUS, SPACING } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import { AuthLayout } from '../components/AuthChrome';
-import { BottomSheet, Button, Input, Text } from '../components/ui';
+import { Button, Text } from '../components/ui';
 import CustomAlert from '../components/CustomAlert';
 import useAlert from '../hooks/useAlert';
 import { create, open } from '../services/plaidLink';
@@ -21,29 +23,36 @@ import { api, getApiTarget } from '../services/api';
 import cache from '../services/cache';
 
 /**
- * Institutions carry a slot in the category ramp rather than a brand hex, so each
- * theme resolves its own legible colour. A literal brand colour picked for the
- * dark screen (the old `iconBg: '#3D3200'`) is invisible on the light one.
+ * There is deliberately no institution picker on this screen.
+ *
+ * It used to show a grid of four featured banks plus a searchable list of ten,
+ * and then discard the choice: handleContinue checked that `selectedBank` was
+ * truthy and called createLinkToken() without it. Plaid asks for the
+ * institution anyway, so the user picked their bank twice and the first pick
+ * changed nothing.
+ *
+ * The list being hardcoded made it worse than redundant. Plaid covers credit
+ * unions and smaller institutions that were not among those ten, and Continue
+ * stayed disabled until something was selected — so anyone banking outside the
+ * list searched, got "No banks found", and could not proceed at all.
+ *
+ * What replaces it is a handoff card that sets the expectation Plaid is about
+ * to take over, and answers the question actually on someone's mind at the
+ * moment they hand over bank credentials: what do you get, and can you move my
+ * money.
  */
-const FEATURED_BANKS = [
-    { id: 'rbc', name: 'RBC Royal Bank', subtitle: 'Instant link', icon: 'bank', colorIndex: 2 },
-    { id: 'td', name: 'TD Canada Trust', subtitle: 'Instant link', icon: 'piggy-bank', colorIndex: 5 },
-    { id: 'cibc', name: 'CIBC', subtitle: 'Instant link', icon: 'credit-card', colorIndex: 6 },
-    { id: 'search', name: 'Find my bank', subtitle: 'Search list', icon: 'magnify', isSearch: true },
+
+/** The three nodes of the handoff, in the order the user will experience them. */
+const HANDOFF_NODES = [
+    { key: 'app', icon: 'wallet-outline', label: 'IndusWealth' },
+    { key: 'plaid', icon: 'shield-check-outline', label: 'Plaid' },
+    { key: 'bank', icon: 'bank-outline', label: 'Your bank' },
 ];
 
-// All available banks for search
-const ALL_BANKS = [
-    { id: 'rbc', name: 'RBC Royal Bank' },
-    { id: 'td', name: 'TD Canada Trust' },
-    { id: 'cibc', name: 'CIBC' },
-    { id: 'bmo', name: 'BMO Bank of Montreal' },
-    { id: 'scotiabank', name: 'Scotiabank' },
-    { id: 'national', name: 'National Bank of Canada' },
-    { id: 'desjardins', name: 'Desjardins' },
-    { id: 'tangerine', name: 'Tangerine' },
-    { id: 'simplii', name: 'Simplii Financial' },
-    { id: 'eq', name: 'EQ Bank' },
+const WHAT_HAPPENS = [
+    'Plaid opens in a secure window.',
+    'You choose your institution and sign in there — never here.',
+    'We receive read-only balances and transactions. Nothing else.',
 ];
 
 /**
@@ -74,45 +83,65 @@ const makeStyles = (t) => StyleSheet.create({
     title: { marginBottom: SPACING.SMALL + 4 },
     subtitle: { marginBottom: SPACING.XL },
 
-    grid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-    },
-    bankCard: {
-        width: '48%',
+    // The handoff diagram: three nodes, two runs of travelling dots between them.
+    handoff: {
         backgroundColor: t.SURFACE,
-        borderRadius: RADIUS.LARGE,
-        borderWidth: 1,
-        borderColor: t.CARD_BORDER_WIDTH ? t.CARD_BORDER : 'transparent',
-        padding: SPACING.MEDIUM,
-        marginBottom: SPACING.MEDIUM,
+        borderRadius: RADIUS.CARD,
+        borderWidth: t.CARD_BORDER_WIDTH,
+        borderColor: t.CARD_BORDER,
+        paddingVertical: SPACING.LARGE,
+        paddingHorizontal: SPACING.MEDIUM,
+        marginBottom: SPACING.LARGE,
         ...t.ELEVATION.CARD,
     },
-    bankCardSelected: {
-        borderColor: t.ACCENT,
-        backgroundColor: t.ACCENT_DIM,
+    handoffRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
-    bankIcon: {
-        width: 46,
-        height: 46,
-        borderRadius: RADIUS.MEDIUM,
+    node: { alignItems: 'center', width: 84 },
+    nodeCircle: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: SPACING.SMALL + 4,
+        marginBottom: SPACING.SMALL,
     },
-    bankName: { marginBottom: 2 },
-    selectedBadge: {
-        position: 'absolute',
-        top: SPACING.SMALL,
-        right: SPACING.SMALL,
-        width: 20,
-        height: 20,
-        borderRadius: 10,
+    nodeLabel: { textAlign: 'center' },
+    wire: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        // Lift the dots to the vertical centre of the circles above the labels.
+        marginBottom: 22,
+    },
+    wireDot: {
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
         backgroundColor: t.ACCENT,
+    },
+
+    steps: { marginBottom: SPACING.LARGE },
+    step: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: SPACING.MEDIUM,
+        marginBottom: SPACING.MEDIUM,
+    },
+    stepNumber: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: t.ACCENT_DIM,
         justifyContent: 'center',
         alignItems: 'center',
+        marginTop: 1,
     },
+    stepText: { flex: 1 },
 
     security: {
         flexDirection: 'row',
@@ -129,21 +158,6 @@ const makeStyles = (t) => StyleSheet.create({
     poweredBy: {
         textAlign: 'center',
         marginTop: SPACING.MEDIUM,
-    },
-
-    sheetTitle: { marginBottom: SPACING.MEDIUM },
-    searchRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.MEDIUM,
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: t.HAIRLINE,
-    },
-    searchName: { flex: 1 },
-    searchEmpty: {
-        textAlign: 'center',
-        paddingVertical: SPACING.XL,
     },
 
     successOverlay: {
@@ -180,22 +194,84 @@ const makeStyles = (t) => StyleSheet.create({
     },
 });
 
+/**
+ * One run of travelling dots along the handoff wire.
+ *
+ * `progress` is a single shared 0..1 loop and each dot reads a staggered slice
+ * of it, so the whole diagram animates off one driver. Opacity only, so it runs
+ * on the native thread; the caller leaves the driver at 0 when Reduce Motion is
+ * on, which renders the dots dim and still.
+ */
+const Wire = ({ progress, offset, styles }) => (
+    <View style={styles.wire}>
+        {[0, 1, 2].map((i) => {
+            const start = 0.05 + offset + i * 0.16;
+            return (
+                <Animated.View
+                    key={i}
+                    style={[
+                        styles.wireDot,
+                        {
+                            opacity: progress.interpolate({
+                                inputRange: [0, start, start + 0.1, start + 0.2, 1],
+                                outputRange: [0.2, 0.2, 1, 0.2, 0.2],
+                                extrapolate: 'clamp',
+                            }),
+                        },
+                    ]}
+                />
+            );
+        })}
+    </View>
+);
+
 const ConnectBankScreen = ({ navigation, route }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
     const { showAlert, alertProps } = useAlert();
 
-    const [selectedBank, setSelectedBank] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [searchVisible, setSearchVisible] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
     const [successVisible, setSuccessVisible] = useState(false);
 
     // Store the link token so we can resume after an external-browser OAuth redirect
     const linkTokenRef = useRef(null);
 
+    // One driver for every dot on the wire. Lazily created through useState
+    // rather than useRef: each Wire reads this value during render to build its
+    // interpolation, and reading a ref during render is exactly what
+    // react-hooks/refs forbids. The initialiser runs once, so it is still a
+    // single stable Animated.Value for the life of the screen.
+    const [progress] = useState(() => new Animated.Value(0));
+
     // Detect if we're in onboarding flow or accessed from main app
     const isOnboarding = route?.params?.isOnboarding ?? false;
+
+    // Respect Reduce Motion. A looping animation behind a bank-credentials
+    // handoff is decoration, and decoration is what that setting is for.
+    useEffect(() => {
+        let loop;
+        let cancelled = false;
+
+        AccessibilityInfo.isReduceMotionEnabled()
+            .then((reduceMotion) => {
+                if (cancelled || reduceMotion) return;
+                loop = Animated.loop(
+                    Animated.timing(progress, {
+                        toValue: 1,
+                        duration: 2200,
+                        easing: Easing.linear,
+                        useNativeDriver: true,
+                    })
+                );
+                loop.start();
+            })
+            .catch(() => { /* no accessibility service — leave the dots static */ });
+
+        return () => {
+            cancelled = true;
+            loop?.stop();
+        };
+    }, [progress]);
 
     // Listen for the deep link that fires when the user returns from an external OAuth browser.
     // Flow: Plaid → bank OAuth (external browser) → https redirect → induswealth:// deep link → here.
@@ -222,24 +298,6 @@ const ConnectBankScreen = ({ navigation, route }) => {
         const subscription = Linking.addEventListener('url', handleDeepLink);
         return () => subscription.remove();
     }, []);
-
-    const filteredBanks = ALL_BANKS.filter((bank) =>
-        bank.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const handleBankSelect = (bank) => {
-        if (bank.isSearch) {
-            setSearchVisible(true);
-        } else {
-            setSelectedBank(bank.id);
-        }
-    };
-
-    const handleSearchBankSelect = (bank) => {
-        setSelectedBank(bank.id);
-        setSearchVisible(false);
-        setSearchQuery('');
-    };
 
     // Shared success handler — used by both the initial open() and the OAuth resume path
     const handlePlaidSuccess = async (success) => {
@@ -302,11 +360,6 @@ const ConnectBankScreen = ({ navigation, route }) => {
     };
 
     const handleContinue = async () => {
-        if (!selectedBank) {
-            showAlert('Select a Bank', 'Please select your bank to continue.');
-            return;
-        }
-
         setLoading(true);
 
         try {
@@ -378,33 +431,9 @@ const ConnectBankScreen = ({ navigation, route }) => {
         );
     };
 
-    const renderBankCard = (bank) => {
-        const isSelected = selectedBank === bank.id;
-        const hue = bank.colorIndex == null ? theme.TEXT_MUTED : categoryColor(theme, bank.colorIndex);
-
-        return (
-            <TouchableOpacity
-                key={bank.id}
-                style={[styles.bankCard, isSelected && styles.bankCardSelected]}
-                onPress={() => handleBankSelect(bank)}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-            >
-                <View style={[styles.bankIcon, { backgroundColor: alpha(hue, 0.14) }]}>
-                    <MaterialCommunityIcons name={bank.icon} size={26} color={hue} />
-                </View>
-                <Text variant="bodyMed" style={styles.bankName} numberOfLines={1}>{bank.name}</Text>
-                <Text variant="meta" tone="muted">{bank.subtitle}</Text>
-
-                {isSelected ? (
-                    <View style={styles.selectedBadge}>
-                        <Ionicons name="checkmark" size={13} color={theme.TEXT_ON_ACCENT} />
-                    </View>
-                ) : null}
-            </TouchableOpacity>
-        );
-    };
+    // Us, the custodian, and the bank we do not know yet. The hues carry that
+    // meaning rather than decorating the row.
+    const nodeColor = { app: theme.ACCENT, plaid: theme.SUCCESS, bank: theme.INFO };
 
     return (
         <AuthLayout
@@ -424,73 +453,72 @@ const ConnectBankScreen = ({ navigation, route }) => {
             ) : undefined}
         >
             <ScrollView showsVerticalScrollIndicator={false}>
-                <Text variant="h1" style={styles.title}>Connect your bank</Text>
+                <Text variant="h1" style={styles.title}>Next stop: your bank</Text>
                 <Text variant="body" tone="secondary" style={styles.subtitle}>
-                    Select your primary banking institution to securely link your accounts
-                    to <Text variant="bodyMed" tone="accent">IndusWealth</Text>.
+                    <Text variant="bodyMed" tone="accent">IndusWealth</Text> hands off to Plaid,
+                    which handles the sign-in. You pick your institution there — credit unions and
+                    smaller banks included.
                 </Text>
 
-                <View style={styles.grid}>
-                    {FEATURED_BANKS.map(renderBankCard)}
+                <View
+                    style={styles.handoff}
+                    accessible
+                    accessibilityRole="image"
+                    accessibilityLabel="IndusWealth connects to your bank through Plaid"
+                >
+                    <View style={styles.handoffRow}>
+                        {HANDOFF_NODES.map((node, i) => (
+                            <React.Fragment key={node.key}>
+                                {i > 0 ? (
+                                    <Wire progress={progress} offset={(i - 1) * 0.28} styles={styles} />
+                                ) : null}
+                                <View style={styles.node}>
+                                    <View
+                                        style={[
+                                            styles.nodeCircle,
+                                            { backgroundColor: alpha(nodeColor[node.key], 0.14) },
+                                        ]}
+                                    >
+                                        <MaterialCommunityIcons
+                                            name={node.icon}
+                                            size={28}
+                                            color={nodeColor[node.key]}
+                                        />
+                                    </View>
+                                    <Text variant="meta" tone="secondary" style={styles.nodeLabel}>
+                                        {node.label}
+                                    </Text>
+                                </View>
+                            </React.Fragment>
+                        ))}
+                    </View>
+                </View>
+
+                <View style={styles.steps}>
+                    {WHAT_HAPPENS.map((line, i) => (
+                        <View key={line} style={styles.step}>
+                            <View style={styles.stepNumber}>
+                                <Text variant="meta" tone="accent">{i + 1}</Text>
+                            </View>
+                            <Text variant="body" tone="secondary" style={styles.stepText}>{line}</Text>
+                        </View>
+                    ))}
                 </View>
 
                 <View style={styles.security}>
                     <Ionicons name="lock-closed" size={14} color={theme.SUCCESS} />
-                    <Text variant="label" tone="success">Bank-grade 256-bit encryption</Text>
+                    <Text variant="label" tone="success">Read-only. We can never move your money.</Text>
                 </View>
 
                 <Button
-                    title="Continue"
+                    title="Continue to Plaid"
                     onPress={handleContinue}
                     loading={loading}
-                    disabled={!selectedBank}
                     block
                 />
 
                 <Text variant="overline" tone="muted" style={styles.poweredBy}>Powered by Plaid</Text>
             </ScrollView>
-
-            <BottomSheet
-                visible={searchVisible}
-                onClose={() => {
-                    setSearchVisible(false);
-                    setSearchQuery('');
-                }}
-                scroll={false}
-            >
-                <Text variant="h2" style={styles.sheetTitle}>Find your bank</Text>
-
-                <Input
-                    placeholder="Search banks…"
-                    icon="search-outline"
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    onClear={() => setSearchQuery('')}
-                    autoFocus
-                />
-
-                <FlatList
-                    data={filteredBanks}
-                    keyExtractor={(item) => item.id}
-                    keyboardShouldPersistTaps="handled"
-                    renderItem={({ item }) => (
-                        <TouchableOpacity
-                            style={styles.searchRow}
-                            onPress={() => handleSearchBankSelect(item)}
-                            accessibilityRole="button"
-                        >
-                            <MaterialCommunityIcons name="bank" size={22} color={theme.TEXT_MUTED} />
-                            <Text variant="body" style={styles.searchName}>{item.name}</Text>
-                            {selectedBank === item.id ? (
-                                <Ionicons name="checkmark-circle" size={20} color={theme.SUCCESS} />
-                            ) : null}
-                        </TouchableOpacity>
-                    )}
-                    ListEmptyComponent={
-                        <Text variant="body" tone="muted" style={styles.searchEmpty}>No banks found</Text>
-                    }
-                />
-            </BottomSheet>
 
             <CustomAlert {...alertProps} />
 
