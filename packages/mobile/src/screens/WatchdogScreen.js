@@ -18,6 +18,7 @@ import {
 import api from '../services/api';
 import { hasSeenWatchdogIntro, setWatchdogIntroSeen } from '../services/cache';
 import { getCategoryMeta } from '../utils/categorization';
+import { syncWatchReminders } from '../services/notifications';
 import CancellationBottomSheet from '../components/CancellationBottomSheet';
 import NegotiationBottomSheet from '../components/NegotiationBottomSheet';
 import AlertBanner from '../components/AlertBanner';
@@ -240,27 +241,49 @@ const WatchdogScreen = ({ navigation }) => {
         }
     }, []);
 
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
-
-    useEffect(() => {
-        hasSeenWatchdogIntro().then((seen) => setShowIntro(!seen));
-    }, []);
-
     // Outcomes are fetched read-only and confirmed separately, so a request
     // that never reaches the screen cannot consume the one chance to tell the
     // user their cancellation failed. Same split as goal milestones.
+    const loadWatchState = useCallback(async () => {
+        try {
+            const data = await api.getWatchOutcomes();
+            setOutcomes(data?.outcomes || []);
+
+            // Cancel-then-reschedule from server state, so a watch that has
+            // resolved or been withdrawn loses its reminder instead of firing
+            // and sending the user to a screen with nothing on it. Serialised
+            // through the shared queue -- two overlapping runs interleave as
+            // cancel, cancel, schedule, schedule and everything ends up
+            // scheduled twice.
+            await syncWatchReminders(data?.pending || []);
+        } catch {
+            // The list still works without them; nothing here is load-bearing
+            // for rendering the screen.
+        }
+    }, []);
+
+    // One load, not two. The list and the watch state are both "open the
+    // screen", and refreshAfterAction already treats them as a pair.
     useEffect(() => {
-        api.getWatchOutcomes()
-            .then((data) => setOutcomes(data?.outcomes || []))
-            .catch(() => { /* the list still works without them */ });
+        fetchData();
+        loadWatchState();
+    }, [fetchData, loadWatchState]);
+
+    useEffect(() => {
+        hasSeenWatchdogIntro().then((seen) => setShowIntro(!seen));
     }, []);
 
     const acknowledgeOutcome = useCallback((id) => {
         setOutcomes((current) => current.filter((o) => o.id !== id));
         api.markWatchSeen(id).catch(() => { /* it will be offered again */ });
     }, []);
+
+    // Acting on a row opens or withdraws a watch, so the reminders have to be
+    // rebuilt from what the server now holds rather than guessed at here.
+    const refreshAfterAction = useCallback(() => {
+        fetchData();
+        loadWatchState();
+    }, [fetchData, loadWatchState]);
 
     const dismissIntro = useCallback(() => {
         setShowIntro(false);
@@ -288,7 +311,7 @@ const WatchdogScreen = ({ navigation }) => {
                 setNegotiateSheet({ visible: true, expense, guide });
             }
 
-            fetchData();
+            refreshAfterAction();
         } catch (err) {
             console.error('Error processing action:', err);
             setError('That did not go through. Pull to refresh and try again.');
@@ -639,7 +662,7 @@ const WatchdogScreen = ({ navigation }) => {
                 onClose={() => setCancelSheet({ visible: false, expense: null, guide: null })}
                 onConfirm={() => {
                     setCancelSheet({ visible: false, expense: null, guide: null });
-                    fetchData();
+                    refreshAfterAction();
                 }}
             />
             <NegotiationBottomSheet
@@ -649,7 +672,7 @@ const WatchdogScreen = ({ navigation }) => {
                 onClose={() => setNegotiateSheet({ visible: false, expense: null, guide: null })}
                 onNegotiated={() => {
                     setNegotiateSheet({ visible: false, expense: null, guide: null });
-                    fetchData();
+                    refreshAfterAction();
                 }}
             />
         </>

@@ -7,6 +7,7 @@ import {
     assertTriggerTypesMatch,
 } from '../utils/goalReminders';
 import { buildCardReminders, CARD_DUE_KIND } from '../utils/cardDueReminders';
+import { selectWatchReminders, WATCH_KIND } from '../utils/watchReminders';
 import { createSyncQueue } from '../utils/syncQueue';
 
 /**
@@ -37,6 +38,7 @@ const GOAL_MILESTONE_KIND = 'goal_milestone';
 const ANDROID_CHANNEL_ID = 'goal-reminders';
 const CARD_CHANNEL_ID = 'card-payments';
 const CHECKIN_KIND = 'checkin';
+const WATCH_CHANNEL_ID = 'watchdog-outcomes';
 
 /**
  * Install the foreground handler and the Android channel.
@@ -75,6 +77,15 @@ export async function configureNotifications() {
         // get to vibrate, for the same reason.
         await Notifications.setNotificationChannelAsync(CARD_CHANNEL_ID, {
             name: 'Card payment due dates',
+            importance: Notifications.AndroidImportance.HIGH,
+            enableVibrate: true,
+        });
+
+        // Its own channel at HIGH for the same reason as card payments: being
+        // charged for something you believed you had cancelled costs real
+        // money, and silencing savings nudges must not silence this.
+        await Notifications.setNotificationChannelAsync(WATCH_CHANNEL_ID, {
+            name: 'Cancellation results',
             importance: Notifications.AndroidImportance.HIGH,
             enableVibrate: true,
         });
@@ -129,6 +140,10 @@ export async function cancelCheckinReminder() {
     return cancelKind(CHECKIN_KIND);
 }
 
+export async function cancelAllWatchReminders() {
+    return cancelKind(WATCH_KIND);
+}
+
 /**
  * Serialises every reminder sync. See utils/syncQueue.js for why it must be.
  *
@@ -149,6 +164,10 @@ export function syncCardDueReminders(cards = []) {
 
 export function syncCheckinReminder(options = {}) {
     return enqueue(() => _syncCheckinReminder(options));
+}
+
+export function syncWatchReminders(watches = []) {
+    return enqueue(() => _syncWatchReminders(watches));
 }
 
 /**
@@ -284,6 +303,52 @@ async function _syncCardDueReminders(cards = []) {
 }
 
 /**
+ * One dated reminder per open watch, asking what happened.
+ *
+ * Cancel-then-reschedule from server state, like the others, so a watch the user
+ * withdrew or that has already resolved loses its reminder rather than firing
+ * and sending them to a screen with nothing on it.
+ *
+ * Unlike goal and card reminders these are one-shot date triggers: the question
+ * is only worth asking once. They still hold a slot until they fire, which is
+ * what the cap in selectWatchReminders is for.
+ *
+ * @returns {{scheduled: number, cancelled: number, permitted: boolean}}
+ */
+async function _syncWatchReminders(watches = []) {
+    const { granted } = await getNotificationPermission();
+
+    // Deliberately does not request permission. iOS grants one prompt and it is
+    // spent when the user switches a reminder on, not as a side effect of
+    // tapping Cancel on a subscription. Without permission the outcome still
+    // reaches them -- it is waiting on the screen when they next open the app.
+    if (!granted) {
+        const cancelled = await cancelAllWatchReminders();
+        return { scheduled: 0, cancelled, permitted: false };
+    }
+
+    const cancelled = await cancelAllWatchReminders();
+    let scheduled = 0;
+
+    for (const reminder of selectWatchReminders(watches)) {
+        try {
+            await Notifications.scheduleNotificationAsync({
+                content: reminder.content,
+                trigger: Platform.OS === 'android'
+                    ? { ...reminder.trigger, channelId: WATCH_CHANNEL_ID }
+                    : reminder.trigger,
+            });
+            scheduled++;
+        } catch (err) {
+            // One bad date must not stop the rest from being scheduled.
+            console.warn(`Could not schedule a watch reminder for ${reminder.key}:`, err?.message || err);
+        }
+    }
+
+    return { scheduled, cancelled, permitted: true };
+}
+
+/**
  * Show milestone notifications immediately.
  *
  * These cannot be scheduled ahead: crossing 50% depends on a balance the device
@@ -338,4 +403,5 @@ export const NOTIFICATION_KINDS = {
     GOAL_MILESTONE: GOAL_MILESTONE_KIND,
     CARD_DUE: CARD_DUE_KIND,
     CHECKIN: CHECKIN_KIND,
+    WATCH_OUTCOME: WATCH_KIND,
 };

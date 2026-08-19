@@ -19,6 +19,11 @@ export const TRIGGER_TYPES = {
     DAILY: 'daily',
     WEEKLY: 'weekly',
     MONTHLY: 'monthly',
+    // One-shot, for a question that is only worth asking once. Everything else
+    // here repeats; a watch reminder that repeated would ask whether a
+    // cancellation worked every month forever, and hold its slot against the
+    // 64-notification ceiling for good.
+    DATE: 'date',
 };
 
 export const CADENCES = ['daily', 'weekly', 'monthly'];

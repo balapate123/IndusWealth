@@ -92,10 +92,16 @@ router.get('/watches/outcomes', authenticateToken, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
 
     try {
-        const outcomes = await watchdogService.getUnpresentedOutcomes(req.user.id);
-        logger.info('Returning watch outcomes', { ...ctx, count: outcomes.length });
+        // Both halves in one round trip: the outcomes to show, and the watches
+        // still running so the device can reschedule its reminders. They are
+        // always needed together, on app open.
+        const [outcomes, pending] = await Promise.all([
+            watchdogService.getUnpresentedOutcomes(req.user.id),
+            watchdogService.getOpenWatches(req.user.id),
+        ]);
+        logger.info('Returning watch outcomes', { ...ctx, count: outcomes.length, pending: pending.length });
 
-        successResponse(res, { outcomes }, {
+        successResponse(res, { outcomes, pending }, {
             source: DATA_SOURCES.DATABASE,
             timestamp: new Date().toISOString(),
         });

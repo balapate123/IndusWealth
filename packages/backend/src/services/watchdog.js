@@ -1080,6 +1080,34 @@ class WatchdogService {
         }));
     }
 
+    /**
+     * Watches still running, for the device to schedule a reminder against.
+     *
+     * Returned alongside the outcomes rather than from their own endpoint: both
+     * are needed on app open, and one round trip is the difference between the
+     * reminders being rescheduled reliably and being rescheduled when a second
+     * request happens to succeed.
+     */
+    async getOpenWatches(userId) {
+        const result = await pool.query(
+            `SELECT w.id, w.action,
+                    TO_CHAR(w.expected_charge_date, 'YYYY-MM-DD') as expected_charge_date,
+                    re.merchant_name
+             FROM watchdog_watches w
+             JOIN recurring_expenses re ON re.id = w.recurring_expense_id
+             WHERE w.user_id = $1 AND w.status = $2
+             ORDER BY w.expected_charge_date ASC`,
+            [userId, WATCH_STATUS.WATCHING]
+        );
+
+        return result.rows.map((row) => ({
+            id: row.id,
+            merchantName: displayNameFor(row.merchant_name),
+            action: row.action,
+            expectedChargeDate: row.expected_charge_date,
+        }));
+    }
+
     /** Record that an outcome actually reached the screen. */
     async markWatchPresented(userId, watchId) {
         const result = await pool.query(

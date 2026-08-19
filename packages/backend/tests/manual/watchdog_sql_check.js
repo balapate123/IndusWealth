@@ -332,6 +332,27 @@ const TRANSACTIONS = [
     check('another user cannot mark it seen',
         await watchdog.markWatchPresented(999, outcomes[1].id), false);
 
+    console.log('\nwhat the device schedules reminders against');
+    // Everything resolved above, so nothing is left running.
+    check('resolved watches are not offered for scheduling',
+        (await watchdog.getOpenWatches(USER_ID)).length, 0);
+
+    // Open a fresh one and check it comes back in a shape the pure reminder
+    // builder can use. If these field names drift, the reminders silently stop
+    // being scheduled and nothing errors.
+    await watchdog.recordAction(USER_ID, expenseIds.Netflix, 'stop');
+    const open = await watchdog.getOpenWatches(USER_ID);
+    check('an open watch is offered', open.length, 1);
+    for (const field of ['id', 'merchantName', 'action', 'expectedChargeDate']) {
+        ok(`and carries ${field}`, open[0][field] !== undefined && open[0][field] !== null);
+    }
+    check('named for a person, not for the upsert key', open[0].merchantName, 'Netflix');
+    ok('and expects a date that has not happened yet',
+        open[0].expectedChargeDate > new Date().toISOString().slice(0, 10),
+        open[0].expectedChargeDate);
+    ok('which is exactly what the device needs to schedule',
+        /^\d{4}-\d{2}-\d{2}$/.test(open[0].expectedChargeDate), open[0].expectedChargeDate);
+
     console.log('\ncache invalidation');
     const cache = await pg.query('SELECT analysis_version FROM watchdog_analysis_cache');
     check('analysis_version is 2, so old caches re-run', cache.rows[0].analysis_version, 2);
