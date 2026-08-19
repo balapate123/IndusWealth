@@ -37,7 +37,9 @@
 | | `src/services/categorization.js` | Rule-based categorization (keyword index, longest match wins) |
 | | `src/services/category_map.js` | **The canonical category vocabulary.** Plaid's legacy taxonomy → our names + `mergeCanonicalRows` for SQL aggregates |
 | | `src/services/debt_calculator.js` | Snowball/Avalanche algorithms |
-| | `src/services/watchdog.js` | Recurring expense logic |
+| | `src/services/watchdog.js` | Watchdog orchestration: grouping, persistence, alerts, actions |
+| | `src/services/recurrence.js` | **Pure.** The four detection gates — 3 charges, amount stability, calendar anchor, confidence. No pool, so the rules are testable as assertions |
+| | `src/services/merchant_guides.js` | **The only way to reach a cancellation guide.** Slug keys (never display names) + three guide tiers; `buildGuide` never returns null |
 | | `src/services/educational_content.js` | Article management |
 | | `src/services/insight_data.js` | Insight aggregation |
 | | `src/services/insight_identity.js` | **The stable identity of an insight.** Type enum + subject slug → `type:subject` fingerprint; dedupes a batch |
@@ -145,6 +147,18 @@ There were two, and the app showed both at once: our keyword patterns produced `
 - **The same keyword must not appear in two categories.** `LCBO`/`WINE`/`BAR`/`PUB`/`LIQUOR` sat in both `Entertainment` and `Alcohol & Bars`; the backend picked Entertainment (declared first) while mobile — which never had the duplicates — said Alcohol & Bars, so one purchase had two names depending on which side of the wire you read.
 - **`packages/mobile/src/utils/categoryMap.js` is generated**, and `tests/category_map.test.mjs` loads the backend module and deep-compares both the map and the keyword tables. That parity test is what caught the Entertainment/Alcohol drift above.
 - `getCategoryMeta()` canonicalizes before lookup so a **stale AsyncStorage page** holding raw Plaid names still renders the right icon instead of a gray wallet.
+
+### Watchdog (recurring obligations)
+The question is **"is this a fixed obligation?"**, not "does this merchant repeat?" — the second describes a habit as well as a commitment, which is why a gas station and a hardware store used to render as subscriptions. Four gates in `services/recurrence.js`, in the order their failure is most informative:
+- **3 charges minimum.** Two give one interval, and `standardDeviation` of a single value is 0, so the weakest evidence used to score as maximally consistent.
+- **Amount stability**, measured as the fraction of *adjacent* charges billing the same number — never as the spread. A subscription steps between stable runs when the price rises; a spread test would delete exactly the row the price-increase alert fires from.
+- **A calendar anchor, not an interval band.** `Charged on the 14th` beats "average gap 25–35 days", which treats February as noise. **There is no `weekly`** — that band caught anything twice in ten days. A genuine weekly charge is now missed, which is the honest failure of the two.
+- **Confidence gates rather than decorates.** `low` never reaches the screen.
+- Three classes — `subscription` / `bill` / `fixed` — and **the class decides the buttons**, which is what structurally removes dead taps. `expense_class` is an explicit column, never inferred (the `user_goals.tracking_mode` lesson). The **variable-amount exemption is merchant-driven**: if unstable amounts alone could promote a row to `bill`, every gas station returns through that door.
+- **Categories are canonical.** Watchdog had a third vocabulary; `merchant_categories.json` is now an internal guide lookup only, its values translated into canonical names on the way out.
+- **A merchant key is a slug, never a display name** (`merchant_guides.js`) — the `insight_identity.js` discipline. **`buildGuide` never returns null**: the sheet only opens if a guide came back, so null meant the button flipped a hidden status and nothing appeared.
+- **`keep` is stored as `keep`.** Stored as `active` it reads as "no answer" and `suggestAction` re-flags the row on the next refresh.
+- Bump `ANALYSIS_VERSION` on any detector change — `getCacheFreshness` discards older caches, which is the only thing that clears stale false positives.
 
 ### Transaction Flags
 User-defined groupings ("Home", "Trip to Montreal"), **distinct from `category`** — a category is inferred by Plaid/AI and single-valued; a flag is chosen by the user and a transaction can carry several.
@@ -335,6 +349,19 @@ EXPO_PUBLIC_API_URL=   # Override default API endpoint
 
 Work is on `dev`. Backend deploys to Render from the deploy branch.
 
+> **`docs/PRODUCT_BACKLOG.md` is the product backlog** — what to build next, and
+> what has already been ruled out and why (section D). Read section D before
+> proposing a feature; several of those ideas cost us a Play Store rejection.
+
+**Watchdog rebuild, 2026-08-19 (on `dev`, unpushed, mobile screen NOT done).** The screen showed gas stations as subscriptions and both action buttons were dead. Root causes, all confirmed against the shipped code:
+- `classifyFrequency` returned `'weekly'` for **any** average interval of 0–10 days, so any merchant visited twice in a week and a half qualified. `confidence` was computed, stored, rendered as an unlabelled dot, and **filtered nothing**. The minimum was 2 charges — one interval, whose standard deviation is 0 by definition, so the weakest evidence scored as the strongest.
+- `EXCLUDED_CATEGORIES` listed `'Payment'` and `'Loan'`, filtering out exactly the commitments the feature exists to show.
+- `cancellation_guides.json` is keyed on the display name `Rogers` while the detector emits `ROGERS`; **5 of 12 guides never resolved**, and 4 of those 5 were the only merchants with negotiation scripts. Negotiate worked for GoodLife Fitness alone.
+- Watchdog kept a **third category vocabulary** disagreeing with `category_map.js` on every row (Netflix: Streaming vs Subscriptions; Rogers, Pioneer, Esso, Intact: all `Other`).
+- `recordAction('keep')` stored `'active'`, which `analyzeForUser` reads as "no answer", so a kept row came back on the next refresh.
+
+Fixed by `services/recurrence.js` (**pure**, no pool — the gates as assertions; 29 tests, 11 mutations all caught) plus `services/merchant_guides.js` (slug keys, tiered guides, **never returns null**). Copy was written *before* the code, as the spec: `docs/superpowers/specs/2026-08-19-watchdog-rebuild-copy.md` §12 maps each user-facing promise to the rule it obligates. Verify with `node tests/manual/watchdog_sql_check.js` (PGlite, 27 checks, drives the shipped service).
+
 **Added 2026-08-11 (all on `dev`, none deployed):** the category treemap on Analytics, credit card payment due dates with local reminders, and the weekly check-in nudge. Three real bugs were found by verification rather than by running the app:
 - `_resolveOwnedAccount` was used by the new card route but **had never been exported** from `db.js` — every card save 500'd.
 - `recordNudgeShown` **table-qualified the column on the left of an `ON CONFLICT ... SET`**, which Postgres reads as a column named `nudge_history`; every `POST /nudges/checkin/seen` 500'd. Same silent write-path shape as the `PUT /insights/preferences` bug.
@@ -362,7 +389,7 @@ Work is on `dev`. Backend deploys to Render from the deploy branch.
 
 **Pending / blockers:**
 0. **Play Store rejection #3 — needs an organisation developer account.** Not a code fix. The user is handling it; development continues meanwhile. (Rejections #1 and #2 had different causes — see `memory/project_play_store_rejections.md`.)
-0b. **Deploy branch has drifted badly.** Production builds from `feature/web-export-fix` (`d32dee6`); `dev` is now **ten commits ahead** (standing instruction: work stays on `dev` until told otherwise). Production 404s `/insights/spotlight`, `/card-due-dates` and `/nudges`, and needs a **Manual Deploy** — auto-deploy is off. Two migrations are pending there (`add_card_due_dates.sql`, `add_checkin_nudges.sql`); both are idempotent and run automatically on boot. Staging has the Track B routes but nothing since.
+0b. **Deploy branch has drifted badly.** Production builds from `feature/web-export-fix` (`d32dee6`); `dev` is now **ten commits ahead** (standing instruction: work stays on `dev` until told otherwise). Production 404s `/insights/spotlight`, `/card-due-dates` and `/nudges`, and needs a **Manual Deploy** — auto-deploy is off. Three migrations are pending there (`add_card_due_dates.sql`, `add_checkin_nudges.sql`, `add_watchdog_classes.sql`); all are idempotent and run automatically on boot. Staging has the Track B routes but nothing since.
 1. **Plaid Android OAuth (IN PROGRESS — user finishing manually)**: `PLAID_ENV=production` on Render. The Plaid dashboard login has TWO teams: "BHARGAV KIRIT MARSONIA" (personal) and "IndusWealth". The Android package name `com.induswealth.app` was mistakenly being registered under the personal team; it must be saved under Developers → API → "Allowed Android package names" in the team whose `PLAID_CLIENT_ID` matches Render's (verify via Developers → Keys — likely the IndusWealth team). Redirect URIs list was empty on the personal team, further evidence Render's keys belong to the other team. Error until done: "Android package name must be configured in the developer dashboard."
 2. **Plaid Link cannot open in Expo Go** (native module missing). Testing bank connect requires a dev build: `cd packages/mobile && eas build --profile development --platform android`, then `npx expo start` and open the standalone dev app. JS-only changes need no rebuild; there is NO EAS Update (OTA) configured, so installed builds only get new JS via rebuild.
 3. ~~Run `npm run migrate` against prod DB for `category_ai_insights`~~ **RESOLVED**: migrations now run automatically on every deploy. `services/db.js` `initDb()` (called on boot) and the `npm run migrate` CLI both iterate the single ordered list in `db/migrations.js`; `add_category_insights.sql` is included, so it lands on the next Render deploy. All migrations are idempotent, so the boot re-run is a safe no-op.
