@@ -238,6 +238,7 @@ const HomeScreen = ({ navigation }) => {
     // reminders get reconciled with the server — the hook reschedules whenever
     // the list loads, which covers a goal changed on another device.
     const { goals: activeGoals, load: loadGoals } = useGoals({ status: 'active' });
+    const [watchdog, setWatchdog] = useState(null);
 
     // Reload on focus. useGoals holds its state per instance, and Home and the
     // Goals list each have their own — so deleting a goal over there refetched
@@ -376,11 +377,17 @@ const HomeScreen = ({ navigation }) => {
 
             // STEP 2: Fetch fresh data from API
             const refreshParam = forceRefresh ? '?refresh=true' : '';
-            const [accountsData, transactionsData, userData] = await Promise.all([
+            const [accountsData, transactionsData, userData, watchdogData] = await Promise.all([
                 api.getAccounts().catch(() => null),
                 api.getTransactions(refreshParam).catch(() => null),
                 api.auth.me().catch(() => null),
+                api.getWatchdogSummary().catch(() => null),
             ]);
+
+            // Summary only. The outcome cards stay on the Watchdog screen: they
+            // are presented once, and two screens racing to mark the same one
+            // seen is a good way to lose it.
+            if (watchdogData?.success) setWatchdog(watchdogData);
 
             if (userData?.user?.name) {
                 setUserName(userData.user.name.split(' ')[0]); // Use first name
@@ -648,6 +655,58 @@ const HomeScreen = ({ navigation }) => {
                     />
                 </View>
             </Card>
+
+            {/* Watchdog. It lives behind Profile -> Quick access, which is four
+                taps from here for the feature with the clearest dollar value on
+                it. There is no room for a sixth tab, so this is the door.
+
+                Summary only, and deliberately no flag count: "3 flags" invites a
+                tap to go and clear something, which is not what this screen is
+                for. What you are committed to is the useful number. */}
+            <View>
+                <Overline
+                    right={watchdog?.subscription_count > 0 ? (
+                        <TouchableOpacity onPress={() => navigation.navigate('Watchdog')}>
+                            <Text variant="label" tone="link">View all</Text>
+                        </TouchableOpacity>
+                    ) : null}
+                >
+                    Recurring payments
+                </Overline>
+
+                <Card onPress={() => navigation.navigate('Watchdog')}>
+                    <View style={styles.goalsEmpty}>
+                        <View style={styles.goalsEmptyIcon}>
+                            <Ionicons name="repeat" size={20} color={theme.ACCENT} />
+                        </View>
+                        <View style={styles.goalsEmptyBody}>
+                            {watchdog?.subscription_count > 0 ? (
+                                <>
+                                    <Text variant="bodyMed">
+                                        ${Number(watchdog.total_monthly || 0).toFixed(2)} a month committed
+                                    </Text>
+                                    <Text variant="meta" tone="secondary">
+                                        {watchdog.subscription_count} repeating payment
+                                        {watchdog.subscription_count === 1 ? '' : 's'}
+                                        {watchdog.confirmed_savings > 0
+                                            ? ` · $${Number(watchdog.confirmed_savings).toFixed(2)} a month saved so far`
+                                            : ''}
+                                    </Text>
+                                </>
+                            ) : (
+                                <>
+                                    <Text variant="bodyMed">Find what repeats</Text>
+                                    <Text variant="meta" tone="secondary">
+                                        Subscriptions, bills and fixed payments, and how to get out of
+                                        the ones you do not want.
+                                    </Text>
+                                </>
+                            )}
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color={theme.TEXT_MUTED} />
+                    </View>
+                </Card>
+            </View>
 
             {/* Goals — only the ones still in progress, newest target first.
                 Capped at two: this is a summary, and the full list is one tap

@@ -1169,19 +1169,16 @@ class WatchdogService {
         const flagsCount = parseInt(flagsResult.rows[0].count, 10);
         const topFlag = topFlagResult.rows[0] || null;
 
-        // Calculate potential savings
-        const savingsResult = await pool.query(
-            `SELECT COALESCE(SUM(amount), 0) as savings
-             FROM recurring_expenses
-             WHERE user_id = $1 AND action IN ('stop', 'negotiate')`,
-            [userId]
-        );
+        // Was the same counterfactual the screen used to lead with: the summed
+        // amounts of everything the user had said they would cancel. The widget
+        // reports measured savings for the same reason the screen does.
+        const confirmedSavings = await this.getConfirmedSavings(userId);
 
         return {
             total_monthly: parseFloat(stats.total_monthly),
             subscription_count: parseInt(stats.subscription_count, 10),
             flags_found: flagsCount,
-            potential_savings: parseFloat(savingsResult.rows[0].savings),
+            confirmed_savings: confirmedSavings,
             top_flag: topFlag ? {
                 name: topFlag.name,
                 reason: topFlag.reason,

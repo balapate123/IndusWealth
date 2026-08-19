@@ -101,6 +101,12 @@ const makeStyles = (t) => StyleSheet.create({
         marginBottom: SPACING.SMALL,
     },
     introBody: { marginTop: 6 },
+    introActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+        marginTop: SPACING.MEDIUM,
+    },
 
     // Totals
     totalsTop: {
@@ -499,13 +505,20 @@ const WatchdogScreen = ({ navigation }) => {
                             that. What we can do is show you exactly what you&apos;re committed to,
                             and how to get out of it.
                         </Text>
-                        <Button
-                            title="Got it"
-                            variant="secondary"
-                            size="sm"
-                            onPress={dismissIntro}
-                            style={{ marginTop: SPACING.MEDIUM, alignSelf: 'flex-start' }}
-                        />
+                        <View style={styles.introActions}>
+                            <Button
+                                title="How it works"
+                                variant="ghost"
+                                size="sm"
+                                onPress={() => navigation.navigate('LegalDoc', { docType: 'watchdog' })}
+                            />
+                            <Button
+                                title="Got it"
+                                variant="secondary"
+                                size="sm"
+                                onPress={dismissIntro}
+                            />
+                        </View>
                     </Card>
                 )}
 

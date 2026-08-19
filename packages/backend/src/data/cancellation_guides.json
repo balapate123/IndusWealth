@@ -20,10 +20,6 @@
       "pauseNote": "Netflix allows you to pause for 1-3 months instead of cancelling"
     },
     "negotiation": null,
-    "alternatives": [
-      { "name": "Crave", "price": 7.99, "note": "Canadian content + HBO" },
-      { "name": "Amazon Prime Video", "price": 9.99, "note": "Included with Prime membership" }
-    ],
     "annualOption": null,
     "averageCanadianPrice": 16.49
   },
@@ -62,12 +58,6 @@
         "Be polite but firm - they have significant discount authority"
       ]
     },
-    "alternatives": [
-      { "name": "Bell", "price": null, "note": "Compare plans at bell.ca/mobility" },
-      { "name": "Telus", "price": null, "note": "Compare plans at telus.com" },
-      { "name": "Fido", "price": null, "note": "Rogers flanker brand, often cheaper" },
-      { "name": "Koodo", "price": null, "note": "Telus flanker brand" }
-    ],
     "annualOption": null,
     "averageCanadianPrice": null
   },
@@ -102,10 +92,6 @@
         "Ask about bundle discounts if you have multiple Bell services"
       ]
     },
-    "alternatives": [
-      { "name": "Rogers", "price": null, "note": "Compare at rogers.com" },
-      { "name": "Virgin Plus", "price": null, "note": "Bell flanker brand, often cheaper" }
-    ],
     "annualOption": null,
     "averageCanadianPrice": null
   },
@@ -137,10 +123,6 @@
         "Telus EPP (Employee Purchase Plan) pricing is sometimes offered to retention customers"
       ]
     },
-    "alternatives": [
-      { "name": "Koodo", "price": null, "note": "Telus flanker brand" },
-      { "name": "Rogers", "price": null, "note": "Compare at rogers.com" }
-    ],
     "annualOption": null,
     "averageCanadianPrice": null
   },
@@ -165,11 +147,11 @@
       "pauseNote": null
     },
     "negotiation": null,
-    "alternatives": [
-      { "name": "Netflix", "price": 16.49, "note": "Broader content library" },
-      { "name": "Crave", "price": 7.99, "note": "Canadian + HBO content" }
-    ],
-    "annualOption": { "monthlyEquivalent": 11.08, "annualPrice": 132.99, "savings": "16%" },
+    "annualOption": {
+      "monthlyEquivalent": 11.08,
+      "annualPrice": 132.99,
+      "savings": "16%"
+    },
     "averageCanadianPrice": 11.99
   },
   "Spotify": {
@@ -194,10 +176,6 @@
       "pauseNote": "Spotify allows you to pause for up to 3 months"
     },
     "negotiation": null,
-    "alternatives": [
-      { "name": "YouTube Music", "price": 10.99, "note": "Includes YouTube Premium" },
-      { "name": "Apple Music", "price": 10.99, "note": "Better if you're in the Apple ecosystem" }
-    ],
     "annualOption": null,
     "averageCanadianPrice": 10.99
   },
@@ -221,8 +199,11 @@
       "pauseNote": "You can pause Prime for up to 3 months"
     },
     "negotiation": null,
-    "alternatives": [],
-    "annualOption": { "monthlyEquivalent": 8.25, "annualPrice": 99.00, "savings": "17%" },
+    "annualOption": {
+      "monthlyEquivalent": 8.25,
+      "annualPrice": 99,
+      "savings": "17%"
+    },
     "averageCanadianPrice": 9.99
   },
   "GoodLife Fitness": {
@@ -257,13 +238,12 @@
         "Corporate rates may be available through your employer"
       ]
     },
-    "alternatives": [
-      { "name": "Planet Fitness", "price": 15.00, "note": "Budget gym option" },
-      { "name": "Anytime Fitness", "price": 49.99, "note": "24/7 access" },
-      { "name": "YMCA", "price": 30.00, "note": "Community-based, income-adjusted pricing available" }
-    ],
-    "annualOption": { "monthlyEquivalent": 35.00, "annualPrice": 420.00, "savings": "12%" },
-    "averageCanadianPrice": 50.00
+    "annualOption": {
+      "monthlyEquivalent": 35,
+      "annualPrice": 420,
+      "savings": "12%"
+    },
+    "averageCanadianPrice": 50
   },
   "Adobe": {
     "displayName": "Adobe Creative Cloud",
@@ -297,10 +277,6 @@
         "Common offers: 2 months free, 40% off for 3 months, or Photography plan at reduced rate"
       ]
     },
-    "alternatives": [
-      { "name": "Affinity Suite", "price": 99.99, "note": "One-time purchase, no subscription" },
-      { "name": "Canva Pro", "price": 16.99, "note": "Good for basic design needs" }
-    ],
     "annualOption": null,
     "averageCanadianPrice": 75.99
   },
@@ -325,11 +301,11 @@
       "pauseNote": null
     },
     "negotiation": null,
-    "alternatives": [
-      { "name": "Google Workspace", "price": 8.40, "note": "Web-based alternative" },
-      { "name": "LibreOffice", "price": 0, "note": "Free and open source" }
-    ],
-    "annualOption": { "monthlyEquivalent": 8.25, "annualPrice": 99.00, "savings": "16%" },
+    "annualOption": {
+      "monthlyEquivalent": 8.25,
+      "annualPrice": 99,
+      "savings": "16%"
+    },
     "averageCanadianPrice": 9.99
   },
   "Crave": {
@@ -353,10 +329,6 @@
       "pauseNote": null
     },
     "negotiation": null,
-    "alternatives": [
-      { "name": "Netflix", "price": 16.49, "note": "Larger content library" },
-      { "name": "Disney+", "price": 11.99, "note": "Disney/Marvel/Star Wars" }
-    ],
     "annualOption": null,
     "averageCanadianPrice": 7.99
   },
@@ -381,7 +353,6 @@
       "pauseNote": null
     },
     "negotiation": null,
-    "alternatives": [],
     "annualOption": null,
     "averageCanadianPrice": null
   }

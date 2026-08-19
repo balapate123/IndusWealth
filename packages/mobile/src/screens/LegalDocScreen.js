@@ -79,11 +79,83 @@ const TERMS_OF_SERVICE_SECTIONS = [
     },
 ];
 
+/**
+ * The long-form answer to "why isn't X in my list", which is the question the
+ * Watchdog screen itself should not try to answer inline.
+ *
+ * Written in the same voice as the screen: it states what we cannot do as
+ * plainly as what we can.
+ */
+const WATCHDOG_SECTIONS = [
+    {
+        title: 'What Watchdog does',
+        content: 'Watchdog reads your transaction history looking for payments that repeat — subscriptions, bills, and fixed payments like rent or a loan.\n\nIt cannot cancel anything and it cannot negotiate. Nothing can; there is no way for an app to end a contract on your behalf. What it can do is show you exactly what you are committed to, tell you how to get out of it, and then watch your account to see whether it actually stopped.',
+    },
+    {
+        title: 'Why something is on the list',
+        content: 'A payment has to pass four tests before we call it recurring.\n\nWe have seen it at least three times. Twice could be a coincidence — two charges give one gap, and a single gap tells you nothing about whether it repeats.\n\nIt bills the same amount. A subscription charges the same number every time. A gas station never does. This is the test that keeps your fill-ups off the list.\n\nIt lands on the same day. Not "roughly every month" — the 14th, three months running. Statements do not wander.\n\nAnd we have to be reasonably sure. Anything we are only guessing at is left off rather than shown with a caveat.',
+    },
+    {
+        title: 'Why something is missing',
+        content: 'The most common reason is that we have only seen it once or twice. Keep the account connected and it will appear.\n\nWeekly payments are not detected at all. That is deliberate: the rule that would catch them also caught every merchant anyone visited twice in a week and a half, which is how gas stations and hardware stores ended up looking like subscriptions. Missing a genuine weekly charge is the better of the two mistakes.\n\nSomething paid by e-transfer to a person is also skipped, along with groceries and restaurants.\n\nAnd if you have just connected an account, we may not have enough history yet. Watchdog looks back about six months.',
+    },
+    {
+        title: 'The three groups',
+        content: 'Subscriptions are things you can cancel — streaming, software, a gym, a news site. These get a Cancel button.\n\nBills are things you usually cannot cancel but can often lower: your phone, your internet, your insurance. These get a Negotiate button where we hold a script for that company, and nothing where we do not, because a button with no path behind it is worse than no button.\n\nFixed payments are rent, a mortgage, a car loan. They carry no buttons at all. They are here so you can see and plan around them.',
+    },
+    {
+        title: 'Why a bill shows a range',
+        content: 'A hydro or gas bill genuinely changes month to month, so we show what it has ranged between rather than pretending one number is the answer.\n\nSubscriptions never show a range. If you ever see one there, something has gone wrong on our end.',
+    },
+    {
+        title: 'What happens after you tap Cancel',
+        content: 'We show you the steps and, where we have one, a direct link. You do the cancelling on the company\'s own site or over the phone.\n\nWhen you come back and mark it done, we note the date your next charge was due and check your account around then. If nothing arrives, we tell you it stopped and count it toward your confirmed savings. If a charge does arrive, we tell you that instead — cancellations sometimes take an extra billing cycle, and if you have a confirmation it may be worth disputing.\n\nThat second message is the reason the feature exists. Anyone can look up how to cancel a subscription. Almost nothing tells you it did not work.',
+    },
+    {
+        title: 'Confirmed savings',
+        content: 'The figure at the top counts only what we have watched happen: charges that stopped, and bills that came back smaller.\n\nIt deliberately does not count things you have told us you intend to cancel. A number made of good intentions is not a saving, and once you have seen one of those you stop believing the rest.',
+    },
+    {
+        title: 'What we never do',
+        content: 'We do not contact any company on your behalf, and we do not move money — not to cancel something, not to pay a bill, not ever.\n\nWe do not recommend a product based on your spending.\n\nAnd we do not share your transaction data with the merchants on this screen.',
+    },
+];
+
+/**
+ * Every long-form document the app renders in place.
+ *
+ * Was a pair of ternaries on `isPrivacy`, which silently meant "terms" for any
+ * docType that was not 'privacy' -- a third document would have rendered the
+ * Terms of Service under its own title.
+ */
+const DOCS = {
+    privacy: {
+        title: 'Privacy Policy',
+        icon: 'shield-checkmark',
+        version: 'Version 1.0 — Effective March 2026',
+        footer: 'IndusWealth is committed to protecting your privacy in accordance with Canadian law.',
+        sections: PRIVACY_POLICY_SECTIONS,
+    },
+    terms: {
+        title: 'Terms of Service',
+        icon: 'document-text',
+        version: 'Version 1.0 — Effective March 2026',
+        footer: 'By using IndusWealth, you acknowledge that you have read and agree to these Terms.',
+        sections: TERMS_OF_SERVICE_SECTIONS,
+    },
+    watchdog: {
+        title: 'How Watchdog works',
+        icon: 'eye',
+        version: null,
+        footer: 'Watchdog reads your transactions. It never moves money and never contacts anyone on your behalf.',
+        sections: WATCHDOG_SECTIONS,
+    },
+};
+
 const LegalDocScreen = ({ navigation, route }) => {
     const docType = route.params?.docType || 'privacy';
-    const isPrivacy = docType === 'privacy';
-    const title = isPrivacy ? 'Privacy Policy' : 'Terms of Service';
-    const sections = isPrivacy ? PRIVACY_POLICY_SECTIONS : TERMS_OF_SERVICE_SECTIONS;
+    const doc = DOCS[docType] || DOCS.privacy;
+    const { title, sections } = doc;
 
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
@@ -95,16 +167,12 @@ const LegalDocScreen = ({ navigation, route }) => {
             contentContainerStyle={styles.content}
         >
             <View style={styles.docHeader}>
-                <Ionicons
-                    name={isPrivacy ? 'shield-checkmark' : 'document-text'}
-                    size={40}
-                    color={theme.ACCENT}
-                />
+                <Ionicons name={doc.icon} size={40} color={theme.ACCENT} />
                 <Text variant="h1" tone="accent" style={styles.docTitle}>IndusWealth</Text>
                 <Text variant="title">{title}</Text>
-                <Text variant="meta" tone="muted" style={styles.docVersion}>
-                    Version 1.0 — Effective March 2026
-                </Text>
+                {doc.version ? (
+                    <Text variant="meta" tone="muted" style={styles.docVersion}>{doc.version}</Text>
+                ) : null}
             </View>
 
             {sections.map((section, index) => (
@@ -115,11 +183,7 @@ const LegalDocScreen = ({ navigation, route }) => {
             ))}
 
             <View style={styles.footer}>
-                <Text variant="meta" tone="muted" style={styles.footerText}>
-                    {isPrivacy
-                        ? 'IndusWealth is committed to protecting your privacy in accordance with Canadian law.'
-                        : 'By using IndusWealth, you acknowledge that you have read and agree to these Terms.'}
-                </Text>
+                <Text variant="meta" tone="muted" style={styles.footerText}>{doc.footer}</Text>
             </View>
         </Screen>
     );

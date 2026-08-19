@@ -141,8 +141,14 @@ const CATEGORY_GUIDES = {
             'Ask the gym how they accept cancellations — many need it in writing.',
             'Ask for written confirmation and the date of your final payment.',
         ],
+        // Said nothing about the law. An earlier draft asserted that Ontario has
+        // specific rules for fitness contracts — which is true, but we are an
+        // Ontario-jurisdiction app with a published financial disclaimer, and
+        // stating a consumer right loosely is not worth the risk for a sentence
+        // that adds nothing the next line does not already cover. Point people
+        // at their own agreement instead.
         tips: [
-            'Ontario has specific rules for fitness contracts. Check your agreement for your cancellation rights.',
+            'Your agreement sets the notice period and any cancellation rights. Read it before you call.',
             'Keep the written confirmation. It is the only proof you cancelled.',
         ],
     },

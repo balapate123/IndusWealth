@@ -13,6 +13,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 
 import {
     WATCH_KIND,
@@ -50,8 +51,16 @@ test('it fires three days after the charge was due, not on the day', () => {
 });
 
 test('the grace period matches the one the server resolves on', () => {
-    // If these drift, the notification arrives before the outcome exists and
-    // the user opens the app to a watch that is still running.
+    // Loads the backend module through createRequire and compares, the same way
+    // the category map parity test does. Asserting the number is 3 on this side
+    // proves nothing about the other: if the server waited four days the
+    // notification would arrive before the outcome existed, and the user would
+    // open the app to a watch still running and learn nothing. Neither side
+    // errors when they drift, which is what makes it worth a test.
+    const require = createRequire(import.meta.url);
+    const backend = require('../../backend/src/services/watch.js');
+
+    assert.equal(WATCH_GRACE_DAYS, backend.GRACE_DAYS);
     assert.equal(WATCH_GRACE_DAYS, 3);
 });
 
