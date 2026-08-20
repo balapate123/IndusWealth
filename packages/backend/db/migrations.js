@@ -40,4 +40,5 @@ module.exports = [
     'add_checkin_nudges.sql',
     'add_watchdog_classes.sql',
     'add_watchdog_watches.sql',
+    'add_goal_baseline_at.sql',
 ];

@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { encrypt, decrypt } = require('./encryption');
 const { mergeCanonicalRows } = require('./category_map');
+const { computeGoalPace } = require('./goal_pace');
 
 // PostgreSQL connection pool
 const pool = new Pool(
@@ -1141,6 +1142,9 @@ const GOAL_COLUMNS = `
     g.id, g.name, g.goal_type, g.target_amount::float AS target_amount,
     g.target_date, g.tracking_mode, g.account_id,
     g.baseline_amount::float AS baseline_amount,
+    -- When measurement started. Moves with baseline_amount, so it is the honest
+    -- denominator for a savings rate even after a relink.
+    g.baseline_at,
     g.color_index, g.icon,
     g.reminder_cadence, g.reminder_day, g.reminder_hour,
     g.reminder_amount::float AS reminder_amount,
@@ -1180,6 +1184,37 @@ const GOAL_FROM = `
         END AS saved
     ) p`;
 
+/**
+ * Attach the pace block to a goal row.
+ *
+ * Done here rather than in the route because `getGoals` and `getGoalById` are
+ * the only two ways a goal row reaches anything — the check-in nudge, the
+ * milestone check and the spotlight all read through them. A decoration added
+ * in one route is a decoration three other callers silently lack.
+ *
+ * `today` is the server's UTC date. The device computes its own day count for
+ * the deadline label, so the two can differ by one day late in the evening;
+ * that shifts no verdict, since every threshold here is measured in weeks.
+ */
+const _withPace = (row) => {
+    if (!row) return row;
+    return {
+        ...row,
+        pace: computeGoalPace({
+            targetAmount: row.target_amount,
+            savedAmount: row.saved_amount,
+            targetDate: row.target_date,
+            measuringSince: row.baseline_at,
+            lastContributionAt: row.last_contribution_at,
+            trackingMode: row.tracking_mode,
+            // A Date, not an ISO string: the columns above arrive from pg as
+            // Date objects, and today must be resolved in the same frame or a
+            // server east of Greenwich compares two different calendars.
+            today: new Date(),
+        }),
+    };
+};
+
 const getGoals = async (userId, { status = 'active' } = {}) => {
     const params = [userId];
     let statusClause = '';
@@ -1194,7 +1229,7 @@ const getGoals = async (userId, { status = 'active' } = {}) => {
          ORDER BY g.status = 'achieved', g.target_date NULLS LAST, LOWER(g.name)`,
         params
     );
-    return result.rows;
+    return result.rows.map(_withPace);
 };
 
 const getGoalById = async (userId, goalId) => {
@@ -1203,7 +1238,7 @@ const getGoalById = async (userId, goalId) => {
          WHERE g.user_id = $1 AND g.id = $2`,
         [userId, goalId]
     );
-    return result.rows[0] || null;
+    return _withPace(result.rows[0]) || null;
 };
 
 /**
@@ -1306,6 +1341,12 @@ const updateGoal = async (userId, goalId, fields) => {
     // Relinking re-snapshots the baseline, otherwise progress would be measured
     // against a balance from a different account.
     if (fields.accountId !== undefined) {
+        // Every branch below moves the baseline, and the saved figure is
+        // measured from it, so the clock the rate is divided by restarts too.
+        // Leaving it would divide a fresh near-zero saved figure by months of
+        // history and report a confident "you have stalled".
+        sets.push('baseline_at = NOW()');
+
         if (fields.accountId === null) {
             set('account_id', null);
             set('tracking_mode', 'manual');
