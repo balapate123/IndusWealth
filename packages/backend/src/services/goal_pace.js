@@ -189,6 +189,7 @@ function computeGoalPace({
         remaining: null,
         daysRemaining: null,
         observedDays: null,
+        daysSinceContribution: null,
         requiredPerMonth: null,
         actualPerMonth: null,
         deltaPerMonth: null,
@@ -239,7 +240,10 @@ function computeGoalPace({
     // account-tracked goal always has a null last contribution. Applying
     // staleness to it would mark every one of them stalled.
     const lastAt = trackingMode === 'manual' ? parseDate(lastContributionAt) : null;
-    const stale = Boolean(lastAt) && daysBetween(lastAt, now) > STALE_CONTRIBUTION_DAYS;
+    // Surfaced so the copy can be specific. "No contributions in 8 weeks" is a
+    // fact the user can act on; "this goal has stalled" is a verdict on them.
+    const daysSinceContribution = lastAt ? daysBetween(lastAt, now) : null;
+    const stale = daysSinceContribution !== null && daysSinceContribution > STALE_CONTRIBUTION_DAYS;
     const stopped = actualPerMonth !== null && actualPerMonth <= 0;
     const stalled = stale || stopped;
 
@@ -259,6 +263,7 @@ function computeGoalPace({
         remaining,
         daysRemaining,
         observedDays,
+        daysSinceContribution,
         requiredPerMonth: null,
         actualPerMonth,
         deltaPerMonth: null,

@@ -5,6 +5,7 @@ import { SPACING, RADIUS, alpha, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import { Card, Text, BarTrack } from './ui';
 import { money } from './TransactionRow';
+import { paceSummary, PACE_TONE } from '../utils/goalPace';
 
 /**
  * One goal: what it is, how far along, and what it needs next.
@@ -15,7 +16,25 @@ import { money } from './TransactionRow';
  * `progress_percent` is null — not zero — when the goal follows an account that
  * has been disconnected. Those are two very different states and the card says
  * so, because "0% saved" would read as a real measurement of nothing.
+ *
+ * The pace line renders in compact mode too, unlike the percentage and the
+ * footer. Home is where people actually look, and "am I going to make it" is
+ * the half of the question the bar cannot answer.
  */
+
+/** Icon per tone. Deliberately no error iconography: missing a savings target
+ *  is not a fault condition, and drawing it like one is scolding by other means. */
+const PACE_ICON = {
+    [PACE_TONE.GOOD]: 'trending-up',
+    [PACE_TONE.NEUTRAL]: 'speedometer-outline',
+    [PACE_TONE.ATTENTION]: 'time-outline',
+};
+
+const paceColor = (t, tone) => {
+    if (tone === PACE_TONE.GOOD) return t.SUCCESS;
+    if (tone === PACE_TONE.ATTENTION) return t.WARNING;
+    return t.TEXT_MUTED;
+};
 
 const makeStyles = (t) => StyleSheet.create({
     header: {
@@ -42,6 +61,12 @@ const makeStyles = (t) => StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
+        marginTop: SPACING.SMALL,
+    },
+    pace: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
         marginTop: SPACING.SMALL,
     },
     warning: {
@@ -91,6 +116,11 @@ const GoalCard = ({ goal, onPress, compact = false }) => {
     const percent = disconnected ? 0 : Math.round(Number(goal.progress_percent) || 0);
     const remaining = Math.max(target - saved, 0);
     const deadline = deadlineLabel(goal);
+    // Null for achieved and disconnected goals: both already have their own
+    // treatment on this card and a vaguer restatement underneath is worse than
+    // the gap. Also null for a state this build has not learned, rather than
+    // printing a raw enum the way InsightCardV2 once did.
+    const pace = paceSummary(goal.pace);
 
     return (
         <Card inset={false} onPress={onPress} style={{ marginBottom: SPACING.MEDIUM }}>
@@ -143,6 +173,24 @@ const GoalCard = ({ goal, onPress, compact = false }) => {
                         height={8}
                     />
 
+                    {pace && (
+                        <View style={styles.pace}>
+                            <Ionicons
+                                name={PACE_ICON[pace.tone]}
+                                size={12}
+                                color={paceColor(theme, pace.tone)}
+                            />
+                            <Text
+                                variant="meta"
+                                color={paceColor(theme, pace.tone)}
+                                numberOfLines={1}
+                                style={{ flex: 1 }}
+                            >
+                                {pace.text}
+                            </Text>
+                        </View>
+                    )}
+
                     {!compact && (
                         <View style={styles.footer}>
                             <Text variant="meta" tone="muted" style={{ flex: 1 }}>
@@ -158,4 +206,7 @@ const GoalCard = ({ goal, onPress, compact = false }) => {
 };
 
 export default GoalCard;
-export { deadlineLabel, daysUntil };
+// Exported so GoalDetailScreen dresses a tone the same way. Two copies of a
+// tone-to-colour map is how one screen ends up calling "behind" amber and the
+// other calling it red.
+export { deadlineLabel, daysUntil, PACE_ICON, paceColor };

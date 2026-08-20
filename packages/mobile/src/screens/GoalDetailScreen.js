@@ -25,7 +25,8 @@ import GoalEditorSheet from '../components/GoalEditorSheet';
 import CustomAlert from '../components/CustomAlert';
 import { useAlert } from '../hooks/useAlert';
 import { describeReminder } from '../utils/goalReminders';
-import { deadlineLabel } from '../components/GoalCard';
+import { deadlineLabel, PACE_ICON, paceColor } from '../components/GoalCard';
+import { paceDetail } from '../utils/goalPace';
 import { syncGoalReminders } from '../services/notifications';
 import api from '../services/api';
 
@@ -63,6 +64,16 @@ const makeStyles = (t) => StyleSheet.create({
         marginBottom: SPACING.MEDIUM,
     },
     section: { marginTop: SPACING.LARGE },
+    paceHead: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+        marginBottom: SPACING.MEDIUM,
+    },
+    paceCols: { flexDirection: 'row', gap: SPACING.MEDIUM },
+    paceCol: { flex: 1 },
+    paceValue: { marginTop: 2 },
+    paceNote: { marginTop: SPACING.MEDIUM },
     sheetField: { marginTop: SPACING.MEDIUM },
     sheetActions: { flexDirection: 'row', gap: SPACING.SMALL + 2, marginTop: SPACING.LARGE },
     addRow: {
@@ -243,6 +254,9 @@ const GoalDetailScreen = ({ navigation, route }) => {
     const percent = disconnected ? 0 : Math.round(Number(goal.progress_percent) || 0);
     const remaining = Math.max(target - saved, 0);
     const deadline = deadlineLabel(goal);
+    // Null for a finished or disconnected goal: the hero above already says
+    // "Target reached", and a disconnected one has its own reconnect prompt.
+    const pace = paceDetail(goal.pace);
 
     return (
         <Screen>
@@ -320,6 +334,51 @@ const GoalDetailScreen = ({ navigation, route }) => {
                         sub={deadline || 'No deadline'}
                     />
                 </StatGrid>
+
+                {pace && (
+                    <Card inset={false} style={styles.section}>
+                        <View style={styles.paceHead}>
+                            <Ionicons
+                                name={PACE_ICON[pace.tone]}
+                                size={16}
+                                color={paceColor(theme, pace.tone)}
+                            />
+                            <Text variant="body" color={paceColor(theme, pace.tone)} style={{ flex: 1 }}>
+                                {pace.headline || 'Pace'}
+                            </Text>
+                        </View>
+
+                        {/* Both columns always render. A tile that disappears when
+                            we have no number reads as a layout bug; an em dash
+                            reads as "not yet", which is what is true. */}
+                        <View style={styles.paceCols}>
+                            <View style={styles.paceCol}>
+                                <Text variant="meta" tone="muted">Needs</Text>
+                                <Text variant="h2" style={styles.paceValue} numberOfLines={1}>
+                                    {pace.required}
+                                </Text>
+                                <Text variant="meta" tone="muted" numberOfLines={1}>
+                                    {pace.requiredSub}
+                                </Text>
+                            </View>
+                            <View style={styles.paceCol}>
+                                <Text variant="meta" tone="muted">Your pace</Text>
+                                <Text variant="h2" style={styles.paceValue} numberOfLines={1}>
+                                    {pace.actual}
+                                </Text>
+                                <Text variant="meta" tone="muted" numberOfLines={1}>
+                                    {pace.actualSub}
+                                </Text>
+                            </View>
+                        </View>
+
+                        {pace.projection && (
+                            <Text variant="meta" tone="muted" style={styles.paceNote}>
+                                {pace.projection}
+                            </Text>
+                        )}
+                    </Card>
+                )}
 
                 <Card inset={false} style={styles.section}>
                     <ListRow

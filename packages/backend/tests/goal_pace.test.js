@@ -245,6 +245,24 @@ test('a manual goal nobody has fed in weeks is stalled, however good the average
     assert.equal(p.projectedDate, null, 'projected from a rate that stopped');
 });
 
+test('how long it has been is reported, so the copy can be specific', () => {
+    // "No contributions in 8 weeks" is a fact somebody can act on. "This goal
+    // has stalled" is a verdict on them, and the never-scold rule applies to
+    // our copy as much as to the model's.
+    assert.equal(pace({ lastContributionAt: '2025-11-01' }).daysSinceContribution, 61);
+    assert.equal(pace({ lastContributionAt: '2025-12-28' }).daysSinceContribution, 4);
+});
+
+test('an account-tracked goal reports no contribution age, because it has none', () => {
+    // Reporting the age of a contribution row that is no longer how the goal is
+    // measured would put "last topped up 8 weeks ago" under a balance that has
+    // been climbing all along.
+    assert.equal(
+        pace({ trackingMode: 'account', lastContributionAt: '2025-06-01' }).daysSinceContribution,
+        null
+    );
+});
+
 test('the staleness cutoff is longer than a month, so monthly savers survive it', () => {
     // Somebody contributing on the 1st is 31 days stale on the 1st. A 30-day
     // cutoff would call every monthly saver stalled, once a month, forever.
