@@ -47,6 +47,7 @@
 | | `src/services/logger.js` | Logging utility |
 | | `src/services/flags.js` | Flag constants: icon allowlist, ramp size, starter set |
 | | `src/services/goals.js` | Goal constants: icons, types, cadences, milestones + `newMilestones()` |
+| | `src/services/goal_pace.js` | **Pure.** Required vs. actual savings rate, the projected date, and the closed `PACE_STATE` enum |
 | | `src/services/cardDueDates.js` | Due-date constants: 28-day cap, lead bounds, 10-card cap |
 | | `src/services/nudges.js` | **Pure** check-in selection: candidates, priority, both cooldowns |
 | | `src/services/link_registry.js` | **The only source of outbound URLs.** Vetted destinations by key + host allowlist + safe in-app routes |
@@ -121,6 +122,7 @@
 | Utils | `src/utils/categorization.js` | Client-side category helpers |
 | | `src/utils/categoryMap.js` | **Generated** from the backend map — never edit by hand; run `packages/backend/scripts/gen-mobile-category-map.js` |
 | | `src/utils/goalReminders.js` | Pure reminder logic (trigger building, copy, cadence text) — no expo/RN imports so it is testable off-device |
+| | `src/utils/goalPace.js` | Pure copy for the pace block; mirrors `PACE_STATE`. Never scolds, rounds, hedges |
 | | `src/utils/cardDueReminders.js` | Pure due-date scheduling incl. the **lead-day wraparound** |
 | | `src/utils/treemap.js` | Pure squarified treemap layout + top-7/Other folding |
 | | `src/utils/syncQueue.js` | The one-at-a-time queue every reminder sync runs through |
@@ -128,7 +130,7 @@
 | | `packages/backend/tests/*.test.js` | `npm test` — node --test |
 
 ### Database Tables
-`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`), `transaction_flags` + `transaction_flag_links` (migration: `add_transaction_flags.sql`), `user_goals` + `goal_contributions` (migration: `add_goals.sql`), `insight_tracking` (migration: `add_insight_tracking.sql`, also adds `user_preferences.spotlight_enabled` / `.spotlight_last_shown_at`), `card_due_dates` (migration: `add_card_due_dates.sql`), `nudge_history` (migration: `add_checkin_nudges.sql`, also adds `user_preferences.checkin_enabled` / `.checkin_last_shown_at`)
+`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`), `transaction_flags` + `transaction_flag_links` (migration: `add_transaction_flags.sql`), `user_goals` + `goal_contributions` (migrations: `add_goals.sql`, `add_goal_baseline_at.sql` — adds `user_goals.baseline_at`), `insight_tracking` (migration: `add_insight_tracking.sql`, also adds `user_preferences.spotlight_enabled` / `.spotlight_last_shown_at`), `card_due_dates` (migration: `add_card_due_dates.sql`), `nudge_history` (migration: `add_checkin_nudges.sql`, also adds `user_preferences.checkin_enabled` / `.checkin_last_shown_at`)
 
 ### Charts
 `Spending by category` on Analytics is a **treemap** (`components/ui/Treemap.js`), not a stacked bar: past about four shares a bar's segments are too thin to compare and the labels stop fitting. Layout is squarified (`utils/treemap.js`, pure + tested).
@@ -176,6 +178,18 @@ A target the user saves **toward**, so progress accumulates upward. Debt payoff 
 - Accounts are addressed by **`plaid_account_id` (string)**, matching `GET /accounts` and the flag endpoints. The numeric `accounts.id` is the FK and stays inside the join. `a.user_id = g.user_id` in that join is the authorisation.
 - Colour is `color_index` into the 7-hue ramp, never a hex — same rule as flags.
 - `goal_contributions` has no `user_id`; the `EXISTS (SELECT 1 FROM user_goals WHERE id = $2 AND user_id = $1)` guard in the insert is what stops one user writing to another's goal.
+
+### Goal Pace
+`target_date` was stored, sorted on and rendered from the day goals shipped and nothing computed a rate from it. `services/goal_pace.js` is **pure** (`today` injected) and returns two rates and a date; `utils/goalPace.js` on the device owns what is said about them.
+- **A rate we cannot measure is not reported as zero.** A disconnected goal has an *unknown* pace, a goal created last Tuesday has *none* — both distinct from stalled. Closed state enum, `unmeasurable` and `too_early` included, mirrored in `utils/goalPace.js` with a parity test. Same failure the `tracking_mode` column exists to prevent.
+- **30-day observation floor.** Ten days and one $500 contribution extrapolates to $1,522/mo — arithmetic, not evidence. Same gate and same reason as the 2-sightings rule on insight persistence.
+- **The window is the one the progress bar uses**, everything since `baseline_at`, not a rolling 90 days. A rolling window needs dated inflows for account-tracked goals and there are none — `current_balance` is one point in time with no history. Reading the account's transactions instead would be a second, differently-derived answer that disagrees with the first. One window means the projected date lands exactly where the bar implies.
+- **`baseline_at` moves with `baseline_amount` and only with it** (migration `add_goal_baseline_at.sql`, backfilled from `created_at`). Relinking re-snapshots the baseline, so `saved` restarts near zero; dividing that by months of `created_at` history reports a confident, wrong "you have stalled". A rename must **not** touch it — the PGlite harness checks both directions.
+- The lifetime average flatters a goal fed hard in October and abandoned in November. `last_contribution_at` catches it at **45 days, not 30**, or every monthly saver is called stalled once a month forever. It is ignored for account-tracked goals, whose old contribution rows survive a switch of tracking mode.
+- **`node-postgres` returns DATE and TIMESTAMPTZ as `Date` objects, not strings.** `String(date).slice(0,10)` split on `-` yields nothing, so every goal read from the database reported no observation window and sat on "too early to tell" permanently, without erroring. `parseDate` takes both and reads **local** components, which is what pg builds a DATE from. Found by PGlite, not by reasoning.
+- Pace is attached in `db.js`, not in the route: `getGoals` and `getGoalById` are the only two ways a goal row reaches anything. A decoration added in one route is three callers silently lacking it.
+- **Copy never scolds** — the gap (`About $845/mo short of the pace`), never a verdict. The tone map has **no error colour**; missing a savings target is not a fault condition. Whole dollars and "about", and a projection names a **month, never a day** — the estimate moves a fortnight on one missed transfer.
+- The due-soon countdown floors at zero *on the client*. Goal payloads cache for 24h, so a `due_soon` block can outlive its target date and the day count goes negative. Nothing on the server can produce that; only the cache can.
 
 ### Local Notifications (goal reminders)
 Local, **not push** — no APNs cert, no FCM key, no server scheduler. Two iOS constraints drive the design:

@@ -1,6 +1,6 @@
 # IndusWealth — Product Backlog
 
-**Last updated**: 2026-08-19
+**Last updated**: 2026-08-20
 
 What to build next and, just as importantly, what has already been ruled out and
 why. `PRODUCTION_ROADMAP.md` is the February 2026 launch-hardening audit and is a
@@ -17,7 +17,7 @@ The screen was showing gas stations as subscriptions and its two action buttons
 did nothing. Detector, screen, watch loop, notifications and the loose ends are
 all done. One item is open and it needs a human: the retention phone numbers.
 
-### Done (on `dev`, unpushed)
+### Done (on `dev`, pushed 2026-08-20)
 
 | Commit | What |
 |---|---|
@@ -99,16 +99,43 @@ cut the number and keep the script — the script is the part that works.
 Nothing computes a rate. Every goal answers *how much have I saved* and none
 answers **am I going to make it**.
 
-### 1. Required vs. actual pace
+### 1. Required vs. actual pace — DONE (`bf1467c`, `cececdc`)
 
-`(target − saved) ÷ months remaining` → *"$210/mo to hit this by March."* Compare
-to the actual contribution rate over the last 90 days → *"you're averaging $170,
-about $40/mo behind."*
+`services/goal_pace.js` (pure, 40 tests, 22 mutations all caught) returns two
+rates and a date: what the goal requires, what is actually going in, and where
+the second one lands. `utils/goalPace.js` on the device turns that into a line
+on the goal card — in compact mode too, because Home is where people look — and
+a two-column block on the goal's own screen.
 
-Pure arithmetic on existing columns. No schema change, no Plaid, no notification
-budget. It also upgrades the check-in nudge and the spotlight for free, because
-*"you're $40/mo behind on Emergency Fund"* is a legitimate, user-owned, entirely
-non-advisory ask.
+Three things went differently from the sketch above:
+
+**It needed one column after all.** The estimate is (what has gone in) ÷ (how
+long we have watched), and nothing recorded the second half. `created_at` is the
+obvious stand-in and is wrong in exactly the case that matters: relinking an
+account re-snapshots `baseline_amount`, so `saved` restarts near zero while
+`created_at` still points months back — a confident, badly wrong *"you have
+stalled"*. `baseline_at` moves with the baseline and only with it.
+
+**The window is not 90 days.** A rolling window needs dated inflows for
+account-tracked goals and we do not have them — `current_balance` is one point
+in time with no history behind it. Reading the linked account's transactions
+would put a second, differently-derived answer next to the first and the two
+would disagree. Measuring over the same window the progress bar uses means the
+projected date lands exactly where the bar implies. The cost is a lifetime
+average, which flatters a goal fed hard in October and abandoned in November;
+`last_contribution_at` catches that at 45 days, not 30, so a monthly saver is
+not called stalled once a month forever.
+
+**A rate we cannot measure is not reported as zero.** A disconnected goal has an
+unknown pace, not a stalled one, and a goal created last Tuesday has none at
+all — ten days and one $500 contribution extrapolates to $1,522 a month, which
+is arithmetic, not evidence. Hence a closed state enum with `unmeasurable` and
+`too_early` in it and a 30-day observation floor.
+
+**Still to do:** the check-in nudge and the spotlight do not use it yet.
+*"You're $40/mo behind on Emergency Fund"* is a legitimate, user-owned, entirely
+non-advisory ask and `services/nudges.js` is pure and tested, but it is a new
+candidate branch with its own cooldowns and copy, not a free consequence.
 
 ### 2. Auto-detect contributions
 
