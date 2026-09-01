@@ -1,6 +1,6 @@
 # IndusWealth — Product Backlog
 
-**Last updated**: 2026-08-20
+**Last updated**: 2026-08-21
 
 What to build next and, just as importantly, what has already been ruled out and
 why. `PRODUCTION_ROADMAP.md` is the February 2026 launch-hardening audit and is a
@@ -132,10 +132,13 @@ all — ten days and one $500 contribution extrapolates to $1,522 a month, which
 is arithmetic, not evidence. Hence a closed state enum with `unmeasurable` and
 `too_early` in it and a 30-day observation floor.
 
-**Still to do:** the check-in nudge and the spotlight do not use it yet.
-*"You're $40/mo behind on Emergency Fund"* is a legitimate, user-owned, entirely
-non-advisory ask and `services/nudges.js` is pure and tested, but it is a new
-candidate branch with its own cooldowns and copy, not a free consequence.
+**The nudge is done too** (`61bc2ab`). `goal_behind` sits between `goal_stalled`
+and `goal_step`: a stalled goal is still the clearer ask — it needs any action at
+all, not a larger one — but a measured shortfall against a date the user chose
+beats a generic step. `due_soon` deliberately does not qualify; inside the last
+month there is no monthly rate to offer and the only thing left to say is that a
+date is about to pass. `NUDGE_KINDS` is now closed and asserted against both the
+builder and the mobile icon map.
 
 ### 2. Auto-detect contributions
 
@@ -179,11 +182,30 @@ pay; $380 uncommitted."* This is the question people actually open a finance app
 to ask, and we hold more of the inputs than most apps do. Arithmetic on the
 user's own money — not advice.
 
-### 3. Promote the price-increase alert
+### 3. Promote the price-increase alert — DONE (`10f3ca1`)
 
-Already computed in `generateAlerts` and visible only inside a screen nobody
-opens. *"Rogers went up $8/mo"* is spotlight-worthy and derives entirely from the
-user's own data.
+`services/price_alerts.js` (pure, 33 tests, 21 mutations, 20 caught) owns the
+rule and is shared with `generateAlerts`, which had its own inline copy — two
+places to decide what counts as a price increase, and one of them would be
+wrong. Live increases are merged into the insights list before
+`recordGeneration`, so they inherit identity, recurrence, dismissals and both
+spotlight cooldowns instead of becoming a second way to interrupt somebody.
+
+Worth remembering:
+
+- **The subject is prefixed** (`price_rogers`, not `rogers`) so our measured
+  figure and anything the model says about Rogers spending occupy two ledger
+  rows rather than one overwriting the other.
+- **The benefit is the increase, not the bill.** Claiming the whole $103 assumes
+  they cancel; the $8 is what changed and what retentions could give back.
+- **Freshness comes from `recurring_expenses.last_seen`, never from the alert
+  row.** `persistAlerts` updates an undismissed alert in place and never deletes
+  one, so a subscription cancelled in March still carries its March alert today.
+- **Extracting the rule surfaced a missing gate**: a minimum dollar amount.
+  Fifty cents on a $2 subscription clears 5% and is six dollars a year.
+- PGlite rejected the first version of the query outright — the column is
+  `last_seen`, not the `last_charge_date` it was written against. It would have
+  thrown on every insights generation.
 
 ### 4. Year in review / merchant deep-dive
 

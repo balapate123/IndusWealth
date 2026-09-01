@@ -49,7 +49,8 @@
 | | `src/services/goals.js` | Goal constants: icons, types, cadences, milestones + `newMilestones()` |
 | | `src/services/goal_pace.js` | **Pure.** Required vs. actual savings rate, the projected date, and the closed `PACE_STATE` enum |
 | | `src/services/cardDueDates.js` | Due-date constants: 28-day cap, lead bounds, 10-card cap |
-| | `src/services/nudges.js` | **Pure** check-in selection: candidates, priority, both cooldowns |
+| | `src/services/nudges.js` | **Pure** check-in selection: candidates, priority, both cooldowns, closed `NUDGE_KINDS` |
+| | `src/services/price_alerts.js` | **Pure.** The price-increase rule, shared by Watchdog alerts and the insights pipeline |
 | | `src/services/link_registry.js` | **The only source of outbound URLs.** Vetted destinations by key + host allowlist + safe in-app routes |
 | | `src/services/link_health.js` | Probes article URLs and writes `educational_articles.url_status` |
 | | `src/services/transactionSync.js` | Plaid→DB sync, shared by `GET /transactions` and the webhook (per-item in-flight guard) |
@@ -229,7 +230,7 @@ An insight's `id` is invented by the model every generation and its `type` used 
 ### The Weekly Check-in Nudge
 One local weekly notification with **evergreen** copy that opens the app to a live recommendation. Content freezes at schedule time, so the notification cannot name a figure — it would be a week stale and might name a deleted goal. The specific ask is fetched on open, the same split as milestones.
 - **Scope is a compliance boundary, not a preference.** A nudge may reference a goal or debt **the user created**, and nothing else. No branch in `services/nudges.js` invents a destination — "put your surplus into X" is the shape that got the app rejected. Tests assert no nudge names a security or product, and that every action points at an id the user already owns.
-- Priority: goal ≥90% → goal needing a relink → goal idle 21 days → routine step → interest on a **manually entered** debt. Plaid-derived debts are excluded: their balances move on their own, so a nudge about one can be stale by the time it is read.
+- Priority: goal ≥90% → goal needing a relink → goal idle 21 days → **behind its own pace** → routine step → interest on a **manually entered** debt. `goal_behind` reads the `pace` block; a stalled goal outranks it because "do anything" is a clearer ask than "do more". `due_soon` earns no nudge — inside the last month there is no monthly rate to offer and the only thing left to say is that a date is about to pass. `NUDGE_KINDS` is closed, and `CheckinNudge`'s icon map is asserted against it in both directions. Plaid-derived debts are excluded: their balances move on their own, so a nudge about one can be stale by the time it is read.
 - A goal that **cannot be measured** (`needs_relink`, `saved_amount` null) asks for a reconnect and quotes no figure. "Move $25 toward" a number we cannot see is worse than silence.
 - Two cooldowns, both **server-owned** so two devices cannot disagree: **7 days per user**, **21 days per nudge**. Per-user is checked first, or somebody with several eligible nudges gets a different one every day. Recorded when the sheet **renders**, not when it is fetched.
 - The suggested amount **never exceeds what is left**, and the user's own per-goal `reminder_amount` wins over anything computed.
@@ -245,6 +246,17 @@ IndusWealth is **not a registered adviser**, so it must never recommend a securi
 - The ETF list screen stays as **education**: same order for everyone, nothing derived from the user's finances.
 - No brokerage or bank product pages in `link_registry.js`. Neutral rate comparison (`ratehub_savings`) is fine; a provider signup page reached from an insight about your own balance is product steering.
 - `docs/store/PLAY_STORE_LISTING.md` already promises "does not provide financial, investment, legal, or tax advice" — keep the app matching that claim, not the other way round.
+
+### Price Increases
+`generateAlerts` computed "Rogers went up $8/mo" from the user's own transactions, wrote it to `subscription_alerts`, and rendered it only on the Watchdog screen — a tab that no longer has a slot. It is the most concrete thing the app knows about anybody's money and nobody saw it.
+- **`services/price_alerts.js` owns the rule**, shared with `generateAlerts`. Inline in one place, the alert and the insight could disagree about what counts as an increase, and one of them would be wrong.
+- **Only the last two charges count.** A bill that spiked in June and came back down in July has not gone up; an introductory price that ended two years ago is not an increase either. Comparing against `amountHistory[0]` announces both.
+- **Two floors, not one.** 5% *and* $1. Extracting the rule is what surfaced the missing dollar gate — fifty cents on a $2 subscription clears 5% and is six dollars a year.
+- **Merged into the insights list before `recordGeneration`**, so price increases inherit identity, recurrence, dismissals and both spotlight cooldowns. A parallel channel would have none of that, and the spotlight is one interruption per user per week.
+- **Subject is prefixed** — `price_rogers`, not `rogers` — so our measured figure and whatever the model says about Rogers spending occupy two ledger rows instead of one overwriting the other. Slug, never a display name (`merchant_guides.js` rule).
+- **The benefit is the increase, not the whole bill.** Claiming the entire charge assumes they cancel; the difference is what changed and what retentions could return.
+- **Freshness is `recurring_expenses.last_seen`, never the alert row.** `persistAlerts` updates an undismissed alert in place and never deletes one, so a subscription cancelled in March still carries its March alert. 45-day window.
+- `DECIMAL[]` comes back from pg as **strings** — `"103" > "95"` is false lexically and the increase vanishes silently. Same family as the goal-pace `Date` bug.
 
 ### AI Insight Links
 The insights prompt used to ask Gemini for "REAL, valid URLs", which is the one thing an LLM cannot do — it knows the domain and invents the path. 40% of links 404'd.
