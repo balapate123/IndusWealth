@@ -11,6 +11,7 @@ const { getUserFinancialSummary } = require('../services/insight_data');
 const { generateInsights } = require('../services/ai_insights');
 const insightPersistence = require('../services/insight_persistence');
 const { normalizeType } = require('../services/insight_identity');
+const { priceIncreaseInsights } = require('../services/price_alerts');
 const {
     getArticleCatalog,
     formatCatalogForPrompt,
@@ -107,6 +108,29 @@ router.get('/', authenticateToken, async (req, res) => {
             articleCatalogText: formatCatalogForPrompt(articleCatalog),
             outstandingText,
         });
+
+        // Measured price increases, ahead of anything the model wrote.
+        //
+        // These are computed from the user's own transactions with no model
+        // involved, which is exactly why they go in here rather than through a
+        // parallel channel: merged before recordGeneration, they get identity,
+        // recurrence, dismissals and both spotlight cooldowns for free. A
+        // second way of interrupting somebody would have none of that.
+        //
+        // Prepended because a figure off their own statement beats a generated
+        // one, and capped at two inside price_alerts for the same reason.
+        // A failure here must not cost the user their insights.
+        try {
+            const candidates = await db.getPriceIncreaseCandidates(userId);
+            const priced = priceIncreaseInsights(candidates, {
+                today: new Date().toISOString().slice(0, 10),
+            });
+            if (priced.length) {
+                result.insights = [...priced, ...result.insights];
+            }
+        } catch (priceError) {
+            console.error('Could not add price-increase insights:', priceError.message);
+        }
 
         // Record this generation against the ledger before anything is filtered
         // for display — the history is of what is true, not of what was shown.

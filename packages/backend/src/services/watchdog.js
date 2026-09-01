@@ -4,6 +4,7 @@ const merchantAliases = require('../data/merchant_aliases.json');
 const merchantCategories = require('../data/merchant_categories.json');
 const cancellationGuides = require('../data/cancellation_guides.json');
 const { analyzeRecurrence, evidenceLine } = require('./recurrence');
+const { detectPriceIncrease } = require('./price_alerts');
 const {
     WATCH_STATUS, RESOLVED_STATUSES, resolveWatch, confirmedMonthlySavings, firstExpectedAfter,
 } = require('./watch');
@@ -246,24 +247,25 @@ class WatchdogService {
         const alerts = [];
 
         // 1. PRICE INCREASE DETECTION
+        //
+        // The rule lives in services/price_alerts.js, shared with the insights
+        // pipeline. It used to be inline here, which meant the alert on this
+        // screen and the insight on the Insights tab could disagree about what
+        // counts as a price increase -- and one of them would be wrong. The
+        // shared version also adds a minimum dollar amount: fifty cents on a $2
+        // subscription cleared the 5% bar and was not worth telling anybody.
         for (const expense of expenses) {
-            if (expense.amountHistory && expense.amountHistory.length >= 2) {
-                const previous = expense.amountHistory[expense.amountHistory.length - 2];
-                const current = expense.amountHistory[expense.amountHistory.length - 1];
-                if (current > previous) {
-                    const pctIncrease = ((current - previous) / previous) * 100;
-                    if (pctIncrease >= 5) {
-                        alerts.push({
-                            type: 'price_increase',
-                            merchantName: expense.merchantName,
-                            title: `${expense.merchantName} price increased`,
-                            message: `${expense.merchantName} went from $${previous.toFixed(2)} to $${current.toFixed(2)} (${pctIncrease.toFixed(0)}% increase)`,
-                            severity: pctIncrease >= 20 ? 'critical' : 'warning',
-                            data: { previous, current, pctIncrease },
-                        });
-                    }
-                }
-            }
+            const rise = detectPriceIncrease(expense.amountHistory);
+            if (!rise) continue;
+
+            alerts.push({
+                type: 'price_increase',
+                merchantName: expense.merchantName,
+                title: `${expense.merchantName} price increased`,
+                message: `${expense.merchantName} went from $${rise.previous.toFixed(2)} to $${rise.current.toFixed(2)} (${rise.pctIncrease.toFixed(0)}% increase)`,
+                severity: rise.pctIncrease >= 20 ? 'critical' : 'warning',
+                data: { previous: rise.previous, current: rise.current, pctIncrease: rise.pctIncrease },
+            });
         }
 
         // 2. DUPLICATE CATEGORY DETECTION

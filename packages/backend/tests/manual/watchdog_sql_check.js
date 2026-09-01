@@ -24,6 +24,8 @@ const { PGlite } = require('@electric-sql/pglite');
 
 const db = require('../../src/services/db');
 const watchdog = require('../../src/services/watchdog');
+const { priceIncreaseInsights } = require('../../src/services/price_alerts');
+const { fingerprintOf } = require('../../src/services/insight_identity');
 
 let passed = 0;
 let failed = 0;
@@ -352,6 +354,53 @@ const TRANSACTIONS = [
         open[0].expectedChargeDate);
     ok('which is exactly what the device needs to schedule',
         /^\d{4}-\d{2}-\d{2}$/.test(open[0].expectedChargeDate), open[0].expectedChargeDate);
+
+    // -----------------------------------------------------------------------
+    // Price increases reaching the insights pipeline
+    // -----------------------------------------------------------------------
+
+    console.log('\nprice increases');
+
+    // A real rise on a live merchant, and a rise on one that stopped being
+    // charged months ago. Only the first is news.
+    await pg.query(
+        `UPDATE recurring_expenses
+            SET amount_history = ARRAY[95.00, 95.00, 103.00]::DECIMAL(15,2)[],
+                last_seen = CURRENT_DATE - INTERVAL '6 days'
+          WHERE user_id = $1 AND merchant_name = 'ROGERS'`,
+        [USER_ID]
+    );
+    await pg.query(
+        `UPDATE recurring_expenses
+            SET amount_history = ARRAY[10.00, 20.00]::DECIMAL(15,2)[],
+                last_seen = CURRENT_DATE - INTERVAL '200 days'
+          WHERE user_id = $1 AND merchant_name = 'NETFLIX.COM'`,
+        [USER_ID]
+    );
+
+    // The query is new and its interval cast has never run anywhere else.
+    const candidates = await db.getPriceIncreaseCandidates(USER_ID);
+    ok('the candidate query runs', Array.isArray(candidates));
+    ok('and excludes a merchant charged 200 days ago',
+        !candidates.some((c) => c.merchant_name === 'NETFLIX.COM'),
+        JSON.stringify(candidates.map((c) => c.merchant_name)));
+    ok('while keeping the live one',
+        candidates.some((c) => c.merchant_name === 'ROGERS'),
+        JSON.stringify(candidates.map((c) => c.merchant_name)));
+
+    // DECIMAL[] comes back from pg as an array of strings, and "103" > "95" is
+    // false lexically -- the increase would vanish with nothing to show for it.
+    const rogers = candidates.find((c) => c.merchant_name === 'ROGERS');
+    ok('amount_history survives the round trip', Array.isArray(rogers.amount_history),
+        JSON.stringify(rogers.amount_history));
+
+    const priced = priceIncreaseInsights(candidates, {
+        today: new Date().toISOString().slice(0, 10),
+    });
+    check('one insight is produced from real rows', priced.length, 1);
+    check('named for a person', priced[0].title, 'Rogers went up $8 a month');
+    check('with a stable identity', fingerprintOf(priced[0]), 'spending_optimization:price_rogers');
+    check('and the increase as the benefit', priced[0].potential_benefit.annual_savings, 96);
 
     console.log('\ncache invalidation');
     const cache = await pg.query('SELECT analysis_version FROM watchdog_analysis_cache');

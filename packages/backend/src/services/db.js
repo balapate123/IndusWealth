@@ -1124,6 +1124,32 @@ const clearPasswordResetToken = async (userId) => {
     );
 };
 
+/**
+ * Recurring expenses that could carry a live price increase.
+ *
+ * Read from recurring_expenses rather than subscription_alerts on purpose.
+ * persistAlerts updates an undismissed alert in place and never deletes one, so
+ * a subscription cancelled in March still has its March price-increase alert
+ * today; the expense row carries last_seen, which goes stale honestly.
+ *
+ * The gates themselves are in services/price_alerts.js, pure and tested. This
+ * only narrows the rows: a history worth comparing, and a charge recent enough
+ * to still be real.
+ */
+const getPriceIncreaseCandidates = async (userId, { maxAgeDays = 45 } = {}) => {
+    const result = await pool.query(
+        `SELECT merchant_name, amount_history, frequency, last_seen, status, category
+           FROM recurring_expenses
+          WHERE user_id = $1
+            AND array_length(amount_history, 1) >= 2
+            AND last_seen >= CURRENT_DATE - ($2 || ' days')::interval
+          ORDER BY last_seen DESC
+          LIMIT 50`,
+        [userId, String(maxAgeDays)]
+    );
+    return result.rows;
+};
+
 // ============ SAVINGS GOALS ============
 
 /**
@@ -2027,6 +2053,7 @@ module.exports = {
     // Insight tracking operations
     recordInsightSightings,
     markInsightsResolved,
+    getPriceIncreaseCandidates,
     getOutstandingInsights,
     getInsightTracking,
     markInsightActed,
