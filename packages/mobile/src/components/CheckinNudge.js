@@ -13,11 +13,16 @@ import { RADIUS, SPACING, alpha } from '../constants/tokens';
  * than assign fault. The same rule the insight spotlight holds.
  */
 
+// One entry per kind in services/nudges.js NUDGE_KINDS. The fallback below is
+// a safety net, not a licence to leave a kind out: tests/checkinNudge.test.mjs
+// fails when the two lists disagree.
 const ICONS = {
     goal_finish: 'flag',
     goal_stalled: 'time-outline',
     goal_step: 'trending-up',
     goal_relink: 'link-outline',
+    // Matches the pace line on GoalCard, which is the same measurement.
+    goal_behind: 'speedometer-outline',
     debt_interest: 'card-outline',
 };
 

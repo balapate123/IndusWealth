@@ -9,9 +9,13 @@
  * the No Investment Advice section of CLAUDE.md). Every candidate below names a
  * target the user chose themselves; there is no branch that invents one.
  *
- * Pure and dependency-free so the selection, the cooldowns and the copy can be
- * exercised without a database. The route supplies the rows and the clock.
+ * Pure so the selection, the cooldowns and the copy can be exercised without a
+ * database. The route supplies the rows and the clock. The one import is
+ * goal_pace.js, itself pure — the enum is imported rather than string-matched
+ * so the two cannot drift silently.
  */
+
+const { PACE_STATE } = require('./goal_pace');
 
 /** A nudge is not shown again for this long, even if it is still the best one. */
 const NUDGE_COOLDOWN_DAYS = 21;
@@ -19,8 +23,37 @@ const NUDGE_COOLDOWN_DAYS = 21;
 /** And no more than one nudge of any kind per user per week. */
 const USER_COOLDOWN_DAYS = 7;
 
+/**
+ * Every kind of nudge this module can emit.
+ *
+ * Closed, and asserted against what buildNudgeCandidates actually produces, for
+ * the same reason PACE_STATE and the insight type enum are: the device keys an
+ * icon off this string. constants/insights.js drifted from its backend enum
+ * once and every card fell back to a generic bulb. A kind added here without a
+ * matching icon is drift; a test on the mobile side fails on it rather than
+ * quietly rendering a sparkle.
+ */
+const NUDGE_KINDS = Object.freeze([
+    'goal_finish',
+    'goal_relink',
+    'goal_stalled',
+    'goal_behind',
+    'goal_step',
+    'debt_interest',
+]);
+
 /** A goal is "stalled" once nothing has gone into it for this long. */
 const STALLED_DAYS = 21;
+
+/**
+ * Below this, being behind the pace is not worth an interruption.
+ *
+ * The on-track band is 5% wide, so a small goal can be "behind" by a couple of
+ * dollars a month. Spending the user's one nudge a week on "adding about $2 a
+ * month would help" is worse than saying nothing; those goals fall through to
+ * the routine step instead.
+ */
+const MIN_PACE_GAP = 5;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -51,6 +84,56 @@ function suggestedContribution(goal) {
 
     const rounded = Math.max(5, Math.round(remaining / 20 / 5) * 5);
     return Math.min(rounded, remaining);
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+/**
+ * A target date as a month.
+ *
+ * Never a day, for the same reason the projection on the goal screen is not:
+ * the pace behind it is an average, and naming a day invites somebody to hold
+ * us to it. Accepts a Date because node-postgres parses DATE columns into one.
+ */
+function targetMonth(value) {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(`${String(value).slice(0, 10)}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return null;
+    return `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/**
+ * What a goal is short by each month, or null if that is not worth saying.
+ *
+ * Only `behind` qualifies, and the distinction from `stalled` is the whole
+ * point: money IS going into a behind goal, just not fast enough. Until this
+ * existed, such a goal produced the same generic "Move $25 toward X" as one
+ * with no deadline at all.
+ *
+ * `due_soon` deliberately does not qualify. Inside the last month there is no
+ * monthly rate to offer, and the only thing left to say is that a date the user
+ * set is about to pass — which changes nothing they can act on. A due-soon goal
+ * that IS within reach is already caught by goal_finish at 90%.
+ */
+function paceShortfall(goal) {
+    // Absent on a payload from an older build, and on any goal read from
+    // somewhere other than getGoals/getGoalById. Falling through is correct:
+    // the routine step still applies.
+    const pace = goal?.pace;
+    if (!pace || pace.state !== PACE_STATE.BEHIND) return null;
+
+    const gap = Math.abs(Number(pace.deltaPerMonth));
+    if (!Number.isFinite(gap) || gap < MIN_PACE_GAP) return null;
+
+    // Never ask for more than is left. A monthly gap can exceed the remaining
+    // balance on a goal that is nearly done but nearly out of time, and asking
+    // for more than the target reads as a machine not paying attention — the
+    // same rule suggestedContribution follows.
+    const remaining = Number(pace.remaining);
+    const ask = Number.isFinite(remaining) && remaining > 0 ? Math.min(gap, remaining) : gap;
+
+    return { perMonth: Math.round(ask), by: targetMonth(goal.target_date) };
 }
 
 /**
@@ -120,10 +203,30 @@ function buildNudgeCandidates({ goals = [], debts = [], now = new Date() } = {})
             continue;
         }
 
+        // Ranked below a stall and above a routine step. A stalled goal is
+        // still the clearer ask -- do anything -- but a measured shortfall
+        // against the user's own deadline beats "move $25 toward this".
+        const shortfall = paceShortfall(goal);
+        if (shortfall) {
+            candidates.push({
+                key: `goal_behind:${goal.id}`,
+                kind: 'goal_behind',
+                priority: 4,
+                title: goal.name,
+                // Framed as the step that closes the gap, not as the gap. Both
+                // are true; only one of them is something to do.
+                body: shortfall.by
+                    ? `Adding about ${money(shortfall.perMonth)} a month would put this back on pace for ${shortfall.by}.`
+                    : `Adding about ${money(shortfall.perMonth)} a month would put this back on pace.`,
+                action: { type: 'goal', goalId: goal.id, label: 'Add to goal' },
+            });
+            continue;
+        }
+
         candidates.push({
             key: `goal_step:${goal.id}`,
             kind: 'goal_step',
-            priority: 4,
+            priority: 5,
             title: goal.name,
             body: `Move ${money(amount)} toward ${goal.name}.`,
             action: { type: 'goal', goalId: goal.id, label: 'Add to goal' },
@@ -148,7 +251,7 @@ function buildNudgeCandidates({ goals = [], debts = [], now = new Date() } = {})
         candidates.push({
             key: `debt_interest:${debt.id}`,
             kind: 'debt_interest',
-            priority: 5,
+            priority: 6,
             title: debt.name,
             body: `At ${apr}% this is costing about ${money(Math.round(monthlyInterest))} a month in interest.`,
             action: { type: 'debt', debtId: debt.id, label: 'Open Debt Attack' },
@@ -185,9 +288,12 @@ function selectNudge(candidates = [], { lastShownAt = null, seen = {}, enabled =
 }
 
 module.exports = {
+    NUDGE_KINDS,
     NUDGE_COOLDOWN_DAYS,
     USER_COOLDOWN_DAYS,
     STALLED_DAYS,
+    MIN_PACE_GAP,
+    paceShortfall,
     buildNudgeCandidates,
     selectNudge,
     suggestedContribution,
