@@ -1,7 +1,7 @@
 # Transaction selection, and correcting a category
 
 **Date**: 2026-09-21
-**Status**: approved, implementing
+**Status**: implemented (`98a1756`, `6d22a02`, `455ad71`)
 
 Two features that meet in the middle. Selecting several transactions to total
 them — and optionally keep them as a group — and correcting a category the app
@@ -307,6 +307,43 @@ it is why the opt-in is off by default and why the result reports the number of
 rows it moved.
 
 ---
+
+## 9a. What implementation found that the design did not
+
+Two defects the design could not have caught, both of which would have shipped
+as "built but silently does nothing" — the failure shape CLAUDE.md already names
+as this project's recurring one.
+
+**The device derives its own category.** `utils/categorization.js` runs the same
+layers in the same order as the server, keyword pass first, so a correction
+stored server-side never reached the screen: `UBER EATS` corrected to
+`Transportation` kept rendering as `Restaurants`. The device needed a Priority 0
+of its own, mirroring the backend's. A cross-package test now asserts the two
+agree for every category a user can pick.
+
+**The endpoints took the wrong id.** They were written against
+`transactions.id`, the numeric primary key. Every other write this app makes to
+a transaction — notes, flags — is addressed by `plaid_transaction_id`, because
+`GET /transactions` aliases the numeric one away as `transaction_id` before the
+device ever sees it. As written, every correction would have matched nothing and
+returned a cheerful success. The PGlite harness now has a check that the numeric
+key is not a way in.
+
+A third, smaller one: `merchantLabel` is sent from the server rather than
+derived on the device, because normalising a merchant name is backend logic and
+a third implementation of it is how this project got two category vocabularies
+in the first place.
+
+## 9b. Known limitation
+
+**Removing a merchant rule clears that merchant's corrections wholesale**,
+including a row the user had separately corrected by hand *after* the rule
+existed. Provenance is not stored, so "written by the rule" and "corrected
+afterwards" are indistinguishable, and the wider answer wins.
+
+The confirmation names how many rows will be restored, so the cost is visible
+before it is paid. Storing provenance would fix it properly and is not worth a
+column until somebody hits it.
 
 ## 10. Explicitly not in scope
 

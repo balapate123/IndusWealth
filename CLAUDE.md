@@ -51,6 +51,8 @@
 | | `src/services/cardDueDates.js` | Due-date constants: 28-day cap, lead bounds, 10-card cap |
 | | `src/services/nudges.js` | **Pure** check-in selection: candidates, priority, both cooldowns, closed `NUDGE_KINDS` |
 | | `src/services/price_alerts.js` | **Pure.** The price-increase rule, shared by Watchdog alerts and the insights pipeline |
+| | `src/services/merchant_identity.js` | **Pure.** `normalizeMerchantName` + the rule key and label. Lifted out of the Watchdog class so corrections and Watchdog share one answer |
+| | `src/services/category_corrections.js` | Which transactions belong to a merchant (**pure**), and the create/apply/revert orchestration around it |
 | | `src/services/link_registry.js` | **The only source of outbound URLs.** Vetted destinations by key + host allowlist + safe in-app routes |
 | | `src/services/link_health.js` | Probes article URLs and writes `educational_articles.url_status` |
 | | `src/services/transactionSync.js` | Plaid→DB sync, shared by `GET /transactions` and the webhook (per-item in-flight guard) |
@@ -117,6 +119,7 @@
 | | `src/components/InsightSpotlight.js` | The pop-up recommendation: ledger, action, snooze, dismiss |
 | | `src/components/CardDueDates.js` | Debt-tab section: list, day picker, lead time, on/off |
 | | `src/components/CheckinNudge.js` | The weekly check-in sheet: one thing, one action, a way out |
+| | `src/components/CategoryPickerSheet.js` | The closed category list, for one transaction or a selection; carries the "all this merchant" opt-in |
 | | `src/components/ui/Treemap.js` | Part-to-whole by area (Analytics "Spending by category") |
 | Constants | `src/constants/theme.js` | Dark theme + gold accents |
 | | `src/constants/insights.js` | Insight type enum → icon/label/ramp slot; must mirror `insight_identity.js` |
@@ -124,6 +127,7 @@
 | | `src/utils/categoryMap.js` | **Generated** from the backend map — never edit by hand; run `packages/backend/scripts/gen-mobile-category-map.js` |
 | | `src/utils/goalReminders.js` | Pure reminder logic (trigger building, copy, cadence text) — no expo/RN imports so it is testable off-device |
 | | `src/utils/goalPace.js` | Pure copy for the pace block; mirrors `PACE_STATE`. Never scolds, rounds, hedges |
+| | `src/utils/transactionSelection.js` | Pure selection maths: toggle, count, net total, copy. Count and total always describe the same rows |
 | | `src/utils/cardDueReminders.js` | Pure due-date scheduling incl. the **lead-day wraparound** |
 | | `src/utils/treemap.js` | Pure squarified treemap layout + top-7/Other folding |
 | | `src/utils/syncQueue.js` | The one-at-a-time queue every reminder sync runs through |
@@ -131,7 +135,7 @@
 | | `packages/backend/tests/*.test.js` | `npm test` — node --test |
 
 ### Database Tables
-`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`), `transaction_flags` + `transaction_flag_links` (migration: `add_transaction_flags.sql`), `user_goals` + `goal_contributions` (migrations: `add_goals.sql`, `add_goal_baseline_at.sql` — adds `user_goals.baseline_at`), `insight_tracking` (migration: `add_insight_tracking.sql`, also adds `user_preferences.spotlight_enabled` / `.spotlight_last_shown_at`), `card_due_dates` (migration: `add_card_due_dates.sql`), `nudge_history` (migration: `add_checkin_nudges.sql`, also adds `user_preferences.checkin_enabled` / `.checkin_last_shown_at`)
+`users`, `accounts`, `transactions`, `sync_log`, `custom_debts`, `debt_apr_overrides`, `user_insights`, `user_insight_dismissals`, `user_preferences`, `insight_actions`, `merchant_category_cache`, `ai_categorization_log`, `educational_articles`, `user_article_bookmarks`, `insight_articles`, `refresh_tokens`, `login_attempts`, `totp_secrets`, `recovery_codes`, `category_ai_insights` (migration: `add_category_insights.sql`), `transaction_flags` + `transaction_flag_links` (migration: `add_transaction_flags.sql`), `user_goals` + `goal_contributions` (migrations: `add_goals.sql`, `add_goal_baseline_at.sql` — adds `user_goals.baseline_at`), `insight_tracking` (migration: `add_insight_tracking.sql`, also adds `user_preferences.spotlight_enabled` / `.spotlight_last_shown_at`), `merchant_category_rules` + `transactions.user_category` (migration: `add_transaction_category_override.sql`), `card_due_dates` (migration: `add_card_due_dates.sql`), `nudge_history` (migration: `add_checkin_nudges.sql`, also adds `user_preferences.checkin_enabled` / `.checkin_last_shown_at`)
 
 ### Charts
 `Spending by category` on Analytics is a **treemap** (`components/ui/Treemap.js`), not a stacked bar: past about four shares a bar's segments are too thin to compare and the labels stop fitting. Layout is squarified (`utils/treemap.js`, pure + tested).
@@ -162,6 +166,27 @@ The question is **"is this a fixed obligation?"**, not "does this merchant repea
 - **A merchant key is a slug, never a display name** (`merchant_guides.js`) — the `insight_identity.js` discipline. **`buildGuide` never returns null**: the sheet only opens if a guide came back, so null meant the button flipped a hidden status and nothing appeared.
 - **`keep` is stored as `keep`.** Stored as `active` it reads as "no answer" and `suggestAction` re-flags the row on the next refresh.
 - Bump `ANALYSIS_VERSION` on any detector change — `getCacheFreshness` discards older caches, which is the only thing that clears stale false positives.
+
+### Category Corrections
+The category anybody sees is **not stored** — it is derived on every read, by five modules that do not all take the same route: two through `categorizeTransaction` in JS, two as SQL aggregates over Plaid's raw array, and Watchdog's own resolver. A correction reaching only some of them is the two-vocabularies bug arriving through a different door.
+- **`effectiveCategory(row)` in `category_map.js` is the only place a category is decided.** `tests/category_override.test.js` scans `src/` for a module that derives a category without consulting the correction and fails on it. A heuristic, and it says so — it fails at the moment a new consumer copies the old pattern.
+- **`transactions.user_category` is the correction; Plaid's `category` array is never overwritten.** The derivation still works underneath, the correction is reversible, and a canonical name in `category[]` would be a third vocabulary in a column that holds Plaid's.
+- **A merchant rule is materialised, not joined.** Creating one writes the column across matching history; `upsertTransactions` applies it to new rows. That is what lets the aggregates read one column with **no join** — matching merchants needs `normalizeMerchantName`, and reimplementing it in SQL would be two implementations of one rule.
+- **Deliberate asymmetry**: creating a rule **overwrites** an existing one-off correction (the user just said "all of them"); sync only fills rows where `user_category IS NULL` (automatic, so it must never undo a deliberate answer).
+- **The device runs its own Priority 0.** `utils/categorization.js` derives the category independently, keyword-pass first, so without it a stored correction never reaches the screen — `UBER EATS` → Transportation kept rendering as Restaurants. `tests/categoryCorrection.test.mjs` asserts both sides agree for every pickable category.
+- **Addressed by `plaid_transaction_id`, never the numeric id** — the same contract notes and flags use, because `GET /transactions` aliases the numeric key away as `transaction_id`. The first version took integers and would have matched nothing while answering 200.
+- `merchantLabel` is **sent from the server**, not derived on device. A third merchant normaliser is how the two category vocabularies happened.
+- `CANONICAL_CATEGORIES` stays closed and `Other` is not pickable — it is the fallback, so choosing it is indistinguishable from no correction. The way back is `DELETE .../category`, which is also **the only way to remove a merchant rule** (no rules screen).
+- Removing a rule clears that merchant's corrections **wholesale**, including one made by hand afterwards. Provenance is not stored; the confirmation names the row count first.
+
+### Selecting Transactions
+`Select` in the All-transactions header turns the list into a selection: tap to toggle, a pinned bar shows the count and total, and Group / Category act on it.
+- **A group is a flag.** `transaction_flags` already models a user-named grouping; Group opens the existing `FlagEditorSheet` and then `createFlag` + `setFlagTransactions`. No new model.
+- **The total is summed on the device** — a deliberate exception to "totals come from `db.sumTransactions`". That rule exists because the device holds one page; a selection *is* rows already in memory. `FlagTransactionPickerScreen` does the same.
+- **The count and the total always describe the same rows** (`summarizeSelection` walks the visible list), so the bar can never read "5 selected" over a total covering four.
+- **Changing range, search or flag filter clears the selection** — otherwise the total counts rows that are no longer on screen. Select mode itself stays on.
+- **No "Select all"**: the list is paged, so it would mean "all loaded" while reading as "all matching". Bulk recategorisation of one merchant is the merchant rule's job.
+- Bulk category is **per-transaction only and never creates a rule** — a selection spans merchants, so inferring one would be guessing. Capped at 200, matching `MAX_BULK_TRANSACTIONS`, asserted across packages.
 
 ### Transaction Flags
 User-defined groupings ("Home", "Trip to Montreal"), **distinct from `category`** — a category is inferred by Plaid/AI and single-valued; a flag is chosen by the user and a transaction can carry several.
