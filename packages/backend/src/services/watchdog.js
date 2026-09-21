@@ -1,10 +1,10 @@
 const { pool } = require('./db');
 const { createLogger } = require('./logger');
-const merchantAliases = require('../data/merchant_aliases.json');
 const merchantCategories = require('../data/merchant_categories.json');
 const cancellationGuides = require('../data/cancellation_guides.json');
 const { analyzeRecurrence, evidenceLine } = require('./recurrence');
 const { detectPriceIncrease } = require('./price_alerts');
+const { normalizeMerchantName } = require('./merchant_identity');
 const {
     WATCH_STATUS, RESOLVED_STATUSES, resolveWatch, confirmedMonthlySavings, firstExpectedAfter,
 } = require('./watch');
@@ -89,27 +89,20 @@ class WatchdogService {
     /**
      * Normalize a raw merchant/transaction name to a canonical form.
      */
+    /**
+     * Delegates to services/merchant_identity.js.
+     *
+     * The implementation used to live here, where nothing else could reach it
+     * and no test could exercise it directly. Category corrections need the
+     * same answer -- "all Pioneer" only works if PIONEER #0421 and
+     * PIONEER #0388 are one merchant -- and two implementations of that is how
+     * the same keyword ended up in two categories.
+     *
+     * Kept as a method because `recurring_expenses.merchant_name` is an upsert
+     * key: every stored row was written by this call.
+     */
     normalizeMerchantName(rawName) {
-        if (!rawName) return null;
-
-        let name = rawName.toUpperCase().trim();
-
-        // Strip common suffixes
-        name = name.replace(/(\.COM|\.CA|INC\.?|LLC|LTD|CORP|CO\.)$/g, '');
-
-        // Strip transaction prefixes
-        name = name.replace(/^(POS |PREAUTHORIZED |PAD |EFT |RECURRING |MONTHLY |ANNUAL )/g, '');
-
-        // Strip trailing reference numbers
-        name = name.replace(/\s*#?\d{4,}$/, '');
-
-        // Strip trailing asterisks and codes (e.g., "SPOTIFY *FAMILY")
-        name = name.replace(/\s*\*.*$/, '');
-
-        name = name.trim();
-
-        // Apply known merchant aliases
-        return merchantAliases[name] || name;
+        return normalizeMerchantName(rawName);
     }
 
     /**
