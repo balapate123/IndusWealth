@@ -41,4 +41,5 @@ module.exports = [
     'add_watchdog_classes.sql',
     'add_watchdog_watches.sql',
     'add_goal_baseline_at.sql',
+    'add_transaction_category_override.sql',
 ];

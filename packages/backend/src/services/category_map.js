@@ -305,6 +305,46 @@ const canonicalizeCategory = (category) => {
 };
 
 /**
+ * Whether a stored correction is still a category we have.
+ *
+ * Separate from `effectiveCategory` because callers need the question answered
+ * on its own: "did the user correct this" is not the same as "what is this",
+ * and a renamed category has to answer no to the first so the derivation runs.
+ */
+const isCanonicalCategory = (name) =>
+    typeof name === 'string' && CANONICAL_BY_LOWER.has(name.trim().toLowerCase());
+
+/**
+ * The category a transaction actually has, correction included.
+ *
+ * **This is the only place a category is decided.** The value a user sees is
+ * derived on read rather than stored, by five modules that do not all take the
+ * same route -- two through categorizeTransaction in JS, two as SQL aggregates
+ * over Plaid's raw array, and Watchdog's own resolver. A correction that
+ * reached only some of them would put one category in two vocabularies again:
+ * the transaction list saying Gas & Fuel while the treemap still said Other.
+ *
+ * `user_category` is checked against CANONICAL_CATEGORIES directly rather than
+ * passed through canonicalizeCategory, because that function answers "what does
+ * this resolve to" and maps anything unknown to Other. Here the question is
+ * "is this still a category we have", and the answer for a renamed one must be
+ * no -- so the derivation runs instead of a correction that would group alone
+ * and draw the default icon.
+ *
+ * Case-insensitive: the column is free text to Postgres, and "gas & fuel"
+ * bucketing separately from "Gas & Fuel" is the defect canonicalization exists
+ * to prevent.
+ *
+ * @param {{category?: string[]|string, user_category?: string|null}} row
+ * @returns {string} a member of CANONICAL_CATEGORIES, or 'Other'
+ */
+const effectiveCategory = (row) => {
+    const stored = row && row.user_category;
+    if (isCanonicalCategory(stored)) return CANONICAL_BY_LOWER.get(stored.trim().toLowerCase());
+    return canonicalizeCategory(row && row.category);
+};
+
+/**
  * Collapse rows grouped on a raw Plaid category path into canonical buckets.
  *
  * The merge has to happen here rather than in SQL because an `ORDER BY ...
@@ -316,16 +356,26 @@ const canonicalizeCategory = (category) => {
  * @param {Object}   options
  * @param {string}   options.pathKey    column holding the ' > '-joined path
  * @param {string[]} options.sumFields  numeric fields to add up
+ * @param {string}   [options.overrideKey]  column holding the user's correction
  * @returns {Array<Object>} `{ category, ...sums }`, descending by the first sum
  */
-const mergeCanonicalRows = (rows, { pathKey = 'category_path', sumFields = [] } = {}) => {
+const mergeCanonicalRows = (
+    rows,
+    { pathKey = 'category_path', sumFields = [], overrideKey = null } = {}
+) => {
     const buckets = new Map();
 
     for (const row of rows || []) {
         const path = row[pathKey];
-        const category = canonicalizeCategory(
-            typeof path === 'string' && path.includes(' > ') ? path.split(' > ') : path
-        );
+        // Applying the correction here rather than in SQL is what lets two
+        // groups that arrived under different paths become one category, and
+        // it means the aggregates need no join -- the column travels with the
+        // row it belongs to. A row whose correction no longer resolves falls
+        // back to its own path, never to Other.
+        const category = effectiveCategory({
+            category: typeof path === 'string' && path.includes(' > ') ? path.split(' > ') : path,
+            user_category: overrideKey ? row[overrideKey] : null,
+        });
 
         let bucket = buckets.get(category);
         if (!bucket) {
@@ -349,5 +399,7 @@ module.exports = {
     OTHER_CATEGORY,
     PLAID_CATEGORY_MAP,
     canonicalizeCategory,
+    isCanonicalCategory,
+    effectiveCategory,
     mergeCanonicalRows,
 };

@@ -8,7 +8,7 @@
  * Layer 4: Fresh AI categorization (background async)
  */
 
-const { canonicalizeCategory } = require('./category_map');
+const { canonicalizeCategory, effectiveCategory, isCanonicalCategory } = require('./category_map');
 
 // Lazy load AI features to prevent crashes if GEMINI_API_KEY is missing
 let aiCategorization = null;
@@ -225,6 +225,26 @@ const DEFAULT_META = { icon: 'wallet-outline', color: '#8E8E93' };
  * @returns {Promise<Object>} - { category, icon, color, source, needsAI }
  */
 const categorizeTransaction = async (transaction) => {
+    // Layer 0: the user has already told us what this is.
+    //
+    // Above the keyword pass, not below it: a correction exists precisely
+    // because the layers underneath got it wrong, so any of them winning would
+    // make the edit look like it had not saved. No extra query -- user_category
+    // arrives on the row.
+    if (isCanonicalCategory(transaction && transaction.user_category)) {
+        const corrected = effectiveCategory(transaction);
+        const meta = CATEGORY_PATTERNS[corrected] || DEFAULT_META;
+        return {
+            category: corrected,
+            icon: meta.icon,
+            color: meta.color,
+            // A source the client can render differently: a corrected category
+            // is the one kind whose provenance the user can act on.
+            source: 'user',
+            needsAI: false,
+        };
+    }
+
     // Layer 1: Pattern matching on transaction name (moved to top priority)
     const name = (transaction.name || '').toUpperCase();
     const merchantName = (transaction.merchant_name || '').toUpperCase();

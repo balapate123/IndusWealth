@@ -6,6 +6,7 @@ const path = require('path');
 const { encrypt, decrypt } = require('./encryption');
 const { mergeCanonicalRows } = require('./category_map');
 const { computeGoalPace } = require('./goal_pace');
+const { merchantKeyFor } = require('./merchant_identity');
 
 // PostgreSQL connection pool
 const pool = new Pool(
@@ -303,6 +304,17 @@ const deleteAccountTransactions = async (userId, plaidAccountId) => {
 const upsertTransactions = async (userId, transactions) => {
     if (transactions.length === 0) return;
 
+    // The user's standing category corrections, applied below as each chunk
+    // lands. This is inside upsertTransactions rather than at its two call
+    // sites because two places to remember is one place to forget -- and a
+    // forgotten one means a merchant rule silently stops covering new charges,
+    // with nothing to notice until a chart looks wrong months later.
+    const ruleRows = await pool.query(
+        `SELECT merchant_key, category FROM merchant_category_rules WHERE user_id = $1`,
+        [userId]
+    );
+    const rules = new Map(ruleRows.rows.map((r) => [r.merchant_key, r.category]));
+
     // Single query for account mapping instead of per-transaction lookup
     const accountsResult = await pool.query(
         `SELECT id, plaid_account_id FROM accounts WHERE user_id = $1`,
@@ -344,9 +356,38 @@ const upsertTransactions = async (userId, transactions) => {
                 name = EXCLUDED.name,
                 amount = EXCLUDED.amount,
                 pending = EXCLUDED.pending
-                -- notes and updated_at intentionally excluded to preserve user data`,
+                -- notes, user_category and updated_at intentionally excluded to
+                -- preserve user data. user_category in particular: a sync must
+                -- never undo a correction, and it is only ever set below, where
+                -- an existing one is left alone.`,
             params
         );
+
+        if (rules.size === 0) continue;
+
+        // Merchants are matched in JS because normalizeMerchantName is JS --
+        // PIONEER #0421, POS PIONEER and NETFLIX.COM all have to reduce before
+        // they can be compared. The rows are already in memory here, so this
+        // costs nothing beyond the grouping.
+        const byCategory = new Map();
+        for (const tx of chunk) {
+            const key = merchantKeyFor({ merchant_name: tx.merchant_name, name: tx.name });
+            const category = key ? rules.get(key) : null;
+            if (!category) continue;
+            if (!byCategory.has(category)) byCategory.set(category, []);
+            byCategory.get(category).push(tx.transaction_id);
+        }
+
+        for (const [category, ids] of byCategory) {
+            // IS NULL, so a per-transaction correction always beats the
+            // merchant rule and re-running a sync changes nothing.
+            await pool.query(
+                `UPDATE transactions SET user_category = $3
+                  WHERE user_id = $1 AND plaid_transaction_id = ANY($2::varchar[])
+                    AND user_category IS NULL`,
+                [userId, ids, category]
+            );
+        }
     }
 };
 
@@ -372,7 +413,7 @@ const deleteTransactionsByPlaidIds = async (itemId, plaidTransactionIds) => {
 const getTransactions = async (userId, limit = 100) => {
     const result = await pool.query(
         `SELECT t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name,
-                t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending, t.iso_currency_code, t.notes,
+                t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.user_category, t.pending, t.iso_currency_code, t.notes,
                 a.name as account_name, a.plaid_account_id as account_id
          FROM transactions t
          LEFT JOIN accounts a ON t.account_id = a.id
@@ -386,7 +427,7 @@ const getTransactions = async (userId, limit = 100) => {
 
 const TRANSACTION_COLUMNS = `
     t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name,
-    t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending,
+    t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.user_category, t.pending,
     t.iso_currency_code, t.notes,
     a.name as account_name, a.plaid_account_id as account_id,
     COALESCE((
@@ -515,7 +556,7 @@ const sumTransactions = async (userId, options = {}) => {
 const getTransactionsByAccount = async (userId, accountId, limit = 100) => {
     const result = await pool.query(
         `SELECT t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name,
-                t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.pending, t.iso_currency_code, t.notes,
+                t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.user_category, t.pending, t.iso_currency_code, t.notes,
                 a.name as account_name, a.plaid_account_id as account_id
          FROM transactions t
          LEFT JOIN accounts a ON t.account_id = a.id
@@ -752,9 +793,14 @@ const getFlagAnalytics = async (userId, options = {}) => {
         // halves of one canonical category can each place 8th and both fall
         // outside the top 6 even though their sum belongs 2nd.
         pool.query(
+            // t.user_category rides along and is grouped on, so a corrected row
+            // forms its own group and mergeCanonicalRows can move it. No join:
+            // merchant rules are materialised onto the column at write time
+            // precisely so this query does not need one.
             `SELECT COALESCE(NULLIF(array_to_string(t.category, ' > '), ''), 'Other') AS category_path,
+                    t.user_category,
                     SUM(t.amount)::float AS amount, COUNT(*)::int AS count
-             ${spent} GROUP BY 1`,
+             ${spent} GROUP BY 1, 2`,
             params
         ),
         pool.query(
@@ -771,30 +817,19 @@ const getFlagAnalytics = async (userId, options = {}) => {
         top_merchants: merchants.rows,
         categories: mergeCanonicalRows(categories.rows, {
             pathKey: 'category_path',
+            overrideKey: 'user_category',
             sumFields: ['amount', 'count'],
         }).slice(0, 6),
         accounts: accounts.rows,
     };
 };
 
-// Get spending by category for analytics
-const getCategorySpending = async (userId, days = 30, offsetDays = 0) => {
-    const result = await pool.query(
-        `SELECT
-            COALESCE(category[1], 'Other') as category,
-            SUM(ABS(amount)) as amount,
-            COUNT(*) as count
-         FROM transactions
-         WHERE user_id = $1
-           AND amount > 0
-           AND date >= CURRENT_DATE - INTERVAL '1 day' * $2
-           AND date < CURRENT_DATE - INTERVAL '1 day' * $3
-         GROUP BY category[1]
-         ORDER BY amount DESC`,
-        [userId, days + offsetDays, offsetDays]
-    );
-    return result.rows;
-};
+// getCategorySpending was removed here. It grouped on category[1], which ranks
+// the raw Plaid vocabulary and splits one canonical category across two rows --
+// the thing CLAUDE.md explicitly bans and mergeCanonicalRows exists to avoid.
+// It was exported and called from nowhere, so it was the one query that could
+// have disagreed with every other surface about a corrected category without
+// anybody noticing. Deleted rather than taught about corrections.
 
 // Get daily spending totals
 const getDailySpending = async (userId, days = 30) => {
@@ -1148,6 +1183,143 @@ const getPriceIncreaseCandidates = async (userId, { maxAgeDays = 45 } = {}) => {
         [userId, String(maxAgeDays)]
     );
     return result.rows;
+};
+
+// ============ CATEGORY CORRECTIONS ============
+
+/**
+ * Correct one transaction.
+ *
+ * Scoped to user_id in the WHERE rather than checked beforehand: an id
+ * belonging to somebody else updates nothing and reports nothing, which is the
+ * same shape the goal_contributions EXISTS guard uses.
+ */
+const setTransactionCategory = async (userId, transactionId, category) => {
+    const result = await pool.query(
+        `UPDATE transactions SET user_category = $3, updated_at = NOW()
+          WHERE user_id = $1 AND id = $2
+      RETURNING id`,
+        [userId, transactionId, category]
+    );
+    return result.rowCount > 0;
+};
+
+/**
+ * Correct a selection.
+ *
+ * One statement rather than a call per id: a screenful of corrections should
+ * not be a screenful of round trips, and it should either all land or none of
+ * it should. Returns how many rows actually moved, which is not always the
+ * number of ids sent -- a stale list can name a transaction that has since been
+ * retracted by Plaid.
+ */
+const setTransactionCategories = async (userId, transactionIds, category) => {
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) return 0;
+    const result = await pool.query(
+        `UPDATE transactions SET user_category = $3, updated_at = NOW()
+          WHERE user_id = $1 AND id = ANY($2::int[])`,
+        [userId, transactionIds, category]
+    );
+    return result.rowCount;
+};
+
+/** Back to the derived category. */
+const clearTransactionCategory = async (userId, transactionId) => {
+    const result = await pool.query(
+        `UPDATE transactions SET user_category = NULL, updated_at = NOW()
+          WHERE user_id = $1 AND id = $2
+      RETURNING id`,
+        [userId, transactionId]
+    );
+    return result.rowCount > 0;
+};
+
+/** One transaction, enough of it to identify the merchant behind it. */
+const getTransactionForCategory = async (userId, transactionId) => {
+    const result = await pool.query(
+        `SELECT id, name, merchant_name, category, user_category
+           FROM transactions WHERE user_id = $1 AND id = $2`,
+        [userId, transactionId]
+    );
+    return result.rows[0] || null;
+};
+
+const getMerchantCategoryRules = async (userId) => {
+    const result = await pool.query(
+        `SELECT id, merchant_key, merchant_label, category
+           FROM merchant_category_rules WHERE user_id = $1 ORDER BY merchant_label`,
+        [userId]
+    );
+    return result.rows;
+};
+
+const upsertMerchantCategoryRule = async (userId, { merchantKey, merchantLabel, category }) => {
+    const result = await pool.query(
+        `INSERT INTO merchant_category_rules (user_id, merchant_key, merchant_label, category)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, merchant_key)
+         DO UPDATE SET category = EXCLUDED.category,
+                       merchant_label = EXCLUDED.merchant_label,
+                       updated_at = NOW()
+      RETURNING id, merchant_key, merchant_label, category`,
+        [userId, merchantKey, merchantLabel, category]
+    );
+    return result.rows[0];
+};
+
+const deleteMerchantCategoryRule = async (userId, merchantKey) => {
+    const result = await pool.query(
+        `DELETE FROM merchant_category_rules WHERE user_id = $1 AND merchant_key = $2`,
+        [userId, merchantKey]
+    );
+    return result.rowCount > 0;
+};
+
+/**
+ * Every transaction of this user's, reduced to what identifies its merchant.
+ *
+ * Three columns and no filter on purpose. Matching a merchant needs
+ * `normalizeMerchantName`, which is JS -- PIONEER #0421, POS PIONEER and
+ * NETFLIX.COM all have to reduce before they can be compared -- and narrowing
+ * in SQL first would need that logic in SQL too. Two implementations of one
+ * rule is how the same keyword ended up in two categories.
+ *
+ * A LIKE prefilter is not a safe shortcut either: an aliased merchant need not
+ * contain its own key, and DISNEYPLUS -> Disney+ would be missed silently.
+ *
+ * The cost is one narrow scan per rule change -- a deliberate, rare tap. New
+ * transactions never come through here: `applyMerchantRulesToChunk` handles
+ * them during sync, where the rows are already in memory.
+ */
+const getMerchantIdentityRows = async (userId) => {
+    const result = await pool.query(
+        `SELECT id, name, merchant_name FROM transactions WHERE user_id = $1`,
+        [userId]
+    );
+    return result.rows;
+};
+
+/** Write one category across a set of ids. Returns how many moved. */
+const applyCategoryToIds = async (userId, ids, category) => {
+    if (!ids.length) return 0;
+    const result = await pool.query(
+        `UPDATE transactions SET user_category = $3, updated_at = NOW()
+          WHERE user_id = $1 AND id = ANY($2::int[])
+            AND (user_category IS DISTINCT FROM $3)`,
+        [userId, ids, category]
+    );
+    return result.rowCount;
+};
+
+/** Clear a set of ids. Used when a rule is removed. */
+const clearCategoryForIds = async (userId, ids) => {
+    if (!ids.length) return 0;
+    const result = await pool.query(
+        `UPDATE transactions SET user_category = NULL, updated_at = NOW()
+          WHERE user_id = $1 AND id = ANY($2::int[]) AND user_category IS NOT NULL`,
+        [userId, ids]
+    );
+    return result.rowCount;
 };
 
 // ============ SAVINGS GOALS ============
@@ -2054,6 +2226,16 @@ module.exports = {
     recordInsightSightings,
     markInsightsResolved,
     getPriceIncreaseCandidates,
+    setTransactionCategory,
+    setTransactionCategories,
+    clearTransactionCategory,
+    getTransactionForCategory,
+    getMerchantCategoryRules,
+    upsertMerchantCategoryRule,
+    deleteMerchantCategoryRule,
+    getMerchantIdentityRows,
+    applyCategoryToIds,
+    clearCategoryForIds,
     getOutstandingInsights,
     getInsightTracking,
     markInsightActed,
@@ -2068,7 +2250,6 @@ module.exports = {
     SPOTLIGHT_USER_COOLDOWN_DAYS,
     SPOTLIGHT_MIN_BENEFIT,
     // Analytics operations
-    getCategorySpending,
     getDailySpending,
     getIncomeVsExpenses,
     getMonthlySpending,

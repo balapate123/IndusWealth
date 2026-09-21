@@ -5,6 +5,8 @@ const db = require('../services/db');
 const { syncTransactions } = require('../services/transactionSync');
 const { authenticateToken } = require('../middleware/auth');
 const { categorizeTransaction, getCategoryBreakdown, batchCategorizeWithAI } = require('../services/categorization');
+const corrections = require('../services/category_corrections');
+const { CANONICAL_CATEGORIES } = require('../services/category_map');
 const { createLogger } = require('../services/logger');
 const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse } = require('../utils/responseHelper');
 
@@ -210,6 +212,184 @@ router.get('/', authenticateToken, async (req, res, next) => {
 // PATCH /transactions/:transactionId
 // Update transaction notes
 // Requires authentication
+// ---------------------------------------------------------------------------
+// Category corrections
+//
+// The category anybody sees is derived on read, not stored, so a correction
+// needs its own column and every consumer has to consult it. `effectiveCategory`
+// in category_map.js is that single place; these three routes are the only
+// things that write to it.
+//
+// Declared BEFORE the PATCH /:transactionId notes route would be reached, so a
+// literal path segment can never be captured as a transaction id.
+// ---------------------------------------------------------------------------
+
+/**
+ * The categories a correction may use.
+ *
+ * Served rather than hardcoded on the device for the same reason the goal
+ * editor reads its options from the API: a picker offering something the
+ * server will reject is a button that does nothing.
+ */
+router.get('/categories/options', authenticateToken, (req, res) => {
+    res.json({ success: true, data: CANONICAL_CATEGORIES, requestId: req.requestId });
+});
+
+const badCategory = (req, res) => res.status(400).json({
+    success: false,
+    code: 'UNKNOWN_CATEGORY',
+    message: 'That is not a category this app uses.',
+    requestId: req.requestId,
+});
+
+const parseTransactionId = (req, res) => {
+    const id = Number.parseInt(req.params.transactionId, 10);
+    if (Number.isNaN(id) || id < 1) {
+        res.status(400).json({
+            success: false,
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid transaction id',
+            requestId: req.requestId,
+        });
+        return null;
+    }
+    return id;
+};
+
+/**
+ * POST /transactions/category  { transactionIds, category }
+ *
+ * Bulk, for the selection on All transactions.
+ *
+ * Deliberately never creates a merchant rule: a selection spans merchants, so
+ * inferring one from it would be guessing at intent and would rewrite history
+ * for merchants the user did not name.
+ */
+router.post('/category', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+
+    try {
+        const { transactionIds, category } = req.body || {};
+        const result = await corrections.correctTransactions(req.user.id, transactionIds, category);
+
+        if (!result.ok) {
+            if (result.reason === 'unknown_category') return badCategory(req, res);
+            if (result.reason === 'too_many') {
+                return res.status(400).json({
+                    success: false,
+                    code: 'TOO_MANY_TRANSACTIONS',
+                    message: `You can change up to ${corrections.MAX_BULK_TRANSACTIONS} at a time.`,
+                    requestId: req.requestId,
+                });
+            }
+            return res.status(400).json({
+                success: false,
+                code: 'VALIDATION_ERROR',
+                message: 'Select at least one transaction.',
+                requestId: req.requestId,
+            });
+        }
+
+        logger.info('Bulk category correction', { ...ctx, changed: result.changed, category });
+        res.json({ success: true, changed: result.changed, requestId: req.requestId });
+    } catch (error) {
+        logger.error('Failed to apply a bulk category correction', { ...ctx, error });
+        next(error);
+    }
+});
+
+/**
+ * PATCH /transactions/:transactionId/category  { category, applyToMerchant }
+ *
+ * One transaction, or every transaction from its merchant.
+ */
+router.patch('/:transactionId/category', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+
+    try {
+        const transactionId = parseTransactionId(req, res);
+        if (transactionId === null) return;
+
+        const { category, applyToMerchant = false } = req.body || {};
+        const result = await corrections.correctTransaction(req.user.id, transactionId, category, {
+            applyToMerchant: applyToMerchant === true,
+        });
+
+        if (!result.ok) {
+            if (result.reason === 'unknown_category') return badCategory(req, res);
+            return res.status(404).json({
+                success: false,
+                code: 'NOT_FOUND',
+                message: 'Transaction not found',
+                requestId: req.requestId,
+            });
+        }
+
+        logger.info('Category corrected', {
+            ...ctx, transactionId, category, rule: Boolean(result.rule), alsoChanged: result.alsoChanged,
+        });
+
+        res.json({
+            success: true,
+            // The screen says "and 23 other Pioneer transactions" from this, so
+            // it is the count of rows that actually moved -- not the count
+            // matched, which would include rows already in that category.
+            alsoChanged: result.alsoChanged,
+            rule: result.rule
+                ? { merchantLabel: result.rule.merchant_label, category: result.rule.category }
+                : null,
+            requestId: req.requestId,
+        });
+    } catch (error) {
+        logger.error('Failed to correct a category', { ...ctx, error });
+        next(error);
+    }
+});
+
+/**
+ * DELETE /transactions/:transactionId/category
+ *
+ * Back to the derived category. When a merchant rule covers this transaction
+ * the rule goes too, along with the correction on every row it had written --
+ * otherwise the rule keeps re-applying to a merchant the user has just told us
+ * to stop correcting, and the undo reads as broken.
+ *
+ * This is also the only way to remove a rule. A rules screen is out of scope;
+ * without this route, a rule created by mistake would have no way out.
+ */
+router.delete('/:transactionId/category', authenticateToken, async (req, res, next) => {
+    const ctx = { requestId: req.requestId, userId: req.user.id };
+
+    try {
+        const transactionId = parseTransactionId(req, res);
+        if (transactionId === null) return;
+
+        const result = await corrections.revertTransaction(req.user.id, transactionId);
+        if (!result.ok) {
+            return res.status(404).json({
+                success: false,
+                code: 'NOT_FOUND',
+                message: 'Transaction not found',
+                requestId: req.requestId,
+            });
+        }
+
+        logger.info('Category correction reverted', {
+            ...ctx, transactionId, removedRule: Boolean(result.removedRule),
+        });
+
+        res.json({
+            success: true,
+            alsoChanged: result.alsoChanged,
+            removedRule: result.removedRule,
+            requestId: req.requestId,
+        });
+    } catch (error) {
+        logger.error('Failed to revert a category correction', { ...ctx, error });
+        next(error);
+    }
+});
+
 router.patch('/:transactionId', authenticateToken, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
     logger.info('Updating transaction notes', ctx);

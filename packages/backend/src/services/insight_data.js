@@ -158,15 +158,20 @@ async function _getSpendingSummary(userId, days) {
     // `food_and_drink` and `restaurants` as separate lines, so it reasoned about
     // one category as if it were two.
     const categoryResult = await pool.query(
+        // user_category rides along for the same reason it does in db.js: the
+        // model is told what the user says this spending is, not only what
+        // Plaid guessed. A correction the insights disagreed with would be the
+        // model arguing with the screen it is printed next to.
         `SELECT
             COALESCE(NULLIF(array_to_string(category, ' > '), ''), 'Other') as category_path,
+            user_category,
             SUM(amount) as total,
             COUNT(*) as count
          FROM transactions
          WHERE user_id = $1
            AND amount > 0
            AND date >= CURRENT_DATE - INTERVAL '1 day' * $2
-         GROUP BY 1`,
+         GROUP BY 1, 2`,
         [userId, days]
     );
 
@@ -174,6 +179,7 @@ async function _getSpendingSummary(userId, days) {
     let total_spending = 0;
     mergeCanonicalRows(categoryResult.rows, {
         pathKey: 'category_path',
+        overrideKey: 'user_category',
         sumFields: ['total', 'count'],
     }).forEach(row => {
         by_category[row.category.toLowerCase().replace(/ /g, '_')] = Math.round(row.total);

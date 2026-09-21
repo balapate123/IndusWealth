@@ -11,7 +11,7 @@ const {
 const {
     guideKeyFor, logoColorFor, findGuide, displayNameFor, hasNegotiationScript, buildGuide,
 } = require('./merchant_guides');
-const { canonicalizeCategory, OTHER_CATEGORY } = require('./category_map');
+const { canonicalizeCategory, effectiveCategory, OTHER_CATEGORY } = require('./category_map');
 
 const logger = createLogger('WATCHDOG');
 
@@ -154,8 +154,13 @@ class WatchdogService {
      * canonicalise -- and its values are mapped into canonical names on the way
      * out, so it cannot reintroduce a second vocabulary.
      */
-    resolveCategory(plaidCategory, normalizedName) {
-        const canonical = canonicalizeCategory(plaidCategory);
+    resolveCategory(transaction, normalizedName) {
+        // Takes the row, not the raw array, so a user's correction reaches the
+        // Watchdog screen too. It used to take plaidCategory alone, which meant
+        // a merchant recategorised on the transaction list kept its old
+        // category here -- one category with two names, in the third place this
+        // project has had to fix that.
+        const canonical = effectiveCategory(transaction);
         if (canonical && canonical !== OTHER_CATEGORY) return canonical;
 
         const legacy = merchantToCategoryMap[normalizedName];
@@ -201,7 +206,7 @@ class WatchdogService {
             // Plaid re-categorises merchants over time and the newest label is
             // the one the rest of the app is showing for this merchant today.
             const latest = txns.reduce((a, b) => (new Date(a.date) > new Date(b.date) ? a : b));
-            const category = this.resolveCategory(latest.category, merchant);
+            const category = this.resolveCategory(latest, merchant);
 
             const analysis = analyzeRecurrence(txns, { merchantCategory: category });
             if (!analysis.isRecurring) continue;
