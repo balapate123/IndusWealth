@@ -156,7 +156,9 @@ const plaidTx = (id, name, amount, date, category, merchant = null) => ({
     // -----------------------------------------------------------------------
     console.log('\n--- one transaction ---\n');
 
-    const legacyId = (await pg.query(`SELECT id FROM transactions WHERE plaid_transaction_id = 'legacy-1'`)).rows[0].id;
+    // The Plaid id, not the numeric key -- that is what GET /transactions
+    // hands the device, and what notes and flags are already addressed by.
+    const legacyId = 'legacy-1';
 
     const single = await corrections.correctTransaction(USER, legacyId, 'Groceries');
     check('a correction applies', single.ok, true);
@@ -170,6 +172,17 @@ const plaidTx = (id, name, amount, date, category, merchant = null) => ({
     const categorized = await categorizeTransaction(corrected);
     check('the shipped resolver returns the correction', categorized.category, 'Groceries');
     check('and says where it came from', categorized.source, 'user');
+
+    // The bug this contract exists to prevent. Every write the app makes to a
+    // transaction -- notes, flags, and now this -- is addressed by the Plaid
+    // id, because the numeric key is aliased away as `transaction_id` before
+    // the device ever sees it. An endpoint taking the numeric one matches
+    // nothing and answers cheerfully.
+    const numericId = (await pg.query(
+        `SELECT id FROM transactions WHERE plaid_transaction_id = 'legacy-1'`
+    )).rows[0].id;
+    check('the numeric primary key is not a way in',
+        (await corrections.correctTransaction(USER, numericId, 'Groceries')).reason, 'not_found');
 
     check('an unknown category is refused',
         (await corrections.correctTransaction(USER, legacyId, 'Petrol')).reason, 'unknown_category');
@@ -186,7 +199,7 @@ const plaidTx = (id, name, amount, date, category, merchant = null) => ({
         plaidTx('e-1', 'ESSO', 55.00, '2026-09-06', GAS, 'ESSO'),
     ]);
 
-    const p1 = (await pg.query(`SELECT id FROM transactions WHERE plaid_transaction_id = 'p-1'`)).rows[0].id;
+    const p1 = 'p-1';
     const ruleResult = await corrections.correctTransaction(USER, p1, 'Gas & Fuel', { applyToMerchant: true });
 
     check('the rule applies', ruleResult.ok, true);
@@ -221,7 +234,7 @@ const plaidTx = (id, name, amount, date, category, merchant = null) => ({
     check('a charge that arrives later gets the rule', p3.rows[0].user_category, 'Gas & Fuel');
 
     // A per-transaction correction on a merchant that also has a rule.
-    const p3Id = (await pg.query(`SELECT id FROM transactions WHERE plaid_transaction_id = 'p-3'`)).rows[0].id;
+    const p3Id = 'p-3';
     await corrections.correctTransaction(USER, p3Id, 'Groceries');
     await db.upsertTransactions(USER, [
         plaidTx('p-3', 'PIONEER #0421', 70.00, '2026-09-12', GROCERIES, 'PIONEER #0421'),
@@ -257,7 +270,7 @@ const plaidTx = (id, name, amount, date, category, merchant = null) => ({
     check('and nothing is double counted', Object.keys(byCategory).length, 1);
 
     // Now move one of them somewhere else and watch the chart follow.
-    const p2Id = (await pg.query(`SELECT id FROM transactions WHERE plaid_transaction_id = 'p-2'`)).rows[0].id;
+    const p2Id = 'p-2';
     await corrections.correctTransaction(USER, p2Id, 'Groceries');
 
     const after = await db.getFlagAnalytics(USER, { flagId: flag.rows[0].id });
@@ -272,9 +285,7 @@ const plaidTx = (id, name, amount, date, category, merchant = null) => ({
     // -----------------------------------------------------------------------
     console.log('\n--- bulk ---\n');
 
-    const ids = (await pg.query(
-        `SELECT id FROM transactions WHERE user_id = 1 AND plaid_transaction_id IN ('p-1','e-1') ORDER BY id`
-    )).rows.map((r) => r.id);
+    const ids = ['p-1', 'e-1'];
 
     const bulk = await corrections.correctTransactions(USER, ids, 'Transportation');
     check('a selection moves together', bulk.changed, 2);
@@ -283,7 +294,7 @@ const plaidTx = (id, name, amount, date, category, merchant = null) => ({
     check('an empty selection is refused',
         (await corrections.correctTransactions(USER, [], 'Groceries')).reason, 'no_transactions');
     check('an oversized selection is refused',
-        (await corrections.correctTransactions(USER, Array.from({ length: 201 }, (_, i) => i + 1), 'Groceries')).reason,
+        (await corrections.correctTransactions(USER, Array.from({ length: 201 }, (_, i) => `tx-${i}`), 'Groceries')).reason,
         'too_many');
 
     const foreign = await corrections.correctTransactions(OTHER_USER, ids, 'Groceries');

@@ -19,7 +19,7 @@
 
 // Extension is required: Metro resolves it either way, but the Node test
 // runner imports this file directly and its ESM resolver does not guess.
-import { canonicalizeCategory } from './categoryMap.js';
+import { canonicalizeCategory, CANONICAL_CATEGORIES } from './categoryMap.js';
 
 // Ramp slots: 0 teal · 1 amber · 2 blue · 3 olive · 4 purple · 5 green · 6 pink
 
@@ -236,12 +236,56 @@ export const getCategoryMeta = (categoryName) => {
     return DEFAULT_CATEGORY_META;
 };
 
+/** Canonical names, lower-cased, for a case-insensitive membership test. */
+const CANONICAL_BY_LOWER = new Map(
+    CANONICAL_CATEGORIES.map((name) => [name.toLowerCase(), name])
+);
+
+/**
+ * The user's correction on this row, if it is still a category we have.
+ *
+ * `user_category` is free text as far as the database is concerned, and a
+ * category that has since been renamed must not be rendered -- it would group
+ * alone and draw the default wallet. Falling through to the derivation is the
+ * better failure.
+ *
+ * Mirrors isCanonicalCategory in the backend's category_map.js. It is not in
+ * utils/categoryMap.js because that file is GENERATED from the backend map and
+ * must not be hand-edited.
+ */
+export const correctedCategoryOf = (transaction) => {
+    const stored = transaction && transaction.user_category;
+    if (typeof stored !== 'string') return null;
+    return CANONICAL_BY_LOWER.get(stored.trim().toLowerCase()) || null;
+};
+
 /**
  * Categorize a transaction based on Plaid category or pattern matching
  * @param {Object} transaction - Transaction object
  * @returns {Object} - { category, icon, library, colorIndex }
  */
 export const categorizeTransaction = (transaction) => {
+    // Priority 0: the user has already told us what this is.
+    //
+    // The device derives its own category rather than rendering the server's,
+    // so without this the keyword pass below wins and a correction the server
+    // has already stored never reaches the screen. UBER EATS corrected to
+    // Transportation would keep showing as Restaurants, and the edit would look
+    // like it had not saved.
+    //
+    // Mirrors Layer 0 in the backend's services/categorization.js. A test
+    // asserts the two agree for every canonical name.
+    const corrected = correctedCategoryOf(transaction);
+    if (corrected) {
+        const meta = getCategoryMeta(corrected);
+        return {
+            category: corrected,
+            icon: meta.icon,
+            library: meta.library,
+            colorIndex: meta.colorIndex,
+        };
+    }
+
     // Priority 1: Pattern matching on transaction name (Preferred for specific icons)
     const name = (transaction.name || '').toUpperCase();
     const merchantName = (transaction.merchant_name || '').toUpperCase();

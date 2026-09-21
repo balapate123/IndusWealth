@@ -32,6 +32,9 @@ const makeStyles = () => StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    // Sits exactly where the category icon was, so rows do not shift sideways
+    // when selection mode turns on and the list stops looking like itself.
+    check: { borderWidth: 1.5 },
 });
 
 const money = (value) =>
@@ -47,6 +50,11 @@ const TransactionRow = ({
     meta,
     divider = false,
     onPress,
+    // Selection mode. `selectable` is what draws the empty circle: without it
+    // an unselected row in selection mode looks identical to a normal row, and
+    // there is no affordance saying tapping now does something different.
+    selectable = false,
+    selected = false,
 }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
@@ -64,9 +72,23 @@ const TransactionRow = ({
                     {accountColor ? (
                         <View style={[styles.stripe, { backgroundColor: accountColor }]} />
                     ) : null}
-                    <View style={[styles.icon, { backgroundColor: alpha(tint, 0.16) }]}>
-                        <IconSet name={transaction.categoryIcon} size={19} color={tint} />
-                    </View>
+                    {selectable ? (
+                        <View style={[
+                            styles.icon,
+                            styles.check,
+                            selected
+                                ? { backgroundColor: theme.ACCENT }
+                                : { borderColor: theme.TEXT_MUTED },
+                        ]}>
+                            {selected ? (
+                                <Ionicons name="checkmark" size={17} color={theme.TEXT_ON_ACCENT} />
+                            ) : null}
+                        </View>
+                    ) : (
+                        <View style={[styles.icon, { backgroundColor: alpha(tint, 0.16) }]}>
+                            <IconSet name={transaction.categoryIcon} size={19} color={tint} />
+                        </View>
+                    )}
                 </View>
             }
             title={transaction.merchant}

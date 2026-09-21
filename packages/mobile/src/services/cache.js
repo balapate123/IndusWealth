@@ -218,6 +218,28 @@ export const setProfilePicture = async (uri) => {
 
 // ============ CACHE MANAGEMENT ============
 
+/**
+ * Drop the cached transaction page.
+ *
+ * Called after a category correction. The page is held for 24 hours, so
+ * without this the old category keeps rendering until tomorrow and the edit
+ * looks like it did not save -- the same class of problem as a deleted goal
+ * staying on Home because that screen never remounts.
+ *
+ * Only the transactions key: accounts and user are untouched by a correction,
+ * and clearing them would cost a needless round trip on the next open.
+ */
+export const clearTransactionsCache = async () => {
+    try {
+        await AsyncStorage.removeItem(CACHE_KEYS.TRANSACTIONS);
+        await AsyncStorage.removeItem(CACHE_KEYS.LAST_FETCH + '_transactions');
+    } catch (error) {
+        // A stale cache is a wrong category for a day; a thrown error here
+        // would lose the correction the user just made. Log and carry on.
+        console.error('Error clearing transactions cache:', error);
+    }
+};
+
 export const clearAllCache = async () => {
     try {
         const keys = Object.values(CACHE_KEYS);

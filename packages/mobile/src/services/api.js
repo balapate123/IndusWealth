@@ -4,7 +4,7 @@
 // Replace with your actual IP when testing on a physical device
 
 import { Platform } from 'react-native';
-import cache from './cache';
+import cache, { clearTransactionsCache } from './cache';
 import { reset as resetAnalytics } from './analytics';
 
 const PRODUCTION_API_URL = 'https://induswealth.onrender.com';
@@ -499,6 +499,57 @@ export const api = {
             method: 'PATCH',
             body: JSON.stringify({ notes }),
         }),
+
+    // Category corrections.
+    //
+    // The category shown is derived on the server, not stored, so a correction
+    // is its own write rather than a field on the transaction. Every one of
+    // these invalidates the cached transaction page: it is held for 24 hours,
+    // and without that the old category renders until tomorrow and the edit
+    // looks like it did not save.
+
+    /** The categories the server will accept, so the picker cannot drift. */
+    getCategoryOptions: () => apiRequest('/transactions/categories/options'),
+
+    /**
+     * Correct one transaction.
+     *
+     * `applyToMerchant` extends it to every transaction from that merchant,
+     * past and future. The response carries how many OTHER rows moved, so the
+     * confirmation can name a real number.
+     */
+    setTransactionCategory: async (transactionId, category, { applyToMerchant = false } = {}) => {
+        const result = await apiRequest(`/transactions/${transactionId}/category`, {
+            method: 'PATCH',
+            body: JSON.stringify({ category, applyToMerchant }),
+        });
+        await clearTransactionsCache();
+        return result;
+    },
+
+    /** Correct a selection. Never creates a merchant rule — a selection spans merchants. */
+    setTransactionCategories: async (transactionIds, category) => {
+        const result = await apiRequest('/transactions/category', {
+            method: 'POST',
+            body: JSON.stringify({ transactionIds, category }),
+        });
+        await clearTransactionsCache();
+        return result;
+    },
+
+    /**
+     * Back to the derived category.
+     *
+     * Also removes the merchant rule when one covers this transaction, which
+     * is the only way to get rid of one.
+     */
+    clearTransactionCategory: async (transactionId) => {
+        const result = await apiRequest(`/transactions/${transactionId}/category`, {
+            method: 'DELETE',
+        });
+        await clearTransactionsCache();
+        return result;
+    },
 
     // Flags — the user's own groupings ("Home", "Trip"), distinct from the
     // Plaid/AI category. GET /flags also publishes the icon allowlist and ramp

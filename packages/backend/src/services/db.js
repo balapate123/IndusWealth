@@ -1190,16 +1190,22 @@ const getPriceIncreaseCandidates = async (userId, { maxAgeDays = 45 } = {}) => {
 /**
  * Correct one transaction.
  *
+ * Addressed by `plaid_transaction_id`, not the numeric id — the same contract
+ * updateTransactionNotes and the flag endpoints already use. The device has
+ * never held the numeric id: `GET /transactions` aliases it away as
+ * `transaction_id`, and the numeric one stays inside this table's joins. Same
+ * rule as accounts being addressed by their Plaid id.
+ *
  * Scoped to user_id in the WHERE rather than checked beforehand: an id
  * belonging to somebody else updates nothing and reports nothing, which is the
  * same shape the goal_contributions EXISTS guard uses.
  */
-const setTransactionCategory = async (userId, transactionId, category) => {
+const setTransactionCategory = async (userId, plaidTransactionId, category) => {
     const result = await pool.query(
         `UPDATE transactions SET user_category = $3, updated_at = NOW()
-          WHERE user_id = $1 AND id = $2
+          WHERE user_id = $1 AND plaid_transaction_id = $2
       RETURNING id`,
-        [userId, transactionId, category]
+        [userId, plaidTransactionId, category]
     );
     return result.rowCount > 0;
 };
@@ -1213,33 +1219,33 @@ const setTransactionCategory = async (userId, transactionId, category) => {
  * number of ids sent -- a stale list can name a transaction that has since been
  * retracted by Plaid.
  */
-const setTransactionCategories = async (userId, transactionIds, category) => {
-    if (!Array.isArray(transactionIds) || transactionIds.length === 0) return 0;
+const setTransactionCategories = async (userId, plaidTransactionIds, category) => {
+    if (!Array.isArray(plaidTransactionIds) || plaidTransactionIds.length === 0) return 0;
     const result = await pool.query(
         `UPDATE transactions SET user_category = $3, updated_at = NOW()
-          WHERE user_id = $1 AND id = ANY($2::int[])`,
-        [userId, transactionIds, category]
+          WHERE user_id = $1 AND plaid_transaction_id = ANY($2::varchar[])`,
+        [userId, plaidTransactionIds, category]
     );
     return result.rowCount;
 };
 
 /** Back to the derived category. */
-const clearTransactionCategory = async (userId, transactionId) => {
+const clearTransactionCategory = async (userId, plaidTransactionId) => {
     const result = await pool.query(
         `UPDATE transactions SET user_category = NULL, updated_at = NOW()
-          WHERE user_id = $1 AND id = $2
+          WHERE user_id = $1 AND plaid_transaction_id = $2
       RETURNING id`,
-        [userId, transactionId]
+        [userId, plaidTransactionId]
     );
     return result.rowCount > 0;
 };
 
 /** One transaction, enough of it to identify the merchant behind it. */
-const getTransactionForCategory = async (userId, transactionId) => {
+const getTransactionForCategory = async (userId, plaidTransactionId) => {
     const result = await pool.query(
         `SELECT id, name, merchant_name, category, user_category
-           FROM transactions WHERE user_id = $1 AND id = $2`,
-        [userId, transactionId]
+           FROM transactions WHERE user_id = $1 AND plaid_transaction_id = $2`,
+        [userId, plaidTransactionId]
     );
     return result.rows[0] || null;
 };
@@ -1299,7 +1305,13 @@ const getMerchantIdentityRows = async (userId) => {
     return result.rows;
 };
 
-/** Write one category across a set of ids. Returns how many moved. */
+/**
+ * Write one category across a set of NUMERIC ids.
+ *
+ * Numeric, unlike the endpoints above, because these two are only ever fed by
+ * getMerchantIdentityRows during rule materialisation. Nothing here crosses the
+ * wire, so the internal key is the right one.
+ */
 const applyCategoryToIds = async (userId, ids, category) => {
     if (!ids.length) return 0;
     const result = await pool.query(

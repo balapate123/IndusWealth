@@ -7,6 +7,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { categorizeTransaction, getCategoryBreakdown, batchCategorizeWithAI } = require('../services/categorization');
 const corrections = require('../services/category_corrections');
 const { CANONICAL_CATEGORIES } = require('../services/category_map');
+const { merchantLabelFor } = require('../services/merchant_identity');
 const { createLogger } = require('../services/logger');
 const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse } = require('../utils/responseHelper');
 
@@ -133,7 +134,13 @@ router.get('/', authenticateToken, async (req, res, next) => {
                     : [categoryInfo.category],
                 categoryIcon: categoryInfo.icon,
                 categoryColor: categoryInfo.color,
-                categorySource: categoryInfo.source
+                categorySource: categoryInfo.source,
+                // The merchant behind this row, as a person reads it. Sent
+                // rather than derived on the device: normalizeMerchantName is
+                // backend logic, and a third implementation of it is how this
+                // project ended up with two category vocabularies. It is what
+                // the picker puts in "Also apply to all Pioneer".
+                merchantLabel: merchantLabelFor(tx),
             };
 
             categorizedTransactions.push(categorized);
@@ -242,9 +249,17 @@ const badCategory = (req, res) => res.status(400).json({
     requestId: req.requestId,
 });
 
+/**
+ * The Plaid transaction id, which is what the device holds.
+ *
+ * NOT the numeric primary key: `GET /transactions` aliases that away as
+ * `transaction_id`, and every other write the app makes to a transaction --
+ * notes, flags -- is addressed the same way. Parsing this as an integer would
+ * have matched nothing and returned a cheerful 404.
+ */
 const parseTransactionId = (req, res) => {
-    const id = Number.parseInt(req.params.transactionId, 10);
-    if (Number.isNaN(id) || id < 1) {
+    const id = typeof req.params.transactionId === 'string' ? req.params.transactionId.trim() : '';
+    if (!id || id.length > 255) {
         res.status(400).json({
             success: false,
             code: 'VALIDATION_ERROR',

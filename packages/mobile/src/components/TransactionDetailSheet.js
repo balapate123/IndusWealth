@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { RADIUS, SPACING, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import { BottomSheet, Text, Button, Input, SectionTitle, Chip } from './ui';
@@ -50,6 +51,18 @@ const makeStyles = (t) => StyleSheet.create({
         gap: SPACING.SMALL,
     },
     notes: { marginTop: SPACING.MEDIUM },
+    categoryValue: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        flexShrink: 1,
+    },
+    correctedTag: {
+        paddingHorizontal: 7,
+        paddingVertical: 2,
+        borderRadius: RADIUS.CHIP,
+        backgroundColor: t.SURFACE_SUNKEN,
+    },
     counter: { textAlign: 'right', marginTop: -SPACING.SMALL },
     actions: {
         flexDirection: 'row',
@@ -84,6 +97,10 @@ const TransactionDetailSheet = ({
     saving = false,
     onSave,
     onClose,
+    // Omit and the Category row stays exactly as it was: plain text, no tap.
+    // Same opt-in shape as `flags` above, so screens that have not been wired
+    // for corrections are unaffected.
+    onEditCategory = null,
 }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
@@ -117,10 +134,33 @@ const TransactionDetailSheet = ({
                         </Text>
                     </View>
 
-                    <View style={styles.row}>
+                    {/* Tappable only where the screen passes a handler. The
+                        "Corrected" marker is what makes the undo discoverable:
+                        without it, a user who set a category by mistake has no
+                        way of telling it apart from one the app worked out, and
+                        no reason to look for a way back. */}
+                    <TouchableOpacity
+                        style={styles.row}
+                        onPress={onEditCategory || undefined}
+                        disabled={!onEditCategory}
+                        accessibilityRole={onEditCategory ? 'button' : 'text'}
+                        accessibilityLabel={onEditCategory
+                            ? `Category, ${transaction.category}. Tap to change.`
+                            : undefined}
+                    >
                         <Text variant="body" tone="muted">Category</Text>
-                        <Text variant="bodyMed" style={styles.value}>{transaction.category}</Text>
-                    </View>
+                        <View style={styles.categoryValue}>
+                            {transaction.user_category ? (
+                                <View style={styles.correctedTag}>
+                                    <Text variant="meta" tone="muted">Corrected</Text>
+                                </View>
+                            ) : null}
+                            <Text variant="bodyMed">{transaction.category}</Text>
+                            {onEditCategory ? (
+                                <Ionicons name="chevron-forward" size={15} color={theme.TEXT_MUTED} />
+                            ) : null}
+                        </View>
+                    </TouchableOpacity>
 
                     <View style={styles.row}>
                         <Text variant="body" tone="muted">Date</Text>

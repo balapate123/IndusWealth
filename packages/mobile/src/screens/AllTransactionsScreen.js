@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SPACING, categoryColor } from '../constants/tokens';
+import { SPACING, RADIUS, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import {
     Screen,
     ScreenHeader,
     Text,
+    Button,
     Input,
     SegmentedControl,
     EmptyState,
@@ -16,6 +17,14 @@ import {
 } from '../components/ui';
 import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
+import CategoryPickerSheet from '../components/CategoryPickerSheet';
+import FlagEditorSheet from '../components/FlagEditorSheet';
+import {
+    MAX_SELECTION,
+    toggleSelection,
+    summarizeSelection,
+    formatSelectionTotal,
+} from '../utils/transactionSelection';
 import TotalsSummary from '../components/TotalsSummary';
 import useTransactionFlags from '../hooks/useTransactionFlags';
 import api from '../services/api';
@@ -60,13 +69,29 @@ const buildQuery = ({ days, offset, search, flagFilter, forceRefresh }) => {
     return `?${parts.join('&')}`;
 };
 
-const makeStyles = () => StyleSheet.create({
+const makeStyles = (t) => StyleSheet.create({
     controls: {
         paddingHorizontal: SPACING.MEDIUM,
         marginBottom: SPACING.SMALL,
     },
     range: { marginBottom: SPACING.SMALL + 2 },
     search: { marginBottom: 0 },
+    selectionBar: {
+        position: 'absolute',
+        left: SPACING.MEDIUM,
+        right: SPACING.MEDIUM,
+        bottom: SPACING.MEDIUM,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+        paddingVertical: SPACING.SMALL,
+        paddingHorizontal: SPACING.MEDIUM,
+        borderRadius: RADIUS.CARD,
+        backgroundColor: t.SURFACE_HIGH,
+        borderWidth: t.CARD_BORDER_WIDTH,
+        borderColor: t.CARD_BORDER,
+    },
+    selectionSummary: { flex: 1 },
     headerRight: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -113,6 +138,21 @@ const AllTransactionsScreen = ({ navigation, route }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
 
+    // Selection mode. Entered from an explicit control rather than a long-press:
+    // nothing is hidden behind a gesture, and it cannot be triggered by accident
+    // on a list people scroll through every day.
+    const [selectMode, setSelectMode] = useState(false);
+    const [selected, setSelected] = useState(() => new Set());
+    const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false);
+    const [groupOpen, setGroupOpen] = useState(false);
+    const [groupError, setGroupError] = useState(null);
+    const [bulkBusy, setBulkBusy] = useState(false);
+
+    // The correction sheet for a single transaction, opened from the detail
+    // sheet. Separate state from the bulk one so closing either cannot leave
+    // the other half-open over a transaction it was not about.
+    const [singleCategoryOpen, setSingleCategoryOpen] = useState(false);
+
     const [selectedTransaction, setSelectedTransaction] = useState(null);
     const [showTransactionModal, setShowTransactionModal] = useState(false);
     const [editNotes, setEditNotes] = useState('');
@@ -133,6 +173,12 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                 id: tx.transaction_id || index,
                 merchant: tx.name,
                 category: categorization.category,
+                // Carried through so the detail sheet can mark a corrected row
+                // and offer the undo, and so the picker can name the merchant.
+                // Dropping them here is how a feature ends up working on the
+                // server and doing nothing on screen.
+                user_category: tx.user_category ?? null,
+                merchantLabel: tx.merchantLabel ?? null,
                 categoryIcon: categorization.icon,
                 categoryLibrary: categorization.library,
                 categoryColorIndex: categorization.colorIndex,
@@ -221,6 +267,12 @@ const AllTransactionsScreen = ({ navigation, route }) => {
         setLoading(true);
         setTransactions([]);
         setHasMore(false);
+        // And drops the selection with it. Keeping it would leave a total
+        // counting rows that are no longer on screen -- a figure with no
+        // visible working, which is the one thing this app refuses to render.
+        // Selection mode itself stays on: filtering and then selecting is the
+        // useful order, and it is unaffected.
+        setSelected(new Set());
         loadFirstPage(false);
     }, [loadFirstPage]);
 
@@ -314,6 +366,119 @@ const AllTransactionsScreen = ({ navigation, route }) => {
         }
     };
 
+    // -----------------------------------------------------------------------
+    // Selection
+    // -----------------------------------------------------------------------
+
+    // Count and total from the visible rows, so the two always describe the
+    // same set. Summed on the device, which is the one place that is correct:
+    // a selection IS rows already in memory, unlike the list totals, which come
+    // from the server because the device only ever holds a page.
+    const selection = summarizeSelection(transactions, selected);
+    const atSelectionCap = selection.count >= MAX_SELECTION;
+
+    const exitSelectMode = () => {
+        setSelectMode(false);
+        setSelected(new Set());
+    };
+
+    const onRowPress = (item) => {
+        if (!selectMode) {
+            openTransactionDetails(item);
+            return;
+        }
+        // Silently refusing a tap at the cap would read as a broken row, so an
+        // already-selected one can always be tapped off.
+        if (atSelectionCap && !selected.has(item.id)) return;
+        setSelected((prev) => toggleSelection(prev, item.id));
+    };
+
+    const applyBulkCategory = async (category) => {
+        const ids = transactions.filter((tx) => selected.has(tx.id)).map((tx) => tx.id);
+        if (ids.length === 0) return;
+
+        try {
+            setBulkBusy(true);
+            await api.setTransactionCategories(ids, category);
+            setBulkCategoryOpen(false);
+            exitSelectMode();
+            // Reload rather than patch: a category change moves the totals bar
+            // and can move rows out of a category-derived view later. Patching
+            // would leave the header disagreeing with the rows beneath it.
+            loadFirstPage(false);
+        } catch (error) {
+            console.error('Error setting categories:', error);
+        } finally {
+            setBulkBusy(false);
+        }
+    };
+
+    const createGroupFromSelection = async ({ name, colorIndex, icon }) => {
+        // item.id is the PLAID transaction id -- GET /transactions aliases the
+        // numeric key away before the device sees it -- which is exactly what
+        // both the flag endpoint and the category endpoint expect.
+        const ids = transactions.filter((tx) => selected.has(tx.id)).map((tx) => tx.id);
+        if (ids.length === 0) return;
+
+        try {
+            setBulkBusy(true);
+            setGroupError(null);
+            const created = await api.createFlag({ name, colorIndex, icon });
+            const flagId = created?.data?.id ?? created?.id;
+            if (!flagId) throw new Error('flag id missing from the create response');
+
+            await api.setFlagTransactions(flagId, { add: ids });
+            setGroupOpen(false);
+            exitSelectMode();
+            await flagState.reload();
+            loadFirstPage(false);
+        } catch (error) {
+            console.error('Error creating a group:', error);
+            // Surfaced in the sheet rather than swallowed: a duplicate name is
+            // a 409 the user can fix, and a silent failure here loses a
+            // selection they built by hand.
+            setGroupError(error?.message || 'Could not create that group.');
+        } finally {
+            setBulkBusy(false);
+        }
+    };
+
+    // -----------------------------------------------------------------------
+    // One transaction
+    // -----------------------------------------------------------------------
+
+    const applySingleCategory = async (category, { applyToMerchant }) => {
+        if (!selectedTransaction) return;
+
+        try {
+            setBulkBusy(true);
+            await api.setTransactionCategory(selectedTransaction.id, category, { applyToMerchant });
+            setSingleCategoryOpen(false);
+            setShowTransactionModal(false);
+            loadFirstPage(false);
+        } catch (error) {
+            console.error('Error correcting a category:', error);
+        } finally {
+            setBulkBusy(false);
+        }
+    };
+
+    const clearSingleCategory = async () => {
+        if (!selectedTransaction) return;
+
+        try {
+            setBulkBusy(true);
+            await api.clearTransactionCategory(selectedTransaction.id);
+            setSingleCategoryOpen(false);
+            setShowTransactionModal(false);
+            loadFirstPage(false);
+        } catch (error) {
+            console.error('Error removing a category correction:', error);
+        } finally {
+            setBulkBusy(false);
+        }
+    };
+
     const selectedAccount = selectedTransaction
         ? accounts.find((a) => a.id === selectedTransaction.account_id)
         : null;
@@ -329,16 +494,39 @@ const AllTransactionsScreen = ({ navigation, route }) => {
 
     const header = (
         <>
+            {/* While selecting, the header becomes the way out. Back would
+                leave the screen entirely and lose a selection built by hand,
+                which is not what somebody reaches for when they want to stop
+                selecting. */}
             <ScreenHeader
-                title="All transactions"
-                onBack={() => navigation.goBack()}
-                right={
+                title={selectMode
+                    ? (selection.count ? `${selection.count} selected` : 'Select transactions')
+                    : 'All transactions'}
+                onBack={selectMode ? exitSelectMode : () => navigation.goBack()}
+                right={selectMode ? (
+                    <TouchableOpacity
+                        onPress={exitSelectMode}
+                        accessibilityRole="button"
+                        accessibilityLabel="Cancel selection"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                        <Text variant="label" color={theme.ACCENT}>Cancel</Text>
+                    </TouchableOpacity>
+                ) : (
                     <View style={styles.headerRight}>
                         <Text variant="meta" tone="muted">
                             {total > transactions.length
                                 ? `${transactions.length}/${total}`
                                 : `${total}`}
                         </Text>
+                        <TouchableOpacity
+                            onPress={() => setSelectMode(true)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Select transactions"
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                            <Ionicons name="checkmark-circle-outline" size={21} color={theme.ACCENT} />
+                        </TouchableOpacity>
                         <TouchableOpacity
                             onPress={() => navigation.navigate('Flags')}
                             accessibilityRole="button"
@@ -348,7 +536,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                             <Ionicons name="pricetags-outline" size={20} color={theme.ACCENT} />
                         </TouchableOpacity>
                     </View>
-                }
+                )}
             />
             <View style={styles.controls}>
                 <SegmentedControl
@@ -421,7 +609,9 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                                 accountColor={getAccountColor(item.account_id)}
                                 subtitle={`${item.category} · ${item.formattedDate}`}
                                 divider={index > 0}
-                                onPress={() => openTransactionDetails(item)}
+                                selectable={selectMode}
+                                selected={selected.has(item.id)}
+                                onPress={() => onRowPress(item)}
                             />
                         )}
                         keyExtractor={(item) => item.id.toString()}
@@ -472,6 +662,70 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                 )}
             </Screen>
 
+            {/* Pinned above the list, the same shape FlagTransactionPickerScreen
+                already uses: the running total and the actions stay reachable
+                without scrolling back to a header. Rendered only once something
+                is selected, because an empty bar is a permanent strip of
+                nothing covering the last row. */}
+            {selectMode && selection.count > 0 ? (
+                <View style={styles.selectionBar}>
+                    <View style={styles.selectionSummary}>
+                        <Text variant="bodyMed">
+                            {formatSelectionTotal(selection.net)}
+                        </Text>
+                        <Text variant="meta" tone="muted">
+                            {selection.count} selected
+                            {selection.hasInflow ? ' · includes money in' : ''}
+                            {atSelectionCap ? ` · max ${MAX_SELECTION}` : ''}
+                        </Text>
+                    </View>
+                    <Button
+                        title="Category"
+                        variant="secondary"
+                        size="sm"
+                        onPress={() => setBulkCategoryOpen(true)}
+                        disabled={bulkBusy}
+                    />
+                    <Button
+                        title="Group"
+                        size="sm"
+                        onPress={() => { setGroupError(null); setGroupOpen(true); }}
+                        disabled={bulkBusy}
+                    />
+                </View>
+            ) : null}
+
+            <CategoryPickerSheet
+                visible={bulkCategoryOpen}
+                count={selection.count}
+                busy={bulkBusy}
+                onSelect={applyBulkCategory}
+                onClose={() => setBulkCategoryOpen(false)}
+            />
+
+            {/* The group IS a flag, so naming one looks exactly like naming a
+                flag -- same sheet, same colour ramp, same icon allowlist. */}
+            <FlagEditorSheet
+                visible={groupOpen}
+                flag={null}
+                options={flagState.options}
+                saving={bulkBusy}
+                error={groupError}
+                onSave={createGroupFromSelection}
+                onClose={() => setGroupOpen(false)}
+            />
+
+            <CategoryPickerSheet
+                visible={singleCategoryOpen}
+                count={1}
+                busy={bulkBusy}
+                current={selectedTransaction?.category ?? null}
+                merchantLabel={selectedTransaction?.merchantLabel ?? null}
+                onSelect={applySingleCategory}
+                onClear={selectedTransaction?.user_category ? clearSingleCategory : null}
+                onClose={() => setSingleCategoryOpen(false)}
+            />
+
             <TransactionDetailSheet
                 visible={showTransactionModal}
                 transaction={selectedTransaction}
@@ -484,6 +738,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                 onToggleFlag={flagState.toggle}
                 saving={saving}
                 onSave={handleSaveDetails}
+                onEditCategory={() => setSingleCategoryOpen(true)}
                 onClose={() => setShowTransactionModal(false)}
             />
         </>

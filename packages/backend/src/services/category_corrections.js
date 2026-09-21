@@ -71,15 +71,15 @@ function matchingTransactionIds(rows, merchantKey) {
  * can say "and 23 other Pioneer transactions" rather than claiming a number it
  * does not have.
  */
-async function correctTransaction(userId, transactionId, category, { applyToMerchant = false } = {}) {
+async function correctTransaction(userId, plaidTransactionId, category, { applyToMerchant = false } = {}) {
     if (!isCanonicalCategory(category)) return { ok: false, reason: 'unknown_category' };
 
-    const transaction = await db.getTransactionForCategory(userId, transactionId);
+    const transaction = await db.getTransactionForCategory(userId, plaidTransactionId);
     // Scoped to the user by the query, so a foreign id is simply not found.
     if (!transaction) return { ok: false, reason: 'not_found' };
 
     if (!applyToMerchant) {
-        const changed = await db.setTransactionCategory(userId, transactionId, category);
+        const changed = await db.setTransactionCategory(userId, plaidTransactionId, category);
         return { ok: changed, alsoChanged: 0, rule: null };
     }
 
@@ -88,7 +88,7 @@ async function correctTransaction(userId, transactionId, category, { applyToMerc
     if (!merchantKey) {
         // Nothing to key a rule on. Correct the one row rather than failing:
         // the user asked for this transaction to change and it still can.
-        const changed = await db.setTransactionCategory(userId, transactionId, category);
+        const changed = await db.setTransactionCategory(userId, plaidTransactionId, category);
         return { ok: changed, alsoChanged: 0, rule: null, reason: 'no_merchant' };
     }
 
@@ -117,7 +117,15 @@ async function correctTransaction(userId, transactionId, category, { applyToMerc
 async function correctTransactions(userId, transactionIds, category) {
     if (!isCanonicalCategory(category)) return { ok: false, reason: 'unknown_category' };
 
-    const ids = [...new Set((transactionIds || []).map(Number).filter(Number.isInteger))];
+    // Plaid ids are strings. Coercing with Number here would turn every one of
+    // them into NaN and the update would match nothing, with a cheerful 200 and
+    // a changed count of zero.
+    const ids = [...new Set(
+        (transactionIds || [])
+            .filter((id) => typeof id === 'string' || typeof id === 'number')
+            .map((id) => String(id).trim())
+            .filter(Boolean)
+    )];
     if (ids.length === 0) return { ok: false, reason: 'no_transactions' };
     if (ids.length > MAX_BULK_TRANSACTIONS) return { ok: false, reason: 'too_many' };
 
@@ -133,8 +141,8 @@ async function correctTransactions(userId, transactionIds, category) {
  * rule that keeps re-applying to a merchant the user has just told us to stop
  * correcting, which reads as the undo not having worked.
  */
-async function revertTransaction(userId, transactionId) {
-    const transaction = await db.getTransactionForCategory(userId, transactionId);
+async function revertTransaction(userId, plaidTransactionId) {
+    const transaction = await db.getTransactionForCategory(userId, plaidTransactionId);
     if (!transaction) return { ok: false, reason: 'not_found' };
 
     const merchantKey = merchantKeyFor(transaction);
@@ -142,7 +150,7 @@ async function revertTransaction(userId, transactionId) {
     const rule = rules.find((r) => r.merchant_key === merchantKey) || null;
 
     if (!rule) {
-        const changed = await db.clearTransactionCategory(userId, transactionId);
+        const changed = await db.clearTransactionCategory(userId, plaidTransactionId);
         return { ok: changed, alsoChanged: 0, removedRule: null };
     }
 
