@@ -6,6 +6,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { categorizeTransaction, getCategoryBreakdown, batchCategorizeWithAI } = require('../services/categorization');
 const { generateCategoryInsights } = require('../services/ai_insights');
 const { createLogger } = require('../services/logger');
+const { buildCashFlowNote } = require('../services/cash_flow_note');
 const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse, getPlaidStatusFromError } = require('../utils/responseHelper');
 
 const logger = createLogger('ANALYTICS');
@@ -121,38 +122,6 @@ const getTopMerchant = (transactions, previousTransactions) => {
         changePercent,
         category: topData.category
     };
-};
-
-// Helper: Generate AI tip based on financial data
-const generateAiTip = (surplus, netCashFlow, totalExpenses) => {
-    const hisaRate = 0.045; // 4.5% annual rate
-    const monthlyEarnings = Math.round((surplus * hisaRate) / 12);
-
-    if (surplus > 500) {
-        return {
-            title: 'Optimization Tip',
-            description: `Move $${surplus.toLocaleString()} to your HISA for an extra $${monthlyEarnings}/mo interest.`,
-            action: 'Execute Now',
-            surplus: Math.round(surplus),
-            potentialEarnings: monthlyEarnings
-        };
-    } else if (netCashFlow < 0) {
-        return {
-            title: 'Spending Alert',
-            description: `You're spending $${Math.abs(Math.round(netCashFlow))} more than your income. Review subscriptions.`,
-            action: 'Review Now',
-            surplus: 0,
-            potentialEarnings: 0
-        };
-    } else {
-        return {
-            title: 'AI Insight',
-            description: `You're on track to spend $${Math.round(totalExpenses * 1.1)} by EOM. Consider the TTC for work commutes.`,
-            action: 'View Details',
-            surplus: Math.round(surplus),
-            potentialEarnings: monthlyEarnings
-        };
-    }
 };
 
 // Helper: Generate wealth narrative
@@ -406,9 +375,21 @@ router.get('/', authenticateToken, async (req, res, next) => {
         // 4. Top Merchant
         const topMerchant = getTopMerchant(categorizedTransactions, prevCategorizedTransactions);
 
-        // 5. AI Tip
-        const surplus = netCashFlow > 0 ? netCashFlow : 0;
-        const aiTip = generateAiTip(surplus, netCashFlow, totalExpenses);
+        // 5. What the money did.
+        //
+        // Deliberately NOT sent as `aiTip`. There is no OTA, so installed
+        // builds keep rendering whatever key they know -- and the old card
+        // hardcoded "Move $X to your HISA" in its JSX, ignoring the text the
+        // server sent. Keeping the key would mean every existing build carried
+        // on giving the advice that got us rejected, no matter what we put in
+        // it. Under a new key the old card simply does not render, so the
+        // liability goes away on deploy rather than on update. Same reasoning
+        // as returning 410 from /etfs/recommended.
+        const cashFlowNote = buildCashFlowNote({
+            totalIncome,
+            totalExpenses,
+            periodDays,
+        });
 
         // 6. Net Worth Trend (simulated daily data)
         const netWorthTrend = [];
@@ -484,7 +465,7 @@ router.get('/', authenticateToken, async (req, res, next) => {
             burnRate,
             spendingByIntent,
             topMerchant,
-            aiTip,
+            cashFlowNote,
         }, meta);
     } catch (error) {
         logger.error('Failed to fetch analytics', { ...ctx, error });

@@ -430,7 +430,7 @@ const AnalyticsScreen = ({ navigation }) => {
     ] : [];
 
     const topMerchant = analytics?.topMerchant;
-    const aiTip = analytics?.aiTip;
+    const cashFlowNote = analytics?.cashFlowNote;
 
     const categoryTotal = categoryData.reduce((sum, cat) => sum + cat.amount, 0);
 
@@ -690,25 +690,32 @@ const AnalyticsScreen = ({ navigation }) => {
                     )}
                 </Card>
 
-                {/* AI tip */}
-                {aiTip && (
+                {/* What the money did.
+
+                    This card used to read "Move $840 to your HISA for an extra
+                    $31/mo interest" over a button labelled "Execute Now", off a
+                    4.5% rate hardcoded in the route. Recommending where
+                    somebody's surplus should go, on the strength of their own
+                    balances, is the shape that got the app rejected from Play
+                    -- and an invented rate presented as a forecast is its own
+                    problem regardless of policy.
+
+                    It states what happened now, and the only destination it
+                    offers is a goal the user made themselves. */}
+                {cashFlowNote && (
                     <Card>
                         <View style={styles.tipHeader}>
                             <View style={styles.tipIcon}>
-                                <Ionicons name="flash" size={16} color={theme.ACCENT} />
+                                <Ionicons name="swap-vertical" size={16} color={theme.ACCENT} />
                             </View>
-                            <Text variant="title" style={{ flex: 1 }}>{aiTip.title}</Text>
+                            <Text variant="title" style={{ flex: 1 }}>Cash flow</Text>
                         </View>
-                        <Text variant="body" tone="secondary">
-                            Move <Text variant="bodyMed" tone="accent">${aiTip.surplus?.toLocaleString()}</Text> to
-                            your HISA for an extra{' '}
-                            <Text variant="bodyMed" tone="accent">${aiTip.potentialEarnings}/mo</Text> interest.
-                        </Text>
-                        {aiTip.action && (
+                        <Text variant="body" tone="secondary">{cashFlowNote.message}</Text>
+                        {cashFlowNote.surplus > 0 && (
                             <Button
-                                title={aiTip.action}
-                                icon="flash"
-                                onPress={() => navigation.navigate('AllAccounts')}
+                                title="Put it toward a goal"
+                                icon="flag-outline"
+                                onPress={() => navigation.navigate('Goals')}
                                 block
                                 style={{ marginTop: SPACING.MEDIUM }}
                             />
@@ -762,13 +769,12 @@ const AnalyticsScreen = ({ navigation }) => {
                     </Card>
                 )}
 
-                {/* AI insight footer */}
-                <Card>
-                    <Text variant="overline" tone="muted">AI insight</Text>
-                    <Text variant="body" tone="secondary" style={{ marginTop: 6 }}>
-                        {aiTip?.description || 'Analyzing your spending patterns...'}
-                    </Text>
-                </Card>
+                {/* The "AI insight" footer is gone with the tip that fed it.
+                    It rendered the same three-branch `if` the card did -- one
+                    branch of which told every user in the country to "consider
+                    the TTC for work commutes" -- under a heading calling it AI.
+                    Nothing here was ever a model. The Insights tab is where
+                    generated insights live, and they say so honestly. */}
             </Screen>
 
             {/* Category drill-down */}

@@ -51,6 +51,7 @@
 | | `src/services/cardDueDates.js` | Due-date constants: 28-day cap, lead bounds, 10-card cap |
 | | `src/services/nudges.js` | **Pure** check-in selection: candidates, priority, both cooldowns, closed `NUDGE_KINDS` |
 | | `src/services/price_alerts.js` | **Pure.** The price-increase rule, shared by Watchdog alerts and the insights pipeline |
+| | `src/services/cash_flow_note.js` | **Pure.** The one sentence the Analytics screen says about cash flow. Names no product, quotes no rate, instructs nothing |
 | | `src/services/merchant_identity.js` | **Pure.** `normalizeMerchantName` + the rule key and label. Lifted out of the Watchdog class so corrections and Watchdog share one answer |
 | | `src/services/category_corrections.js` | Which transactions belong to a merchant (**pure**), and the create/apply/revert orchestration around it |
 | | `src/services/link_registry.js` | **The only source of outbound URLs.** Vetted destinations by key + host allowlist + safe in-app routes |
@@ -285,6 +286,9 @@ IndusWealth is **not a registered adviser**, so it must never recommend a securi
 - The ETF list screen stays as **education**: same order for everyone, nothing derived from the user's finances.
 - No brokerage or bank product pages in `link_registry.js`. Neutral rate comparison (`ratehub_savings`) is fine; a provider signup page reached from an insight about your own balance is product steering.
 - `docs/store/PLAY_STORE_LISTING.md` already promises "does not provide financial, investment, legal, or tax advice" — keep the app matching that claim, not the other way round.
+- **`generateAiTip` on the Analytics screen was the same defect a second time** and shipped for months: *"Move $840 to your HISA for an extra $31/mo interest"* over a button labelled **Execute Now**, off a **4.5% rate hardcoded in the route**. Swapping the noun does not fix it — account types are legal to name, but recommending a destination off the user's own surplus is the rejected shape whatever sits at the far end. Replaced by `services/cash_flow_note.js`, which states what happened and offers only **a goal the user created**, exactly the rule `nudges.js` follows. Its tests assert the copy names no product, quotes no rate, issues no instruction and never scolds — a prompt rule is a request, a test is enforcement.
+- **The payload key was renamed `aiTip` → `cashFlowNote` deliberately.** There is no OTA, and the old card hardcoded the HISA sentence in its JSX while ignoring the server's text, so keeping the key would have left every installed build giving the rejected advice no matter what was sent. Under a new key the old card simply does not render. Same reasoning as `/etfs/recommended` returning 410.
+- **Still outstanding:** `ai_insights.js` hands Gemini `Average HISA rate: 4-5%` in its Canadian-constants block, so the model can still compose the same sentence. `_rejectSecurityMentions` blocks securities, not account types.
 
 ### Price Increases
 `generateAlerts` computed "Rogers went up $8/mo" from the user's own transactions, wrote it to `subscription_alerts`, and rendered it only on the Watchdog screen — a tab that no longer has a slot. It is the most concrete thing the app knows about anybody's money and nobody saw it.
