@@ -19,7 +19,7 @@
 | | `src/routes/accounts.js` | Bank accounts |
 | | `src/routes/transactions.js` | Transactions + Plaid sync |
 | | `src/routes/debt.js` | Debt overview + snowball/avalanche calc |
-| | `src/routes/analytics.js` | Spending analytics + `/analytics/categories` (advanced category analytics) + `/analytics/categories/insights` (AI insights, 6h cache) |
+| | `src/routes/analytics.js` | Spending analytics + `/analytics/categories` (advanced category analytics, optional `account_id` scope) + `/analytics/categories/insights` (AI insights, 6h cache, **refuses `account_id`**) |
 | | `src/routes/watchdog.js` | Recurring expense detection |
 | | `src/routes/insights.js` | AI insights, dismissals, `GET /insights/spotlight` + `POST /insights/spotlight/seen` (the pop-up) |
 | | `src/routes/educational.js` | Wealth Academy articles |
@@ -84,7 +84,7 @@
 | | `src/screens/DebtAttackScreen.js` | Debt payoff tool |
 | | `src/screens/WatchdogScreen.js` | Recurring expenses |
 | | `src/screens/AnalyticsScreen.js` | Spending analytics ("Advanced" header button opens AdvancedAnalytics) |
-| | `src/screens/AdvancedAnalyticsScreen.js` | Advanced category analytics: stat tiles, AI/rule-based insights, category drill-down, charts |
+| | `src/screens/AdvancedAnalyticsScreen.js` | Advanced category analytics: stat tiles, AI/rule-based insights, category drill-down, charts. Three modes — the tab, pushed for all accounts, pushed scoped to one (`route.params.account`) |
 | | `src/screens/InsightsScreen.js` | AI insights |
 | | `src/screens/ProfileScreen.js` | Profile + settings |
 | | `src/screens/WealthAcademyScreen.js` | Educational content |
@@ -96,7 +96,7 @@
 | | `src/screens/GoalDetailScreen.js` | One goal: progress, linked account, contributions; edit + delete |
 | | (due dates live in the Debt tab via `components/CardDueDates.js`) | |
 | | `src/screens/AllAccountsScreen.js` | Accounts list |
-| | `src/screens/AccountTransactionsScreen.js` | Per-account transactions |
+| | `src/screens/AccountTransactionsScreen.js` | Per-account transactions: same select mode, category correction and flag filter as the full list; balance card links to account-scoped analytics |
 | | `src/screens/FeedbackScreen.js` | Feedback form |
 | | `src/screens/LegalDocScreen.js` | Legal documents |
 | | `src/screens/ArticleWebViewScreen.js` | Article viewer |
@@ -108,6 +108,7 @@
 | | `src/hooks/useCardDueDates.js` | Due dates CRUD; re-syncs device reminders after every mutation |
 | | `src/hooks/useCheckinNudge.js` | Fetches the weekly nudge once per launch; suppressed by the spotlight |
 | | `src/hooks/useTransactionFlags.js` | Flags + the attach/detach diff for the transaction sheet |
+| | `src/hooks/useTransactionSelection.js` | Selection mode for a transaction list: what is ticked, what it totals, Group and Category. Shared by the full list and the account list |
 | | `src/hooks/useGoals.js` | Goals CRUD; re-syncs device reminders after every mutation |
 | | `src/hooks/useInsightSpotlight.js` | Fetches the pop-up once per launch; act/snooze/dismiss |
 | Components | `src/components/CustomAlert.js` | Alert component |
@@ -120,6 +121,7 @@
 | | `src/components/CardDueDates.js` | Debt-tab section: list, day picker, lead time, on/off |
 | | `src/components/CheckinNudge.js` | The weekly check-in sheet: one thing, one action, a way out |
 | | `src/components/CategoryPickerSheet.js` | The closed category list, for one transaction or a selection; carries the "all this merchant" opt-in |
+| | `src/components/TransactionSelectionBar.js` | The pinned running total + Group/Category, and the two sheets they open |
 | | `src/components/ui/Treemap.js` | Part-to-whole by area (Analytics "Spending by category") |
 | Constants | `src/constants/theme.js` | Dark theme + gold accents |
 | | `src/constants/insights.js` | Insight type enum → icon/label/ramp slot; must mirror `insight_identity.js` |
@@ -131,7 +133,7 @@
 | | `src/utils/cardDueReminders.js` | Pure due-date scheduling incl. the **lead-day wraparound** |
 | | `src/utils/treemap.js` | Pure squarified treemap layout + top-7/Other folding |
 | | `src/utils/syncQueue.js` | The one-at-a-time queue every reminder sync runs through |
-| Tests | `packages/mobile/tests/*.test.mjs` | `npm test` — node --test, zero deps (Node 22 detects the module syntax) |
+| Tests | `packages/mobile/tests/*.test.mjs` | `npm test` — node --test, zero deps (Node 22 detects the module syntax). `transactionRowMappers.test.mjs` scans the screens for a row mapper that drops the category correction |
 | | `packages/backend/tests/*.test.js` | `npm test` — node --test |
 
 ### Database Tables
@@ -180,13 +182,25 @@ The category anybody sees is **not stored** — it is derived on every read, by 
 - Removing a rule clears that merchant's corrections **wholesale**, including one made by hand afterwards. Provenance is not stored; the confirmation names the row count first.
 
 ### Selecting Transactions
-`Select` in the All-transactions header turns the list into a selection: tap to toggle, a pinned bar shows the count and total, and Group / Category act on it.
+`Select` in the header of **both** the All-transactions list and one account's list turns it into a selection: tap to toggle, a pinned bar shows the count and total, and Group / Category act on it. `hooks/useTransactionSelection.js` owns the state and the two writes; `components/TransactionSelectionBar.js` owns the bar and its sheets.
 - **A group is a flag.** `transaction_flags` already models a user-named grouping; Group opens the existing `FlagEditorSheet` and then `createFlag` + `setFlagTransactions`. No new model.
 - **The total is summed on the device** — a deliberate exception to "totals come from `db.sumTransactions`". That rule exists because the device holds one page; a selection *is* rows already in memory. `FlagTransactionPickerScreen` does the same.
 - **The count and the total always describe the same rows** (`summarizeSelection` walks the visible list), so the bar can never read "5 selected" over a total covering four.
 - **Changing range, search or flag filter clears the selection** — otherwise the total counts rows that are no longer on screen. Select mode itself stays on.
+- **The hook is handed the rows that are on screen, and that is not the same list on both screens.** The full list searches server-side, so every fetched row is visible and `transactions` is correct. The account list filters **in memory**, so it must pass `filteredTransactions` and clear the selection from an effect keyed on the search text and flag filter — there is no refetch to do it as a side effect. Passing the unfiltered list is how the bar ends up reading "5 selected" over a total covering rows nobody can see.
+- **The cap is measured against the visible count, not the size of the Set.** The request is built from the visible rows, so that is the number the endpoint is actually handed.
+- **A screen with bulk category must also offer the single-row correction** (`onEditCategory` on the detail sheet), or twenty rows can be fixed at once but not one. `tests/transactionRowMappers.test.mjs` asserts this, and that every row mapper carries `user_category` and `merchantLabel` — the account screen shipped without them, so a correction was stored, returned, and invisible.
 - **No "Select all"**: the list is paged, so it would mean "all loaded" while reading as "all matching". Bulk recategorisation of one merchant is the merchant rule's job.
 - Bulk category is **per-transaction only and never creates a rule** — a selection spans merchants, so inferring one would be guessing. Capped at 200, matching `MAX_BULK_TRANSACTIONS`, asserted across packages.
+
+### Account-scoped Analytics
+`GET /analytics/categories?account_id=<plaid_account_id>` scopes the whole advanced-analytics payload to one account; `AdvancedAnalyticsScreen` renders it from `route.params.account`, reached from a row on `AccountBalanceCard`.
+- **Both reads take the scope, not just the obvious one.** `getTransactions` and `getMonthlySpending` — the second had no join at all. Scoping only the transactions leaves the 6-month trend showing every account's bars inside a single-card view: nothing errors, the bars are the right shape, and they answer a different question. Everything below the fetch is JS over the returned rows, so scoping the fetch scopes every aggregate.
+- **`/categories/insights` refuses an `account_id`** rather than serving the all-accounts generation. `category_ai_insights` is unique on `(user_id, period_days)`, so there is nowhere to cache a scoped one and it would overwrite the unscoped row. The screen never asks, so the guard is unreachable in normal use — it exists so a stray call cannot mislabel one card's spending as everything. Rule-based insights inside the payload are scoped by construction.
+- **On a credit account the hero says "Payments & credits" and "Net change"**, never "Income" and "Net": money arriving on a card is a payment or a refund, and "Income $1,240" on a card reads as though it earned something. Label-only; use `account.isCredit` (the API derives it) rather than `type === 'credit'`, which misses a line of credit.
+- A foreign `account_id` 404s with `ACCOUNT_NOT_FOUND`, the same code `goals.js` uses. The filter already carries `t.user_id` so nothing leaked either way — the check only makes "not your account" different from "no spending here".
+- Scoping narrows the 2000-row cap from "across every account" to "on this one", so coverage improves. It does not remove it.
+- Verify with `node tests/manual/account_analytics_sql_check.js` (PGlite, 29 checks, drives the shipped `computeCategoryAnalytics`).
 
 ### Transaction Flags
 User-defined groupings ("Home", "Trip to Montreal"), **distinct from `category`** — a category is inferred by Plaid/AI and single-valued; a flag is chosen by the user and a transaction can carry several.
@@ -449,6 +463,7 @@ Fixed by `services/recurrence.js` (**pure**, no pool — the gates as assertions
 6. `liabilities` product: request access in Plaid dashboard, then re-add to `products` in `services/plaid.js`.
 7. **Gemini "thinking" was truncating JSON** (FIXED): all Gemini JSON calls now set `thinkingConfig: { thinkingBudget: 0 }` (`ai_insights.js` ×2, `ai_categorization.js`). Without it, hidden reasoning tokens exhausted `maxOutputTokens` and cut the JSON mid-string → "Unterminated string in JSON" (Insights tab 500s, silent AI-insight/categorization failures).
 8. **Two years of Plaid history needs a reconnect.** `days_requested` is fixed when the Item is created, so connections made before that change still return 90 days regardless of what we ask for. Disconnect and relink to get the full depth.
+8b. **There are two ESLint configs and a suppression comment is not portable between them.** `npm run lint` uses `eslint.config.js`; `npm run lint:theme` uses `eslint.theme.js`, which does **not** load `react-hooks`. ESLint errors on an `eslint-disable-next-line` naming a rule its config cannot find, so a comment that silences a warning in the first breaks the gate that must stay clean in the second. Prefer fixing the dependency array — destructuring a stable `useCallback` off an object makes it honest — over suppressing it.
 9. **~126 ESLint findings** (`npm run lint` in `packages/mobile`) are a known backlog, mostly `react-hooks/static-components`, `set-state-in-effect`, and `import/no-named-as-default` on the `api` default import. `npm run lint:theme` is the gate that must stay clean and is unaffected. The single highest-value fix is hoisting `MenuItem` out of `ProfileScreen`'s render (~22 `static-components` errors in one change). **Method for keeping this honest:** the count only means something against a baseline — `git stash` the touched file, lint HEAD, then compare, rather than reading the absolute number.
 10. **The check-in nudge overlaps goal reminders by design** — a per-goal reminder already says "Move $25 toward Emergency Fund" on the user's own cadence. The check-in adds value only for people who set **no** per-goal reminder, and for debt-interest nudges. Worth watching whether both firing in one week reads as nagging; the per-user cooldown does not know about goal reminders.
 11. **Product-benefit matching (A5) is parked** until the app is live — user decision, on compliance grounds (see "No Investment Advice"). Goal notifications stay as-is. The affiliate question is deferred, not answered.

@@ -1,7 +1,7 @@
 # Selecting and analysing one account
 
 **Date:** 2026-09-23
-**Status:** approved — implementation in progress
+**Status:** implemented
 **Supersedes nothing.** Extends `2026-09-21-transaction-selection-and-category-override-design.md`.
 
 ---
@@ -266,8 +266,30 @@ AccountTransactionsScreen ──── Select ───► useTransactionSelecti
 
 ## 9. Defects found during implementation
 
-*(filled in as they are found — §9 of the previous spec exists because
-the design missed two things the code found. Empty until the code finds one.)*
+Three, none of them in the design.
+
+1. **`AccountBalanceCard`'s `makeStyles` took no theme parameter.** The new
+   footer row uses `t.HAIRLINE`, which would have thrown on first render of
+   every account screen. Caught by `no-undef` — the kind of thing that reads
+   as correct and is not.
+
+2. **The first mutation round scored three false catches.** Dropping a scope
+   from a query left its bind parameter pushed but unused, so Postgres threw
+   rather than an assertion failing. The mutations were "caught" by the
+   database, proving nothing about whether the checks discriminate. Rewritten
+   so every mutation produces valid SQL; all six are then caught on real
+   assertions. The same shape as the goal-pace mutations whose sed patterns
+   contained a newline escape and so had never applied at all — a mutation
+   runner needs its own
+   sanity check, or it reports success for tests that would not notice.
+
+3. **An `eslint-disable-next-line` comment is a hard error under
+   `lint:theme`.** The theme config does not load `react-hooks`, and eslint
+   fails on a disable directive naming a rule it cannot find. So a suppression
+   that satisfies `npm run lint` breaks the gate that must stay clean. Fixed by
+   removing the need for it: destructuring the stable `clear` callback off the
+   selection makes the dependency array honest, which is better than suppressing
+   the warning anyway.
 
 ## 10. Known limitations
 
@@ -278,3 +300,6 @@ the design missed two things the code found. Empty until the code finds one.)*
 - Selection is cleared by a search keystroke on the account screen. That is
   deliberate (§3.1) and matches the full list, but the full list's clear is
   debounced by its refetch while this one is immediate.
+- `computeCategoryAnalytics` still reads the newest 2000 rows and windows them
+  in JS. Scoping improves the reach of that cap rather than removing it, so a
+  2-year view on a very active all-accounts profile can still truncate.
