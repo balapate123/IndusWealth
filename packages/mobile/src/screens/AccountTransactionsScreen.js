@@ -16,8 +16,11 @@ import {
 } from '../components/ui';
 import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
+import CategoryPickerSheet from '../components/CategoryPickerSheet';
+import TransactionSelectionBar from '../components/TransactionSelectionBar';
 import AccountBalanceCard from '../components/AccountBalanceCard';
 import useTransactionFlags from '../hooks/useTransactionFlags';
+import useTransactionSelection from '../hooks/useTransactionSelection';
 import api from '../services/api';
 import { categorizeTransaction } from '../utils/categorization';
 
@@ -99,6 +102,12 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
     const [editNotes, setEditNotes] = useState('');
     const [saving, setSaving] = useState(false);
 
+    // The correction sheet for one transaction, opened from the detail sheet.
+    // Separate state and a separate busy flag from the selection's, so closing
+    // either cannot leave the other half-open over a row it was not about.
+    const [singleCategoryOpen, setSingleCategoryOpen] = useState(false);
+    const [singleBusy, setSingleBusy] = useState(false);
+
     const flagState = useTransactionFlags();
 
     const formatTransactionsData = (rawTransactions) =>
@@ -108,6 +117,13 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                 id: tx.transaction_id || index,
                 merchant: tx.name,
                 category: categorization.category,
+                // Carried through so the detail sheet can mark a corrected row
+                // and offer the undo, and so the picker can name the merchant.
+                // Dropping them here is how a feature ends up working on the
+                // server and doing nothing on screen -- which is exactly what
+                // happened to the category correction on this screen.
+                user_category: tx.user_category ?? null,
+                merchantLabel: tx.merchantLabel ?? null,
                 categoryIcon: categorization.icon,
                 categoryLibrary: categorization.library,
                 categoryColorIndex: categorization.colorIndex,
@@ -201,11 +217,80 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
         return result;
     }, [transactions, searchQuery]);
 
+    // -----------------------------------------------------------------------
+    // Selection
+    // -----------------------------------------------------------------------
+
+    // `filteredTransactions`, NOT `transactions`. Search on this screen runs in
+    // memory rather than on the server, so `transactions` holds rows that are
+    // not on screen -- and the count and the total are both computed by walking
+    // whatever is passed here. Handing it the unfiltered list is how a bar ends
+    // up reading "5 selected" over a total covering rows nobody can see.
+    const selection = useTransactionSelection({
+        rows: filteredTransactions,
+        onChanged: fetchTransactions,
+        onFlagsChanged: flagState.reload,
+    });
+
+    const { clear: clearSelection } = selection;
+
+    // Changing what is on screen drops the selection, the same rule the full
+    // list follows -- there it falls out of the refetch, here it has to be
+    // explicit because the filtering never leaves the device. Selection mode
+    // itself stays on: filtering and then selecting is the useful order.
+    useEffect(() => {
+        clearSelection();
+    }, [searchQuery, flagFilter, clearSelection]);
+
+    const onRowPress = (item) => {
+        if (!selection.selectMode) {
+            openTransactionDetails(item);
+            return;
+        }
+        selection.toggle(item.id);
+    };
+
     const openTransactionDetails = (item) => {
         setSelectedTransaction(item);
         setEditNotes(item.notes || '');
         flagState.openFor(item);
         setShowTransactionModal(true);
+    };
+
+    // -----------------------------------------------------------------------
+    // One transaction
+    // -----------------------------------------------------------------------
+
+    const applySingleCategory = async (category, { applyToMerchant }) => {
+        if (!selectedTransaction) return;
+
+        try {
+            setSingleBusy(true);
+            await api.setTransactionCategory(selectedTransaction.id, category, { applyToMerchant });
+            setSingleCategoryOpen(false);
+            setShowTransactionModal(false);
+            fetchTransactions();
+        } catch (error) {
+            console.error('Error correcting a category:', error);
+        } finally {
+            setSingleBusy(false);
+        }
+    };
+
+    const clearSingleCategory = async () => {
+        if (!selectedTransaction) return;
+
+        try {
+            setSingleBusy(true);
+            await api.clearTransactionCategory(selectedTransaction.id);
+            setSingleCategoryOpen(false);
+            setShowTransactionModal(false);
+            fetchTransactions();
+        } catch (error) {
+            console.error('Error removing a category correction:', error);
+        } finally {
+            setSingleBusy(false);
+        }
     };
 
     const handleSaveDetails = async () => {
@@ -242,12 +327,35 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
 
     const header = (
         <>
+            {/* While selecting, the header becomes the way out. Back would
+                leave the screen entirely and lose a selection built by hand,
+                which is not what somebody reaches for when they want to stop
+                selecting. */}
             <ScreenHeader
-                title={account.alias || account.name}
-                onBack={() => navigation.goBack()}
-                right={
+                title={selection.selectMode
+                    ? (selection.summary.count ? `${selection.summary.count} selected` : 'Select transactions')
+                    : (account.alias || account.name)}
+                onBack={selection.selectMode ? selection.exit : () => navigation.goBack()}
+                right={selection.selectMode ? (
+                    <TouchableOpacity
+                        onPress={selection.exit}
+                        accessibilityRole="button"
+                        accessibilityLabel="Cancel selection"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                        <Text variant="label" color={theme.ACCENT}>Cancel</Text>
+                    </TouchableOpacity>
+                ) : (
                     <View style={styles.headerRight}>
                         {account.mask ? <Text variant="meta" tone="muted">••{account.mask}</Text> : null}
+                        <TouchableOpacity
+                            onPress={selection.enter}
+                            accessibilityRole="button"
+                            accessibilityLabel="Select transactions"
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                            <Ionicons name="checkmark-circle-outline" size={21} color={theme.ACCENT} />
+                        </TouchableOpacity>
                         <TouchableOpacity
                             onPress={() => navigation.navigate('Flags')}
                             accessibilityRole="button"
@@ -257,10 +365,17 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                             <Ionicons name="pricetags-outline" size={20} color={theme.ACCENT} />
                         </TouchableOpacity>
                     </View>
-                }
+                )}
             />
 
-            <AccountBalanceCard account={account} />
+            {/* The analytics entry point rides on the balance card rather than
+                becoming a fourth header icon: the header already carries the
+                mask, Select and Flags, and an unlabelled glyph in a crowded row
+                is not something anybody finds. */}
+            <AccountBalanceCard
+                account={account}
+                onOpenAnalytics={() => navigation.navigate('AdvancedAnalytics', { account })}
+            />
 
             <Card>
                 <View style={styles.summaryRow}>
@@ -349,7 +464,9 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                                 transaction={item}
                                 subtitle={`${item.category} · ${item.formattedDate}`}
                                 divider={index > 0}
-                                onPress={() => openTransactionDetails(item)}
+                                selectable={selection.selectMode}
+                                selected={selection.isSelected(item.id)}
+                                onPress={() => onRowPress(item)}
                             />
                         )}
                         keyExtractor={(item) => item.id.toString()}
@@ -386,6 +503,19 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                 )}
             </Screen>
 
+            <TransactionSelectionBar selection={selection} flagOptions={flagState.options} />
+
+            <CategoryPickerSheet
+                visible={singleCategoryOpen}
+                count={1}
+                busy={singleBusy}
+                current={selectedTransaction?.category ?? null}
+                merchantLabel={selectedTransaction?.merchantLabel ?? null}
+                onSelect={applySingleCategory}
+                onClear={selectedTransaction?.user_category ? clearSingleCategory : null}
+                onClose={() => setSingleCategoryOpen(false)}
+            />
+
             <TransactionDetailSheet
                 visible={showTransactionModal}
                 transaction={selectedTransaction}
@@ -397,6 +527,7 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                 onToggleFlag={flagState.toggle}
                 saving={saving}
                 onSave={handleSaveDetails}
+                onEditCategory={() => setSingleCategoryOpen(true)}
                 onClose={() => setShowTransactionModal(false)}
             />
         </>
