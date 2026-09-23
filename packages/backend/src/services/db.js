@@ -410,7 +410,23 @@ const deleteTransactionsByPlaidIds = async (itemId, plaidTransactionIds) => {
     return result.rowCount;
 };
 
-const getTransactions = async (userId, limit = 100) => {
+/**
+ * The newest `limit` transactions, optionally scoped to one account.
+ *
+ * `accountId` is a **plaid_account_id**, matching GET /accounts and every other
+ * account-addressed endpoint -- the numeric key stays inside the join. Scoping
+ * narrows the cap too: 2000 rows on one account reaches further back than 2000
+ * rows spread across all of them.
+ */
+const getTransactions = async (userId, limit = 100, { accountId } = {}) => {
+    const params = [userId];
+    let scope = '';
+    if (accountId) {
+        params.push(String(accountId));
+        scope = `AND a.plaid_account_id = $${params.length}`;
+    }
+    params.push(limit);
+
     const result = await pool.query(
         `SELECT t.id, t.plaid_transaction_id as transaction_id, t.name, t.merchant_name,
                 t.amount, TO_CHAR(t.date, 'YYYY-MM-DD') as date, t.category, t.user_category, t.pending, t.iso_currency_code, t.notes,
@@ -418,9 +434,10 @@ const getTransactions = async (userId, limit = 100) => {
          FROM transactions t
          LEFT JOIN accounts a ON t.account_id = a.id
          WHERE t.user_id = $1
+         ${scope}
          ORDER BY t.date DESC, t.id DESC
-         LIMIT $2`,
-        [userId, limit]
+         LIMIT $${params.length}`,
+        params
     );
     return result.rows;
 };
@@ -862,19 +879,37 @@ const getIncomeVsExpenses = async (userId, days = 30) => {
     return result.rows[0] || { income: 0, expenses: 0 };
 };
 
-// Get monthly spending trends
-const getMonthlySpending = async (userId, months = 6) => {
+/**
+ * Monthly spending and income, optionally scoped to one account.
+ *
+ * The scoped form needs a join this query does not otherwise have. Leaving it
+ * off would put all-accounts bars inside a single-card view: a wrong number
+ * with no visible seam, which is the failure mode this codebase keeps finding
+ * by verification rather than by looking at the screen.
+ */
+const getMonthlySpending = async (userId, months = 6, { accountId } = {}) => {
+    const params = [userId, months];
+    let join = '';
+    let scope = '';
+    if (accountId) {
+        params.push(String(accountId));
+        join = 'JOIN accounts a ON t.account_id = a.id';
+        scope = `AND a.plaid_account_id = $${params.length}`;
+    }
+
     const result = await pool.query(
         `SELECT
-            TO_CHAR(date, 'YYYY-MM') as month,
-            COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as spending,
-            COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) as income
-         FROM transactions
-         WHERE user_id = $1
-           AND date >= CURRENT_DATE - INTERVAL '1 month' * $2
-         GROUP BY TO_CHAR(date, 'YYYY-MM')
+            TO_CHAR(t.date, 'YYYY-MM') as month,
+            COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END), 0) as spending,
+            COALESCE(SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) ELSE 0 END), 0) as income
+         FROM transactions t
+         ${join}
+         WHERE t.user_id = $1
+           AND t.date >= CURRENT_DATE - INTERVAL '1 month' * $2
+           ${scope}
+         GROUP BY TO_CHAR(t.date, 'YYYY-MM')
          ORDER BY month ASC`,
-        [userId, months]
+        params
     );
     return result.rows;
 };
@@ -1459,7 +1494,8 @@ const getGoalById = async (userId, goalId) => {
  */
 const _resolveOwnedAccount = async (userId, plaidAccountId) => {
     const result = await pool.query(
-        `SELECT id, current_balance FROM accounts
+        `SELECT id, plaid_account_id, name, alias, type, subtype, current_balance
+         FROM accounts
          WHERE user_id = $1 AND plaid_account_id = $2`,
         [userId, String(plaidAccountId)]
     );

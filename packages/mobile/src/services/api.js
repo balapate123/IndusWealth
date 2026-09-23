@@ -731,7 +731,13 @@ export const api = {
     getAnalytics: (period = 30, forceRefresh = false) =>
         apiRequest(`/analytics?period=${period}${forceRefresh ? '&refresh=true' : ''}`),
     getMonthlyAnalytics: () => apiRequest('/analytics/monthly'),
-    getCategoryAnalytics: (period = 30) => apiRequest(`/analytics/categories?period=${period}`),
+    // `accountId` is a plaid_account_id, scoping the whole payload to one
+    // account. Omitted, the response is every account -- which is what the
+    // Analytics tab asks for.
+    getCategoryAnalytics: (period = 30, { accountId } = {}) => apiRequest(
+        `/analytics/categories?period=${period}`
+        + (accountId ? `&account_id=${encodeURIComponent(accountId)}` : '')
+    ),
     getCategoryAIInsights: (period = 30, forceRefresh = false) =>
         apiRequest(`/analytics/categories/insights?period=${period}${forceRefresh ? '&refresh=true' : ''}`),
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SPACING } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import { Card, Text, BarTrack } from './ui';
@@ -14,6 +15,10 @@ import { Card, Text, BarTrack } from './ui';
  * Anything the bank did not report stays hidden rather than being inferred: a
  * card whose limit Plaid does not expose shows no bar and no percentage, which
  * is honest, where a guessed limit would quietly be wrong.
+ *
+ * `onOpenAnalytics`, when given, adds a labelled row at the foot of the card.
+ * It is optional so the card renders exactly as it always has anywhere that
+ * does not pass it.
  */
 
 const money = (value, currency = 'CAD') =>
@@ -22,7 +27,7 @@ const money = (value, currency = 'CAD') =>
         maximumFractionDigits: 2,
     })}${currency && currency !== 'CAD' ? ` ${currency}` : ''}`;
 
-const makeStyles = () => StyleSheet.create({
+const makeStyles = (t) => StyleSheet.create({
     label: { marginBottom: 2 },
     amount: { marginBottom: 2 },
     bar: { marginTop: SPACING.MEDIUM },
@@ -38,6 +43,16 @@ const makeStyles = () => StyleSheet.create({
         marginTop: SPACING.MEDIUM,
     },
     splitItem: { flex: 1 },
+    analytics: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.SMALL,
+        marginTop: SPACING.MEDIUM,
+        paddingTop: SPACING.MEDIUM,
+        borderTopWidth: 1,
+        borderTopColor: t.HAIRLINE,
+    },
+    analyticsLabel: { flex: 1 },
 });
 
 /** Conventional credit-utilisation bands, used only to colour the bar. */
@@ -47,7 +62,7 @@ const utilisationTone = (theme, ratio) => {
     return theme.SUCCESS;
 };
 
-const AccountBalanceCard = ({ account, style }) => {
+const AccountBalanceCard = ({ account, style, onOpenAnalytics }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
 
@@ -59,6 +74,22 @@ const AccountBalanceCard = ({ account, style }) => {
     const limit = account.limit == null ? null : Number(account.limit);
     const used = account.used == null ? null : Number(account.used);
     const ratio = account.utilization == null ? null : Number(account.utilization);
+
+    // Built once and rendered in both branches below, so the deposit card and
+    // the credit card cannot drift into offering different affordances.
+    const analyticsRow = onOpenAnalytics ? (
+        <TouchableOpacity
+            style={styles.analytics}
+            onPress={onOpenAnalytics}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Analytics for ${account.alias || account.name}`}
+        >
+            <Ionicons name="stats-chart-outline" size={16} color={theme.ACCENT} />
+            <Text variant="label" color={theme.ACCENT} style={styles.analyticsLabel}>Analytics</Text>
+            <Ionicons name="chevron-forward" size={16} color={theme.TEXT_MUTED} />
+        </TouchableOpacity>
+    ) : null;
 
     if (!account.isCredit) {
         // A depository account: the balance is the whole story. `available`
@@ -75,6 +106,7 @@ const AccountBalanceCard = ({ account, style }) => {
                         {money(available, currency)} available to spend now
                     </Text>
                 ) : null}
+                {analyticsRow}
             </Card>
         );
     }
@@ -118,6 +150,7 @@ const AccountBalanceCard = ({ account, style }) => {
                     </View>
                 </View>
             ) : null}
+            {analyticsRow}
         </Card>
     );
 };

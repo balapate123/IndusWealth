@@ -644,10 +644,16 @@ const buildCategoryInsights = ({ categories, totalSpend, weekendSpend, firstHalf
 // Shared by GET /categories (screen data) and GET /categories/insights (AI input).
 // Reads from the DB only — the mobile app forces a Plaid sync via
 // /transactions?refresh=true before calling these on pull-to-refresh.
-const computeCategoryAnalytics = async (userId, periodDays) => {
+//
+// `accountId` (a plaid_account_id) scopes the whole payload to one account.
+// Both reads take it: everything below the fetch is JS over the rows that come
+// back, so scoping the fetch scopes every aggregate. Scoping only the
+// transactions would leave the 6-month trend showing every account's bars
+// inside a single-card view.
+const computeCategoryAnalytics = async (userId, periodDays, { accountId } = {}) => {
         const [transactions, monthlyTrend] = await Promise.all([
-            db.getTransactions(userId, 2000),
-            db.getMonthlySpending(userId, 6),
+            db.getTransactions(userId, 2000, { accountId }),
+            db.getMonthlySpending(userId, 6, { accountId }),
         ]);
 
         const startDate = new Date();
@@ -940,10 +946,38 @@ const computeCategoryAnalytics = async (userId, periodDays) => {
 router.get('/categories', authenticateToken, async (req, res, next) => {
     const ctx = { requestId: req.requestId, userId: req.user.id };
     const periodDays = clampPeriod(req.query.period);
-    logger.info('Fetching category analytics', { ...ctx, period: periodDays });
+    const accountId = req.query.account_id || null;
+    logger.info('Fetching category analytics', { ...ctx, period: periodDays, accountId });
 
     try {
-        const payload = await computeCategoryAnalytics(req.user.id, periodDays);
+        // The filter already carries t.user_id, so a crafted id would return
+        // nothing and leak nothing either way. Resolving it explicitly is what
+        // makes "not your account" distinguishable from "no spending here" —
+        // and it is what lets the response name the account it scoped to.
+        let account = null;
+        if (accountId) {
+            account = await db._resolveOwnedAccount(req.user.id, accountId);
+            if (!account) {
+                logger.warn('Category analytics for an unknown account', { ...ctx, accountId });
+                // Same code and wording goals.js already uses for this case, so
+                // one unknown account reads the same wherever it is hit.
+                return res.status(404).json({
+                    success: false,
+                    code: 'ACCOUNT_NOT_FOUND',
+                    message: 'That account is not connected to your profile.',
+                    requestId: req.requestId,
+                });
+            }
+        }
+
+        const payload = await computeCategoryAnalytics(req.user.id, periodDays, { accountId });
+        payload.scope = accountId ? 'account' : 'all';
+        payload.account = account ? {
+            id: account.plaid_account_id,
+            name: account.alias || account.name,
+            type: account.type,
+            subtype: account.subtype,
+        } : null;
 
         const meta = await createMeta(req.user.id, DATA_SOURCES.DATABASE, {
             syncType: 'last_transaction_sync',
@@ -953,6 +987,7 @@ router.get('/categories', authenticateToken, async (req, res, next) => {
         logger.info('Returning category analytics', {
             ...ctx,
             period: periodDays,
+            accountId,
             categories: payload.categories.length,
             expenses: payload.summary.expenseCount,
         });
@@ -976,6 +1011,17 @@ router.get('/categories/insights', authenticateToken, async (req, res, next) => 
     const forceRefresh = req.query.refresh === 'true';
     const cacheHours = parseInt(process.env.INSIGHTS_CACHE_HOURS) || 6;
     logger.info('Fetching AI category insights', { ...ctx, period: periodDays, forceRefresh });
+
+    // category_ai_insights is unique on (user_id, period_days), so there is
+    // nowhere to put an account-scoped generation: it would overwrite the
+    // all-accounts row and then be served back under the wrong heading. The
+    // screen does not ask for these when scoped, so this is unreachable in
+    // normal use — it exists so a stray call cannot mislabel one card's
+    // spending as everything the user does. Enforcement, not a request.
+    if (req.query.account_id) {
+        logger.info('AI category insights are not account-scoped — returning none', ctx);
+        return successResponse(res, { source: 'unavailable', insights: [] });
+    }
 
     try {
         const userId = req.user.id;
@@ -1056,3 +1102,8 @@ router.get('/categories/insights', authenticateToken, async (req, res, next) => 
 });
 
 module.exports = router;
+
+// Hung off the router so tests/manual/account_analytics_sql_check.js can drive
+// the shipped computation rather than a copy of it. Nothing in the app reads
+// this; an express router is a function, so the property is inert.
+module.exports.computeCategoryAnalytics = computeCategoryAnalytics;

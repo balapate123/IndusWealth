@@ -622,7 +622,12 @@ const WeekdaySplit = ({ category }) => {
     );
 };
 
-const CategoryTransactions = ({ category }) => {
+/**
+ * `showAccount` is off when the whole screen is already scoped to one account:
+ * repeating the same account name on every row is noise, and it crowds out the
+ * date, which is the part that differs.
+ */
+const CategoryTransactions = ({ category, showAccount = true }) => {
     const theme = useTheme();
     const styles = useThemedStyles(makeStyles);
     const transactions = category.transactions || [];
@@ -650,7 +655,7 @@ const CategoryTransactions = ({ category }) => {
                         <View style={styles.txInfo}>
                             <Text variant="body" numberOfLines={1}>{tx.merchant_name || tx.name}</Text>
                             <Text variant="meta" tone="muted" numberOfLines={1}>
-                                {formatDate(tx.date)}{tx.account_name ? ` · ${tx.account_name}` : ''}
+                                {formatDate(tx.date)}{showAccount && tx.account_name ? ` · ${tx.account_name}` : ''}
                             </Text>
                         </View>
                         <View style={styles.txAmountBlock}>
@@ -673,6 +678,16 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     // Rendered both as a tab ("AnalyticsTab") and as a pushed stack screen
     // ("AdvancedAnalytics"). Only the pushed one has somewhere to go back to.
     const isTab = route?.name === 'AnalyticsTab';
+
+    // The third mode: pushed from one account's balance card, scoped to it.
+    // No new route -- the pushed one already takes params, and isTab is already
+    // false there, so the back arrow works without any of this.
+    const account = route?.params?.account ?? null;
+    const accountId = account?.id ?? null;
+
+    // `isCredit` rather than `type === 'credit'`: the API derives it, and it
+    // also catches a line of credit, which Plaid files under `loan`.
+    const isCredit = !!account?.isCredit;
 
     const [data, setData] = useState(null);
     const [aiInsights, setAiInsights] = useState(null);
@@ -714,7 +729,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                     }
                 }
             }
-            const response = await api.getCategoryAnalytics(selectedPeriod);
+            const response = await api.getCategoryAnalytics(selectedPeriod, { accountId });
             if (response?.success) {
                 setData(response);
             }
@@ -722,6 +737,14 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
             // Upgrade rule-based insights to AI ones in the background — the
             // screen stays fully usable if this never resolves
             setAiInsights(null);
+
+            // Not fired at all when scoped to one account, rather than fired and
+            // discarded: category_ai_insights is unique on (user_id, period),
+            // so there is nowhere to cache an account-scoped generation, and it
+            // is a Gemini call. The rule-based insights inside the payload above
+            // are scoped correctly by construction, so the strip is not empty.
+            if (accountId) return;
+
             api.getCategoryAIInsights(selectedPeriod, forceRefresh)
                 .then((aiResponse) => {
                     if (aiResponse?.success && aiResponse.source === 'ai'
@@ -741,7 +764,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [selectedPeriod]);
+    }, [selectedPeriod, accountId]);
 
     useEffect(() => {
         fetchData(false);
@@ -796,7 +819,16 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
     const header = (
         <ScreenHeader
-            title={isTab ? 'Analytics' : 'Advanced Analytics'}
+            /*
+             * Scoped to an account, the title is the account's name rather than
+             * a composed "<name> analytics": ScreenHeader clips at one line, so
+             * composing would truncate the half that identifies which account.
+             * The period row and the "Total spent" hero below say what kind of
+             * screen this is.
+             */
+            title={account
+                ? (account.alias || account.name)
+                : (isTab ? 'Analytics' : 'Advanced Analytics')}
             /*
              * A drill-down gets an arrow even on the tab, which normally has
              * none: iOS has no hardware back, so without this the only way out
@@ -871,8 +903,16 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                             <ChangeBadge percent={summary.spendChangePercent} goodWhenUp={false} />
                         </View>
                         <Text variant="hero">{formatCurrency(summary.totalSpend)}</Text>
+                        {/*
+                          * On a credit card, money arriving is a payment or a
+                          * refund — not income, and not cash flowing anywhere.
+                          * "Income $1,240 · Net +$50" on a card reads as though
+                          * the card had earned something. The arithmetic is the
+                          * same either way; only the words change.
+                          */}
                         <Text variant="body" tone="secondary" style={styles.heroSub}>
-                            Income {formatCurrency(summary.totalIncome)} · Net{' '}
+                            {isCredit ? 'Payments & credits' : 'Income'}{' '}
+                            {formatCurrency(summary.totalIncome)} · {isCredit ? 'Net change' : 'Net'}{' '}
                             <Text
                                 variant="body"
                                 tone={summary.netCashFlow >= 0 ? 'success' : 'danger'}
@@ -958,7 +998,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                                 title={`Top merchants — ${selectedCategory.name}`}
                                 merchants={selectedCategory.topMerchants}
                             />
-                            <CategoryTransactions category={selectedCategory} />
+                            <CategoryTransactions category={selectedCategory} showAccount={!account} />
                         </>
                     ) : (
                         <>
