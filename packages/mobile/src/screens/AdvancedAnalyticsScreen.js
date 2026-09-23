@@ -23,6 +23,7 @@ import {
 } from '../components/ui';
 import { getCategoryMeta } from '../utils/categorization';
 import { OTHER_KEY } from '../utils/treemap';
+import { scopeMatches, SCOPE_MISMATCH_MESSAGE } from '../utils/analyticsScope';
 import api from '../services/api';
 
 // Card is inset SPACING.MEDIUM each side and padded SPACING.MEDIUM each side.
@@ -730,6 +731,17 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                 }
             }
             const response = await api.getCategoryAnalytics(selectedPeriod, { accountId });
+
+            // A server too old to know about `account_id` drops it, computes
+            // every account, and answers 200. Rendering that under one card's
+            // name is the all-accounts total wearing an account's title -- so
+            // say the screen cannot be drawn rather than drawing it wrong.
+            if (!scopeMatches(accountId, response)) {
+                setError(SCOPE_MISMATCH_MESSAGE);
+                setData(null);
+                return;
+            }
+
             if (response?.success) {
                 setData(response);
             }
