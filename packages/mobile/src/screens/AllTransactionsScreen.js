@@ -1,13 +1,12 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SPACING, RADIUS, categoryColor } from '../constants/tokens';
+import { SPACING, categoryColor } from '../constants/tokens';
 import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
 import {
     Screen,
     ScreenHeader,
     Text,
-    Button,
     Input,
     SegmentedControl,
     EmptyState,
@@ -18,15 +17,10 @@ import {
 import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import CategoryPickerSheet from '../components/CategoryPickerSheet';
-import FlagEditorSheet from '../components/FlagEditorSheet';
-import {
-    MAX_SELECTION,
-    toggleSelection,
-    summarizeSelection,
-    formatSelectionTotal,
-} from '../utils/transactionSelection';
+import TransactionSelectionBar from '../components/TransactionSelectionBar';
 import TotalsSummary from '../components/TotalsSummary';
 import useTransactionFlags from '../hooks/useTransactionFlags';
+import useTransactionSelection from '../hooks/useTransactionSelection';
 import api from '../services/api';
 import cache from '../services/cache';
 import { categorizeTransaction } from '../utils/categorization';
@@ -76,22 +70,6 @@ const makeStyles = (t) => StyleSheet.create({
     },
     range: { marginBottom: SPACING.SMALL + 2 },
     search: { marginBottom: 0 },
-    selectionBar: {
-        position: 'absolute',
-        left: SPACING.MEDIUM,
-        right: SPACING.MEDIUM,
-        bottom: SPACING.MEDIUM,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.SMALL,
-        paddingVertical: SPACING.SMALL,
-        paddingHorizontal: SPACING.MEDIUM,
-        borderRadius: RADIUS.CARD,
-        backgroundColor: t.SURFACE_HIGH,
-        borderWidth: t.CARD_BORDER_WIDTH,
-        borderColor: t.CARD_BORDER,
-    },
-    selectionSummary: { flex: 1 },
     headerRight: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -138,15 +116,10 @@ const AllTransactionsScreen = ({ navigation, route }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
 
-    // Selection mode. Entered from an explicit control rather than a long-press:
-    // nothing is hidden behind a gesture, and it cannot be triggered by accident
-    // on a list people scroll through every day.
-    const [selectMode, setSelectMode] = useState(false);
-    const [selected, setSelected] = useState(() => new Set());
-    const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false);
-    const [groupOpen, setGroupOpen] = useState(false);
-    const [groupError, setGroupError] = useState(null);
-    const [bulkBusy, setBulkBusy] = useState(false);
+    // Busy flag for the single-transaction correction below. The selection has
+    // its own, inside the hook -- separate so closing one cannot grey out the
+    // other's buttons.
+    const [singleBusy, setSingleBusy] = useState(false);
 
     // The correction sheet for a single transaction, opened from the detail
     // sheet. Separate state from the bulk one so closing either cannot leave
@@ -262,6 +235,32 @@ const AllTransactionsScreen = ({ navigation, route }) => {
         }
     }, [hasMore, range, debouncedSearch, flagFilter, transactions.length]);
 
+    // -----------------------------------------------------------------------
+    // Selection
+    // -----------------------------------------------------------------------
+
+    // `transactions` IS the visible list here: the search runs on the server,
+    // so every row fetched is a row on screen. The account list filters in
+    // memory and has to pass its filtered list instead.
+    const selection = useTransactionSelection({
+        rows: transactions,
+        onChanged: () => loadFirstPage(false),
+        onFlagsChanged: flagState.reload,
+    });
+
+    // Stable (useCallback with no deps), so naming it here lets the effect
+    // below depend on the clear itself rather than on the whole selection
+    // object -- which changes on every tick and would wipe the list mid-scroll.
+    const { clear: clearSelection } = selection;
+
+    const onRowPress = (item) => {
+        if (!selection.selectMode) {
+            openTransactionDetails(item);
+            return;
+        }
+        selection.toggle(item.id);
+    };
+
     // Changing the range or the search starts a new list.
     useEffect(() => {
         setLoading(true);
@@ -272,9 +271,9 @@ const AllTransactionsScreen = ({ navigation, route }) => {
         // visible working, which is the one thing this app refuses to render.
         // Selection mode itself stays on: filtering and then selecting is the
         // useful order, and it is unaffected.
-        setSelected(new Set());
+        clearSelection();
         loadFirstPage(false);
-    }, [loadFirstPage]);
+    }, [loadFirstPage, clearSelection]);
 
     // Accounts are only needed for row colouring, and never change per page.
     useEffect(() => {
@@ -367,83 +366,6 @@ const AllTransactionsScreen = ({ navigation, route }) => {
     };
 
     // -----------------------------------------------------------------------
-    // Selection
-    // -----------------------------------------------------------------------
-
-    // Count and total from the visible rows, so the two always describe the
-    // same set. Summed on the device, which is the one place that is correct:
-    // a selection IS rows already in memory, unlike the list totals, which come
-    // from the server because the device only ever holds a page.
-    const selection = summarizeSelection(transactions, selected);
-    const atSelectionCap = selection.count >= MAX_SELECTION;
-
-    const exitSelectMode = () => {
-        setSelectMode(false);
-        setSelected(new Set());
-    };
-
-    const onRowPress = (item) => {
-        if (!selectMode) {
-            openTransactionDetails(item);
-            return;
-        }
-        // Silently refusing a tap at the cap would read as a broken row, so an
-        // already-selected one can always be tapped off.
-        if (atSelectionCap && !selected.has(item.id)) return;
-        setSelected((prev) => toggleSelection(prev, item.id));
-    };
-
-    const applyBulkCategory = async (category) => {
-        const ids = transactions.filter((tx) => selected.has(tx.id)).map((tx) => tx.id);
-        if (ids.length === 0) return;
-
-        try {
-            setBulkBusy(true);
-            await api.setTransactionCategories(ids, category);
-            setBulkCategoryOpen(false);
-            exitSelectMode();
-            // Reload rather than patch: a category change moves the totals bar
-            // and can move rows out of a category-derived view later. Patching
-            // would leave the header disagreeing with the rows beneath it.
-            loadFirstPage(false);
-        } catch (error) {
-            console.error('Error setting categories:', error);
-        } finally {
-            setBulkBusy(false);
-        }
-    };
-
-    const createGroupFromSelection = async ({ name, colorIndex, icon }) => {
-        // item.id is the PLAID transaction id -- GET /transactions aliases the
-        // numeric key away before the device sees it -- which is exactly what
-        // both the flag endpoint and the category endpoint expect.
-        const ids = transactions.filter((tx) => selected.has(tx.id)).map((tx) => tx.id);
-        if (ids.length === 0) return;
-
-        try {
-            setBulkBusy(true);
-            setGroupError(null);
-            const created = await api.createFlag({ name, colorIndex, icon });
-            const flagId = created?.data?.id ?? created?.id;
-            if (!flagId) throw new Error('flag id missing from the create response');
-
-            await api.setFlagTransactions(flagId, { add: ids });
-            setGroupOpen(false);
-            exitSelectMode();
-            await flagState.reload();
-            loadFirstPage(false);
-        } catch (error) {
-            console.error('Error creating a group:', error);
-            // Surfaced in the sheet rather than swallowed: a duplicate name is
-            // a 409 the user can fix, and a silent failure here loses a
-            // selection they built by hand.
-            setGroupError(error?.message || 'Could not create that group.');
-        } finally {
-            setBulkBusy(false);
-        }
-    };
-
-    // -----------------------------------------------------------------------
     // One transaction
     // -----------------------------------------------------------------------
 
@@ -451,7 +373,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
         if (!selectedTransaction) return;
 
         try {
-            setBulkBusy(true);
+            setSingleBusy(true);
             await api.setTransactionCategory(selectedTransaction.id, category, { applyToMerchant });
             setSingleCategoryOpen(false);
             setShowTransactionModal(false);
@@ -459,7 +381,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
         } catch (error) {
             console.error('Error correcting a category:', error);
         } finally {
-            setBulkBusy(false);
+            setSingleBusy(false);
         }
     };
 
@@ -467,7 +389,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
         if (!selectedTransaction) return;
 
         try {
-            setBulkBusy(true);
+            setSingleBusy(true);
             await api.clearTransactionCategory(selectedTransaction.id);
             setSingleCategoryOpen(false);
             setShowTransactionModal(false);
@@ -475,7 +397,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
         } catch (error) {
             console.error('Error removing a category correction:', error);
         } finally {
-            setBulkBusy(false);
+            setSingleBusy(false);
         }
     };
 
@@ -499,13 +421,13 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                 which is not what somebody reaches for when they want to stop
                 selecting. */}
             <ScreenHeader
-                title={selectMode
-                    ? (selection.count ? `${selection.count} selected` : 'Select transactions')
+                title={selection.selectMode
+                    ? (selection.summary.count ? `${selection.summary.count} selected` : 'Select transactions')
                     : 'All transactions'}
-                onBack={selectMode ? exitSelectMode : () => navigation.goBack()}
-                right={selectMode ? (
+                onBack={selection.selectMode ? selection.exit : () => navigation.goBack()}
+                right={selection.selectMode ? (
                     <TouchableOpacity
-                        onPress={exitSelectMode}
+                        onPress={selection.exit}
                         accessibilityRole="button"
                         accessibilityLabel="Cancel selection"
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -520,7 +442,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                                 : `${total}`}
                         </Text>
                         <TouchableOpacity
-                            onPress={() => setSelectMode(true)}
+                            onPress={selection.enter}
                             accessibilityRole="button"
                             accessibilityLabel="Select transactions"
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -609,8 +531,8 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                                 accountColor={getAccountColor(item.account_id)}
                                 subtitle={`${item.category} · ${item.formattedDate}`}
                                 divider={index > 0}
-                                selectable={selectMode}
-                                selected={selected.has(item.id)}
+                                selectable={selection.selectMode}
+                                selected={selection.isSelected(item.id)}
                                 onPress={() => onRowPress(item)}
                             />
                         )}
@@ -662,63 +584,12 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                 )}
             </Screen>
 
-            {/* Pinned above the list, the same shape FlagTransactionPickerScreen
-                already uses: the running total and the actions stay reachable
-                without scrolling back to a header. Rendered only once something
-                is selected, because an empty bar is a permanent strip of
-                nothing covering the last row. */}
-            {selectMode && selection.count > 0 ? (
-                <View style={styles.selectionBar}>
-                    <View style={styles.selectionSummary}>
-                        <Text variant="bodyMed">
-                            {formatSelectionTotal(selection.net)}
-                        </Text>
-                        <Text variant="meta" tone="muted">
-                            {selection.count} selected
-                            {selection.hasInflow ? ' · includes money in' : ''}
-                            {atSelectionCap ? ` · max ${MAX_SELECTION}` : ''}
-                        </Text>
-                    </View>
-                    <Button
-                        title="Category"
-                        variant="secondary"
-                        size="sm"
-                        onPress={() => setBulkCategoryOpen(true)}
-                        disabled={bulkBusy}
-                    />
-                    <Button
-                        title="Group"
-                        size="sm"
-                        onPress={() => { setGroupError(null); setGroupOpen(true); }}
-                        disabled={bulkBusy}
-                    />
-                </View>
-            ) : null}
-
-            <CategoryPickerSheet
-                visible={bulkCategoryOpen}
-                count={selection.count}
-                busy={bulkBusy}
-                onSelect={applyBulkCategory}
-                onClose={() => setBulkCategoryOpen(false)}
-            />
-
-            {/* The group IS a flag, so naming one looks exactly like naming a
-                flag -- same sheet, same colour ramp, same icon allowlist. */}
-            <FlagEditorSheet
-                visible={groupOpen}
-                flag={null}
-                options={flagState.options}
-                saving={bulkBusy}
-                error={groupError}
-                onSave={createGroupFromSelection}
-                onClose={() => setGroupOpen(false)}
-            />
+            <TransactionSelectionBar selection={selection} flagOptions={flagState.options} />
 
             <CategoryPickerSheet
                 visible={singleCategoryOpen}
                 count={1}
-                busy={bulkBusy}
+                busy={singleBusy}
                 current={selectedTransaction?.category ?? null}
                 merchantLabel={selectedTransaction?.merchantLabel ?? null}
                 onSelect={applySingleCategory}
