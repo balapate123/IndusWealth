@@ -26,7 +26,6 @@ import {
     filterQueryParts,
     hasDateRange,
     isValidDateText,
-    maskDateInput,
     normalizeDraft,
     parseAmountText,
     presetRange,
@@ -132,16 +131,6 @@ test('a date that does not exist is not a date', () => {
     assert.equal(isValidDateText('2026-13-01'), false);
     assert.equal(isValidDateText('2026-3-1'), false);
     assert.equal(isValidDateText(''), false);
-});
-
-test('typing a date inserts its own dashes', () => {
-    assert.equal(maskDateInput('2026'), '2026');
-    assert.equal(maskDateInput('20260'), '2026-0');
-    assert.equal(maskDateInput('202603'), '2026-03');
-    assert.equal(maskDateInput('20260301'), '2026-03-01');
-    assert.equal(maskDateInput('2026-03-01'), '2026-03-01');
-    assert.equal(maskDateInput('202603011234'), '2026-03-01');
-    assert.equal(maskDateInput('abc'), '');
 });
 
 // ---------------------------------------------------------------------------

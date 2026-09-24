@@ -128,6 +128,7 @@
 | | `src/components/TransactionFilterSheet.js` | Amount range, date range, direction. Edits a draft; nothing refetches until Apply |
 | | `src/components/TransactionFilterButton.js` | The funnel in the header, with the active-filter count |
 | | `src/components/ui/Treemap.js` | Part-to-whole by area (Analytics "Spending by category") |
+| | `src/components/ui/Calendar.js` | Month grid in plain RN (no native picker, so no EAS rebuild). Visible month is seeded by `key`, never followed by an effect |
 | Constants | `src/constants/theme.js` | Dark theme + gold accents |
 | | `src/constants/insights.js` | Insight type enum → icon/label/ramp slot; must mirror `insight_identity.js` |
 | Utils | `src/utils/categorization.js` | Client-side category helpers |
@@ -135,6 +136,7 @@
 | | `src/utils/goalReminders.js` | Pure reminder logic (trigger building, copy, cadence text) — no expo/RN imports so it is testable off-device |
 | | `src/utils/goalPace.js` | Pure copy for the pace block; mirrors `PACE_STATE`. Never scolds, rounds, hedges |
 | | `src/utils/transactionSelection.js` | Pure selection maths: toggle, count, net total, copy. Count and total always describe the same rows |
+| | `src/utils/calendar.js` | Pure month-grid arithmetic. **`monthIndex` is 0-based like `Date.getMonth()`**; `toISO`/`parseISO` are the only crossings to 1-based ISO |
 | | `src/utils/transactionFilters.js` | Pure filter state: the draft→filters crossing, the badge count, the query parts (**and the `days` suppression**), and the sentence describing what is on |
 | | `src/utils/cardDueReminders.js` | Pure due-date scheduling incl. the **lead-day wraparound** |
 | | `src/utils/treemap.js` | Pure squarified treemap layout + top-7/Other folding |
@@ -212,6 +214,8 @@ A funnel in the header of **both** lists opens `TransactionFilterSheet`: an amou
 - **The account screen's search moved server-side** as part of this. It filtered in memory while its Income/Expenses card came from the server, so searching left the card describing the unsearched set. That deleted `filteredTransactions` and the effect clearing the selection on a keystroke — the clear now falls out of the refetch, as on the full list. **Cost: searching by category no longer works there** (the server matches name/merchant/notes/amount). The displayed category is derived, so it is not reachable in SQL — see below.
 - **No category filter**, for the same reason: the category is derived on read (`user_category` → keyword match → canonicalized Plaid path). Reproducing that in SQL means porting `KEYWORD_INDEX` — a sixth implementation of the vocabulary, silently disagreeing with the rows on screen. Advanced Analytics already drills down by category, and is now per-account.
 - `SegmentedControl` gained `allowReselect` (opt-in) for the "Custom" segment, which is selected exactly when a custom range is set and so could otherwise never be tapped.
+- **Dates are picked, not typed.** The first version had `YYYY-MM-DD` text fields and the numeric keypad covered the bottom half of the sheet on a real phone — the second date field, the chips, the direction control and both buttons. `components/ui/Calendar.js` is a plain RN month grid; a native picker is a native module and would mean an EAS rebuild for a change that is otherwise pure JS. Its **visible month is seeded once and remounted by `key`**, never followed by an effect: an effect anchored on the start date drags the grid back the moment you page forward to pick an end.
+- **`BottomSheet` now measures the keyboard**, which fixed the same problem in every sheet with a text field (Flag editor, Category picker, Goal editor — all had their buttons covered). It reads the height off `Keyboard` events and applies it as a bottom margin, shrinking `maxHeight` by the same amount. Measured rather than `KeyboardAvoidingView`: inside a `Modal` with a translucent status bar, Android's `adjustResize` never reaches it, which is why nothing moved. `maxHeight` shrinks in **pixels** — a percentage is of the whole screen, so the sheet would grow past the top of the visible area instead of scrolling inside it.
 
 ### Account-scoped Analytics
 `GET /analytics/categories?account_id=<plaid_account_id>` scopes the whole advanced-analytics payload to one account; `AdvancedAnalyticsScreen` renders it from `route.params.account`, reached from a row on `AccountBalanceCard`.

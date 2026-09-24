@@ -85,21 +85,6 @@ export const parseAmountText = (text) => {
     return Number.parseFloat(raw);
 };
 
-/**
- * Auto-insert the dashes as somebody types a date.
- *
- * A native date picker would be a new native module, and that means an EAS
- * rebuild for a change that is otherwise pure JS — the whole feature would stop
- * reaching the existing dev build. Typing is the cost of not needing one; the
- * preset chips are what stop most people from paying it.
- */
-export const maskDateInput = (text) => {
-    const digits = String(text ?? '').replace(/\D/g, '').slice(0, 8);
-    if (digits.length <= 4) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
-};
-
 /** Does this filter set pin down a window of dates? */
 export const hasDateRange = (filters) => !!(filters?.startDate || filters?.endDate);
 

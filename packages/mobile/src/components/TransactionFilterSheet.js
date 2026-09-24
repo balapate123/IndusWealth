@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { SPACING } from '../constants/tokens';
-import { useThemedStyles } from '../theme/ThemeProvider';
-import { BottomSheet, Text, Button, Input, Chip, ChipRow, SectionTitle, SegmentedControl } from './ui';
+import { Keyboard, View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { RADIUS, SPACING } from '../constants/tokens';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import {
+    BottomSheet, Text, Button, Input, Chip, ChipRow, SectionTitle, SegmentedControl, Calendar,
+} from './ui';
 import {
     DIRECTION,
     EMPTY_FILTERS,
     PRESET_RANGES,
     activeFilterCount,
     draftFromFilters,
-    maskDateInput,
     normalizeDraft,
     presetRange,
 } from '../utils/transactionFilters';
@@ -29,15 +31,22 @@ import {
  * than from an effect, so a cancelled edit cannot be sitting there next time.
  * Same reason `FlagEditorSheet` does it.
  *
- * ## Why the dates are typed
+ * ## Why the dates are picked, not typed
  *
- * A native date picker is a native module, and adding one means an EAS rebuild
- * before any of this reaches a device — for a feature that is otherwise pure
- * JS and loads straight off Metro. The preset chips are what stop most people
- * from ever typing one; `maskDateInput` puts the dashes in for the rest.
+ * The first version had two `YYYY-MM-DD` text fields. On a real phone the
+ * numeric keypad covered the bottom half of the sheet — including the second
+ * date field and everything under it. Two separate fixes came out of that:
+ * `BottomSheet` now measures the keyboard and lifts above it, and the dates
+ * stopped needing a keyboard at all.
  *
- * All the rules about what is valid live in `utils/transactionFilters.js`, so
- * they are asserted rather than trusted. This file only renders them.
+ * `ui/Calendar` is a plain React Native grid rather than
+ * `@react-native-community/datetimepicker`, because that is a native module and
+ * adding one means an EAS rebuild before any of this reaches a device — for a
+ * feature that is otherwise pure JS and loads straight off Metro.
+ *
+ * All the rules about what is valid live in `utils/transactionFilters.js`, and
+ * all the month arithmetic in `utils/calendar.js`, so both are asserted rather
+ * than trusted. This file only renders them.
  */
 
 const DIRECTION_OPTIONS = [
@@ -46,10 +55,26 @@ const DIRECTION_OPTIONS = [
     { value: DIRECTION.IN, label: 'Money in' },
 ];
 
-const makeStyles = () => StyleSheet.create({
+const makeStyles = (t) => StyleSheet.create({
     section: { marginTop: SPACING.MEDIUM, gap: SPACING.SMALL },
     pair: { flexDirection: 'row', gap: SPACING.SMALL + 2 },
     half: { flex: 1, marginBottom: 0 },
+    // Shaped like `Input`'s field so the two read as the same kind of control,
+    // even though one opens a keyboard and the other opens a calendar.
+    dateField: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: t.SURFACE_HIGH,
+        borderRadius: RADIUS.MEDIUM,
+        borderWidth: 1,
+        borderColor: 'transparent',
+        paddingHorizontal: SPACING.MEDIUM - 4,
+        height: 48,
+        gap: SPACING.SMALL,
+    },
+    dateFieldActive: { borderColor: t.ACCENT_BORDER },
+    dateText: { flex: 1 },
     presets: { marginTop: SPACING.SMALL },
     // ChipRow pads its content by SPACING.MEDIUM for a full-bleed row; inside a
     // sheet that already pads, it would indent twice.
@@ -64,16 +89,88 @@ const makeStyles = () => StyleSheet.create({
     cancel: { marginTop: SPACING.SMALL },
 });
 
+/**
+ * One end of the date range: a button, not a text field.
+ *
+ * Typing a date was the first version, and it put a numeric keypad over the
+ * bottom half of the sheet — including the other date field. A button opens a
+ * calendar inside the sheet instead, so nothing is ever covered by a keyboard
+ * that does not need to be there.
+ */
+const DateField = ({ label, value, active, onPress, onClear }) => {
+    const theme = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
+    return (
+        <TouchableOpacity
+            onPress={onPress}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={value ? `${label}: ${value}` : `${label}: any date`}
+            accessibilityState={{ selected: active }}
+            style={[styles.dateField, active && styles.dateFieldActive]}
+        >
+            <Ionicons
+                name="calendar-outline"
+                size={16}
+                color={active ? theme.ACCENT : theme.TEXT_MUTED}
+            />
+            <View style={styles.dateText}>
+                <Text variant="meta" tone="muted">{label}</Text>
+                <Text variant="label" tone={value ? 'primary' : 'muted'} numberOfLines={1}>
+                    {value || 'Any'}
+                </Text>
+            </View>
+            {value ? (
+                <TouchableOpacity
+                    onPress={onClear}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Clear ${label}`}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                    <Ionicons name="close-circle" size={17} color={theme.TEXT_MUTED} />
+                </TouchableOpacity>
+            ) : null}
+        </TouchableOpacity>
+    );
+};
+
 const TransactionFilterBody = ({ filters, onApply, onClose }) => {
     const styles = useThemedStyles(makeStyles);
     const [draft, setDraft] = useState(() => draftFromFilters(filters));
 
+    // Which end the calendar is editing, or null when it is closed. Collapsed
+    // by default so somebody filtering only by amount is not scrolling past a
+    // month grid to reach Apply.
+    const [picking, setPicking] = useState(null);
+    // Bumped when a preset moves both dates, which is the one case where the
+    // grid should jump without the edited field changing. Part of the
+    // Calendar's key -- see the note there on why this is a remount and not an
+    // effect.
+    const [jump, setJump] = useState(0);
+
     const { ok, errors, filters: parsed } = normalizeDraft(draft);
     const set = (patch) => setDraft((prev) => ({ ...prev, ...patch }));
+
+    const openPicker = (field) => {
+        // The amount fields raise a keypad, and it would otherwise sit over the
+        // calendar that just opened underneath it.
+        Keyboard.dismiss();
+        setPicking((prev) => (prev === field ? null : field));
+    };
+
+    const onPickDate = (iso) => {
+        set({ [picking]: iso });
+        // From, then To, is the order people fill a range in. Advancing saves a
+        // tap; it stops at To rather than cycling, because cycling back to From
+        // would silently retarget the next tap at the field they just set.
+        if (picking === 'startDate' && !draft.endDate) setPicking('endDate');
+    };
 
     const applyPreset = (key) => {
         const { startDate, endDate } = presetRange(key);
         set({ startDate: startDate || '', endDate: endDate || '' });
+        setJump((n) => n + 1);
     };
 
     // Measured on the *parsed* filters rather than on the raw draft, so a field
@@ -121,25 +218,22 @@ const TransactionFilterBody = ({ filters, onApply, onClose }) => {
             <View style={styles.section}>
                 <Text variant="label" tone="secondary">Date range</Text>
                 <View style={styles.pair}>
-                    <Input
-                        placeholder="YYYY-MM-DD"
-                        icon="calendar-outline"
+                    <DateField
+                        label="From"
                         value={draft.startDate}
-                        onChangeText={(text) => set({ startDate: maskDateInput(text) })}
-                        keyboardType="number-pad"
-                        error={errors.startDate}
-                        style={styles.half}
+                        active={picking === 'startDate'}
+                        onPress={() => openPicker('startDate')}
+                        onClear={() => set({ startDate: '' })}
                     />
-                    <Input
-                        placeholder="YYYY-MM-DD"
-                        icon="calendar-outline"
+                    <DateField
+                        label="To"
                         value={draft.endDate}
-                        onChangeText={(text) => set({ endDate: maskDateInput(text) })}
-                        keyboardType="number-pad"
-                        error={errors.endDate}
-                        style={styles.half}
+                        active={picking === 'endDate'}
+                        onPress={() => openPicker('endDate')}
+                        onClear={() => set({ endDate: '' })}
                     />
                 </View>
+
                 <ChipRow style={styles.presets} contentContainerStyle={styles.presetsContent}>
                     {PRESET_RANGES.map((preset) => (
                         <Chip
@@ -149,6 +243,22 @@ const TransactionFilterBody = ({ filters, onApply, onClose }) => {
                         />
                     ))}
                 </ChipRow>
+
+                {picking ? (
+                    <Calendar
+                        // Remounted when the field being edited changes, or when
+                        // a preset moves both dates — that is how the grid is
+                        // told to jump, instead of an effect that would drag it
+                        // back to the start date the moment you page forward to
+                        // pick an end.
+                        key={`${picking}:${jump}`}
+                        start={draft.startDate || null}
+                        end={draft.endDate || null}
+                        initialFocus={draft[picking] || draft.startDate || null}
+                        onSelect={onPickDate}
+                    />
+                ) : null}
+
                 {errors.dateRange ? (
                     <Text variant="meta" tone="danger" style={styles.error}>{errors.dateRange}</Text>
                 ) : null}

@@ -146,10 +146,17 @@ Draft state lives in the sheet, not in the screen. Nothing refetches until
 everything over a dollar. The draft is re-seeded from the screen's filters each
 time the sheet opens, so a dismissed edit is discarded rather than lingering.
 
-Dates are typed as `YYYY-MM-DD` with dash auto-insertion, plus four shortcut
-chips (This month · Last month · Last 3 months · This year). A native date
-picker would be a new native module, and that means an EAS rebuild for a
-change that is otherwise pure JS.
+Dates are **picked from a calendar**, not typed — see §10, which is what the
+first version got wrong. Two buttons (From / To) each open `ui/Calendar` inside
+the sheet, with four shortcut chips (This month · Last month · Last 3 months ·
+This year) for the common windows.
+
+`ui/Calendar` is a plain React Native grid. A native date picker would be a new
+native module, and that means an EAS rebuild for a change that is otherwise
+pure JS — the whole feature would stop reaching the existing dev build. All its
+arithmetic is in `utils/calendar.js`, because the one thing a calendar gets
+wrong is being off by one, and that does not throw: it renders a plausible
+month with every date under the wrong weekday.
 
 ### 5.3 The entry point and the preset row
 
@@ -238,6 +245,39 @@ segment as a value, where re-selecting it is genuinely nothing.
   on Advanced Analytics, which is now per-account.
 - The account screen still loads one 500-row page. Filters narrow what counts
   toward that cap, so coverage improves; the cap remains.
-- Dates are typed rather than picked. A picker needs a native module and so an
-  EAS rebuild, which would stop the whole feature reaching the existing dev
-  build.
+
+---
+
+## 10. Found on a device: the keyboard covered the sheet
+
+Typed `YYYY-MM-DD` fields were the wrong call, and only a real phone showed it.
+The numeric keypad covered the bottom half of the sheet — the second date
+field, the preset chips, the direction control and both buttons. Nothing in a
+test could have caught it.
+
+Two independent fixes, because it was two independent bugs:
+
+**`BottomSheet` never accounted for the keyboard at all.** It is anchored to
+the bottom, which is exactly where the keyboard appears, so this was covering
+the buttons of *every* sheet with a text field — `FlagEditorSheet`,
+`CategoryPickerSheet`, `GoalEditorSheet`. It now measures the keyboard height
+from `Keyboard` events and applies it as a bottom margin, shrinking `maxHeight`
+by the same amount.
+
+Measured rather than delegated to `KeyboardAvoidingView`: that behaves
+differently per platform, and inside a `Modal` with a translucent status bar
+Android's `adjustResize` does not reach it — which is why nothing moved on the
+device in the first place. The keyboard's own reported height is the one number
+true on both platforms. `maxHeight` shrinks in pixels, not as a percentage: a
+percentage is of the whole screen, so the sheet would grow past the top of the
+visible area rather than scroll inside it.
+
+**Dates stopped needing a keyboard.** `ui/Calendar` renders the month inside the
+sheet. `maskDateInput` and its test were deleted rather than left unreferenced.
+
+The calendar's visible month is seeded once and remounted by `key` when the
+caller wants it moved — never followed by an effect. An effect anchored on the
+start date would drag the grid back to March the moment you paged to April to
+pick an end. That also keeps the file free of an `exhaustive-deps` suppression,
+which `lint:theme` rejects outright (pending item 8b: that config does not load
+`react-hooks`, and ESLint errors on a disable naming a rule it cannot find).
