@@ -20,6 +20,7 @@
 | | `src/routes/transactions.js` | Transactions + Plaid sync |
 | | `src/routes/debt.js` | Debt overview + snowball/avalanche calc |
 | | `src/routes/analytics.js` | Spending analytics + `/analytics/categories` (advanced category analytics, optional `account_id` scope) + `/analytics/categories/insights` (AI insights, 6h cache, **refuses `account_id`**) |
+| | (`GET /transactions` filters: `account_id`, `days`, `search`, `flag_id`, `min_amount`, `max_amount`, `start_date`, `end_date`, `direction`) | |
 | | `src/routes/watchdog.js` | Recurring expense detection |
 | | `src/routes/insights.js` | AI insights, dismissals, `GET /insights/spotlight` + `POST /insights/spotlight/seen` (the pop-up) |
 | | `src/routes/educational.js` | Wealth Academy articles |
@@ -52,6 +53,7 @@
 | | `src/services/nudges.js` | **Pure** check-in selection: candidates, priority, both cooldowns, closed `NUDGE_KINDS` |
 | | `src/services/price_alerts.js` | **Pure.** The price-increase rule, shared by Watchdog alerts and the insights pipeline |
 | | `src/services/cash_flow_note.js` | **Pure.** The one sentence the Analytics screen says about cash flow. Names no product, quotes no rate, instructs nothing |
+| | `src/services/transaction_filters.js` | **Pure.** `req.query` → the filter object. Junk is always `null` (= don't filter), never a throw and never a bound invented from a typo |
 | | `src/services/merchant_identity.js` | **Pure.** `normalizeMerchantName` + the rule key and label. Lifted out of the Watchdog class so corrections and Watchdog share one answer |
 | | `src/services/category_corrections.js` | Which transactions belong to a merchant (**pure**), and the create/apply/revert orchestration around it |
 | | `src/services/link_registry.js` | **The only source of outbound URLs.** Vetted destinations by key + host allowlist + safe in-app routes |
@@ -89,7 +91,7 @@
 | | `src/screens/InsightsScreen.js` | AI insights |
 | | `src/screens/ProfileScreen.js` | Profile + settings |
 | | `src/screens/WealthAcademyScreen.js` | Educational content |
-| | `src/screens/AllTransactionsScreen.js` | Transaction list: date range, search, flag filter, server-computed totals bar |
+| | `src/screens/AllTransactionsScreen.js` | Transaction list: date range, search, flag filter, the filter sheet (amount/dates/direction), server-computed totals bar |
 | | `src/screens/FlagsScreen.js` | Flag list with per-flag totals; create |
 | | `src/screens/FlagDetailScreen.js` | One flag's analytics: totals, by month/category/merchant/account; edit + delete |
 | | `src/screens/FlagTransactionPickerScreen.js` | Multi-select picker; saves one add/remove diff |
@@ -97,7 +99,7 @@
 | | `src/screens/GoalDetailScreen.js` | One goal: progress, linked account, contributions; edit + delete |
 | | (due dates live in the Debt tab via `components/CardDueDates.js`) | |
 | | `src/screens/AllAccountsScreen.js` | Accounts list |
-| | `src/screens/AccountTransactionsScreen.js` | Per-account transactions: same select mode, category correction and flag filter as the full list; balance card links to account-scoped analytics |
+| | `src/screens/AccountTransactionsScreen.js` | Per-account transactions: same select mode, filters, category correction and flag filter as the full list (search is server-side here too); balance card links to account-scoped analytics |
 | | `src/screens/FeedbackScreen.js` | Feedback form |
 | | `src/screens/LegalDocScreen.js` | Legal documents |
 | | `src/screens/ArticleWebViewScreen.js` | Article viewer |
@@ -123,6 +125,8 @@
 | | `src/components/CheckinNudge.js` | The weekly check-in sheet: one thing, one action, a way out |
 | | `src/components/CategoryPickerSheet.js` | The closed category list, for one transaction or a selection; carries the "all this merchant" opt-in |
 | | `src/components/TransactionSelectionBar.js` | The pinned running total + Group/Category, and the two sheets they open |
+| | `src/components/TransactionFilterSheet.js` | Amount range, date range, direction. Edits a draft; nothing refetches until Apply |
+| | `src/components/TransactionFilterButton.js` | The funnel in the header, with the active-filter count |
 | | `src/components/ui/Treemap.js` | Part-to-whole by area (Analytics "Spending by category") |
 | Constants | `src/constants/theme.js` | Dark theme + gold accents |
 | | `src/constants/insights.js` | Insight type enum → icon/label/ramp slot; must mirror `insight_identity.js` |
@@ -131,6 +135,7 @@
 | | `src/utils/goalReminders.js` | Pure reminder logic (trigger building, copy, cadence text) — no expo/RN imports so it is testable off-device |
 | | `src/utils/goalPace.js` | Pure copy for the pace block; mirrors `PACE_STATE`. Never scolds, rounds, hedges |
 | | `src/utils/transactionSelection.js` | Pure selection maths: toggle, count, net total, copy. Count and total always describe the same rows |
+| | `src/utils/transactionFilters.js` | Pure filter state: the draft→filters crossing, the badge count, the query parts (**and the `days` suppression**), and the sentence describing what is on |
 | | `src/utils/cardDueReminders.js` | Pure due-date scheduling incl. the **lead-day wraparound** |
 | | `src/utils/treemap.js` | Pure squarified treemap layout + top-7/Other folding |
 | | `src/utils/syncQueue.js` | The one-at-a-time queue every reminder sync runs through |
@@ -193,6 +198,20 @@ The category anybody sees is **not stored** — it is derived on every read, by 
 - **A screen with bulk category must also offer the single-row correction** (`onEditCategory` on the detail sheet), or twenty rows can be fixed at once but not one. `tests/transactionRowMappers.test.mjs` asserts this, and that every row mapper carries `user_category` and `merchantLabel` — the account screen shipped without them, so a correction was stored, returned, and invisible.
 - **No "Select all"**: the list is paged, so it would mean "all loaded" while reading as "all matching". Bulk recategorisation of one merchant is the merchant rule's job.
 - Bulk category is **per-transaction only and never creates a rule** — a selection spans merchants, so inferring one would be guessing. Capped at 200, matching `MAX_BULK_TRANSACTIONS`, asserted across packages.
+
+### Filtering a Transaction List
+A funnel in the header of **both** lists opens `TransactionFilterSheet`: an amount range, a date range, a direction (all / money out / money in). A badge on the button shows how many are on.
+- **Every filter runs in SQL, in `buildTransactionFilter`** — never in a `useMemo`. The totals bar is `db.sumTransactions` over the *whole* matching set (the device holds one page), so a device-side filter produces a list and a total describing different rows. Four consumers share that one WHERE, so they cannot disagree; `tests/manual/transaction_filter_sql_check.js` asserts the page, the count and the money agree under every filter, and sums the returned rows to reproduce the total.
+- **Amount is a magnitude: `ABS(t.amount)`.** The row renders `$42.50` whichever way the money went, so "over $100" means a big transaction. Plaid's sign convention is the opposite of the one on screen, so a signed comparison would drop every refund out of `min_amount` without saying so. Direction is a separate control precisely so neither has to encode the other.
+- **A custom date range suppresses `days`.** The two clauses AND and `days` counts from `CURRENT_DATE`, so "last 30 days" plus a window in March is an empty list with no cause visible on screen. `filterQueryParts` is the only place that decides it, and it is tested.
+- **Dates are validated as calendar dates, not just as a pattern.** `new Date('2026-02-30')` does not throw — it lands on March 2nd, widening the window silently. Both the device and `services/transaction_filters.js` build the date and check the components come back unchanged.
+- **Junk filters nothing.** Every parser returns `null` on anything it does not fully recognise — never a throw, and never a bound invented from a typo (`Number.parseFloat('12abc')` is 12). A mistyped filter must show everything, because an empty list nobody asked for reads as missing data.
+- **`min > max` is refused, never swapped.** Swapping answers a different question and does not mention it. The sheet gates Apply; the server returns nothing.
+- **Direction uses strict inequalities**, so a zero-amount row is in neither. `>= 0` would file it under spending.
+- **`describeFilters` is load-bearing**, not decoration. The empty state and the totals label both read it: a filter left on, narrowing a list with nothing on screen to name it, turns "no transactions" into a claim that somebody's data is missing.
+- **The account screen's search moved server-side** as part of this. It filtered in memory while its Income/Expenses card came from the server, so searching left the card describing the unsearched set. That deleted `filteredTransactions` and the effect clearing the selection on a keystroke — the clear now falls out of the refetch, as on the full list. **Cost: searching by category no longer works there** (the server matches name/merchant/notes/amount). The displayed category is derived, so it is not reachable in SQL — see below.
+- **No category filter**, for the same reason: the category is derived on read (`user_category` → keyword match → canonicalized Plaid path). Reproducing that in SQL means porting `KEYWORD_INDEX` — a sixth implementation of the vocabulary, silently disagreeing with the rows on screen. Advanced Analytics already drills down by category, and is now per-account.
+- `SegmentedControl` gained `allowReselect` (opt-in) for the "Custom" segment, which is selected exactly when a custom range is set and so could otherwise never be tapped.
 
 ### Account-scoped Analytics
 `GET /analytics/categories?account_id=<plaid_account_id>` scopes the whole advanced-analytics payload to one account; `AdvancedAnalyticsScreen` renders it from `route.params.account`, reached from a row on `AccountBalanceCard`.
@@ -339,7 +358,7 @@ npx expo start --android                # Android direct
 npx expo start --ios                    # iOS direct
 
 # Tests — node --test, no dependencies, no device, no database
-npm test                                # from packages/mobile (35) or packages/backend (19)
+npm test                                # from packages/mobile (153) or packages/backend (264)
 npm run lint:theme                      # the gate that must stay clean
 ```
 
@@ -436,7 +455,7 @@ Fixed by `services/recurrence.js` (**pure**, no pool — the gates as assertions
 - `recordNudgeShown` **table-qualified the column on the left of an `ON CONFLICT ... SET`**, which Postgres reads as a column named `nudge_history`; every `POST /nudges/checkin/seen` 500'd. Same silent write-path shape as the `PUT /insights/preferences` bug.
 - A treemap mutation test passed against a deliberately broken layout because the aspect-ratio bound was guessed (6:1) rather than measured. It is now 4:1, measured against both variants across four box shapes.
 
-**There is now a real test suite** — `npm test` in either package, `node --test`, no dependencies, no device, no database. 35 mobile + 19 backend. Node 22 detects the ESM syntax in `src/utils`, so mobile tests import the **shipped** file rather than a copy. Previous sessions' verification scripts lived in the scratchpad and were lost; these are committed.
+**There is now a real test suite** — `npm test` in either package, `node --test`, no dependencies, no device, no database. 153 mobile + 264 backend. Node 22 detects the ESM syntax in `src/utils`, so mobile tests import the **shipped** file rather than a copy. Previous sessions' verification scripts lived in the scratchpad and were lost; these are committed.
 
 **Working:** Advanced Analytics page (entry: "Advanced" button on Analytics header), AI category insights with rule-based fallback, `Taxes & Government` category (fixes CANADA TXD → Transportation misclassification), Resend email verification from hello@induswealth.app (domain verified, DNS on Spaceship), transaction flags, savings goals with local reminders, registry-backed insight links, insight persistence + the spotlight pop-up.
 

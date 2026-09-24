@@ -18,12 +18,21 @@ import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import CategoryPickerSheet from '../components/CategoryPickerSheet';
 import TransactionSelectionBar from '../components/TransactionSelectionBar';
+import TransactionFilterSheet from '../components/TransactionFilterSheet';
+import TransactionFilterButton from '../components/TransactionFilterButton';
 import TotalsSummary from '../components/TotalsSummary';
 import useTransactionFlags from '../hooks/useTransactionFlags';
 import useTransactionSelection from '../hooks/useTransactionSelection';
 import api from '../services/api';
 import cache from '../services/cache';
 import { categorizeTransaction } from '../utils/categorization';
+import {
+    EMPTY_FILTERS,
+    activeFilterCount,
+    describeFilters,
+    filterQueryParts,
+    hasDateRange,
+} from '../utils/transactionFilters';
 
 // Reaches as deep as Plaid is asked for at link time. Anything longer than the
 // history a given connection actually holds simply returns fewer rows.
@@ -51,11 +60,15 @@ const formatDate = (dateStr) => {
 const ALL_FLAGS = null;
 const UNFLAGGED = 'none';
 
-const buildQuery = ({ days, offset, search, flagFilter, forceRefresh }) => {
+const buildQuery = ({ days, offset, search, flagFilter, filters, forceRefresh }) => {
     const parts = [
-        `days=${days}`,
         `limit=${PAGE_SIZE}`,
         `offset=${offset}`,
+        // `days` lives in here rather than above it: a custom date range
+        // suppresses it, because the two AND on the server and "the last 30
+        // days" alongside a window in March is an empty list with no cause
+        // visible anywhere on screen.
+        ...filterQueryParts(filters, { days }),
     ];
     if (search) parts.push(`search=${encodeURIComponent(search)}`);
     if (flagFilter !== ALL_FLAGS) parts.push(`flag_id=${encodeURIComponent(flagFilter)}`);
@@ -109,6 +122,12 @@ const AllTransactionsScreen = ({ navigation, route }) => {
     const [flagFilter, setFlagFilter] = useState(route?.params?.flagId ?? ALL_FLAGS);
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
+
+    // Amount, date range and direction. Applied all at once from the sheet, so
+    // this changes only when Apply is pressed — a half-typed minimum never
+    // reaches a request.
+    const [filters, setFilters] = useState(EMPTY_FILTERS);
+    const [filterOpen, setFilterOpen] = useState(false);
 
     const flagState = useTransactionFlags();
 
@@ -186,7 +205,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
     const loadFirstPage = useCallback(async (forceRefresh = false) => {
         try {
             const response = await api.getTransactions(
-                buildQuery({ days: range, offset: 0, search: debouncedSearch, flagFilter, forceRefresh })
+                buildQuery({ days: range, offset: 0, search: debouncedSearch, flagFilter, filters, forceRefresh })
             );
 
             if (response?.success) {
@@ -202,7 +221,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [range, debouncedSearch, flagFilter]);
+    }, [range, debouncedSearch, flagFilter, filters]);
 
     /** Append the next page. Offset is the number of rows already held. */
     const loadMore = useCallback(async () => {
@@ -212,7 +231,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
 
         try {
             const response = await api.getTransactions(
-                buildQuery({ days: range, offset: transactions.length, search: debouncedSearch, flagFilter })
+                buildQuery({ days: range, offset: transactions.length, search: debouncedSearch, flagFilter, filters })
             );
 
             if (response?.success) {
@@ -233,7 +252,7 @@ const AllTransactionsScreen = ({ navigation, route }) => {
             loadingMoreRef.current = false;
             setLoadingMore(false);
         }
-    }, [hasMore, range, debouncedSearch, flagFilter, transactions.length]);
+    }, [hasMore, range, debouncedSearch, flagFilter, filters, transactions.length]);
 
     // -----------------------------------------------------------------------
     // Selection
@@ -407,12 +426,64 @@ const AllTransactionsScreen = ({ navigation, route }) => {
 
     const rangeLabel = RANGES.find((r) => r.value === range)?.full ?? `${range} days`;
 
+    // -----------------------------------------------------------------------
+    // Filters
+    // -----------------------------------------------------------------------
+
+    // A custom window overrides the preset control rather than sitting beside
+    // it — `filterQueryParts` drops `days`, so a highlighted "30d" over a March
+    // list would be the control describing a query nobody ran.
+    const customRange = hasDateRange(filters);
+    const rangeOptions = customRange ? [...RANGES, { value: 'custom', label: 'Custom' }] : RANGES;
+
+    const onRangeChange = (value) => {
+        // Re-tapping Custom reopens the sheet: it is selected whenever a range
+        // is set, so it has no other way to be useful.
+        if (value === 'custom') {
+            setFilterOpen(true);
+            return;
+        }
+        if (customRange) setFilters((prev) => ({ ...prev, startDate: null, endDate: null }));
+        setRange(value);
+    };
+
+    const applyFilters = (next) => {
+        setFilters(next);
+        setFilterOpen(false);
+    };
+
+    // What is narrowing the list, said in words. Carried into both the totals
+    // label and the empty state: a filter left on yesterday, with nothing on
+    // screen to name it, turns an empty list into "my transactions are gone".
+    const filterSummary = describeFilters(filters);
+    const filterCount = activeFilterCount(filters);
+
+    const windowLabel = customRange ? filterSummary : `Last ${rangeLabel}`;
+
     const activeFlag = flagState.flags.find((f) => f.id === flagFilter);
-    const totalsLabel = activeFlag
-        ? `${activeFlag.name} · last ${rangeLabel}`
+    const scopeLabel = activeFlag
+        ? `${activeFlag.name} · ${windowLabel}`
         : flagFilter === UNFLAGGED
-            ? `Unflagged · last ${rangeLabel}`
-            : `Last ${rangeLabel}`;
+            ? `Unflagged · ${windowLabel}`
+            : windowLabel;
+
+    // The date part is already in `windowLabel` when it is custom, so only the
+    // rest of the filter is appended — otherwise the range reads twice.
+    const nonDateSummary = describeFilters({ ...filters, startDate: null, endDate: null });
+    const totalsLabel = customRange
+        ? scopeLabel
+        : (nonDateSummary ? `${scopeLabel} · ${nonDateSummary}` : scopeLabel);
+
+    // Kept as two sentences rather than one clause inside another. "since Mar 1"
+    // reads fine on its own and not at all after "in", and a range that is
+    // sometimes a window and sometimes a list of conditions cannot be made
+    // grammatical in a single template.
+    const windowSentence = customRange ? '' : ` in the last ${rangeLabel}`;
+    const filterNote = filterCount ? ` Filtered to ${filterSummary}.` : '';
+    // A custom range or an amount bound is not fixed by looking further back.
+    const emptyAdvice = filterCount
+        ? ' Try clearing a filter.'
+        : ' Try a longer range, or pull down to sync.';
 
     const header = (
         <>
@@ -441,6 +512,10 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                                 ? `${transactions.length}/${total}`
                                 : `${total}`}
                         </Text>
+                        <TransactionFilterButton
+                            filters={filters}
+                            onPress={() => setFilterOpen(true)}
+                        />
                         <TouchableOpacity
                             onPress={selection.enter}
                             accessibilityRole="button"
@@ -462,9 +537,10 @@ const AllTransactionsScreen = ({ navigation, route }) => {
             />
             <View style={styles.controls}>
                 <SegmentedControl
-                    options={RANGES}
-                    value={range}
-                    onChange={setRange}
+                    options={rangeOptions}
+                    value={customRange ? 'custom' : range}
+                    onChange={onRangeChange}
+                    allowReselect
                     inset={false}
                     style={styles.range}
                 />
@@ -560,24 +636,28 @@ const AllTransactionsScreen = ({ navigation, route }) => {
                             ) : (!hasMore && transactions.length > 0) ? (
                                 <View style={styles.footer}>
                                     <Text variant="meta" tone="muted">
-                                        {debouncedSearch
-                                            ? `${total} ${total === 1 ? 'match' : 'matches'} in the last ${rangeLabel}`
-                                            : `All ${total} from the last ${rangeLabel}`}
+                                        {(debouncedSearch
+                                            ? `${total} ${total === 1 ? 'match' : 'matches'}${windowSentence}`
+                                            : `All ${total}${windowSentence ? ` from${windowSentence}` : ''}`)
+                                            + (filterCount ? ` · ${filterSummary}` : '')}
                                     </Text>
                                 </View>
                             ) : null
                         }
                         ListEmptyComponent={
                             <EmptyState
-                                icon={debouncedSearch ? 'search-outline' : flagFilter !== ALL_FLAGS ? 'pricetag-outline' : 'receipt-outline'}
+                                icon={debouncedSearch
+                                    ? 'search-outline'
+                                    : filterCount ? 'filter-outline'
+                                        : flagFilter !== ALL_FLAGS ? 'pricetag-outline' : 'receipt-outline'}
                                 title={debouncedSearch ? 'No matches' : flagFilter !== ALL_FLAGS ? 'Nothing flagged' : 'No transactions'}
                                 message={debouncedSearch
-                                    ? `Nothing matched "${debouncedSearch}" in the last ${rangeLabel}.`
+                                    ? `Nothing matched "${debouncedSearch}"${windowSentence}.${filterNote}`
                                     : activeFlag
-                                        ? `Nothing is flagged "${activeFlag.name}" in the last ${rangeLabel}. Open a transaction to flag it.`
+                                        ? `Nothing is flagged "${activeFlag.name}"${windowSentence}.${filterNote} Open a transaction to flag it.`
                                         : flagFilter === UNFLAGGED
-                                            ? `Everything in the last ${rangeLabel} carries a flag.`
-                                            : `Nothing in the last ${rangeLabel}. Try a longer range, or pull down to sync.`}
+                                            ? `Everything${windowSentence} carries a flag.${filterNote}`
+                                            : `Nothing${windowSentence}.${filterNote}${emptyAdvice}`}
                             />
                         }
                     />
@@ -585,6 +665,13 @@ const AllTransactionsScreen = ({ navigation, route }) => {
             </Screen>
 
             <TransactionSelectionBar selection={selection} flagOptions={flagState.options} />
+
+            <TransactionFilterSheet
+                visible={filterOpen}
+                filters={filters}
+                onApply={applyFilters}
+                onClose={() => setFilterOpen(false)}
+            />
 
             <CategoryPickerSheet
                 visible={singleCategoryOpen}

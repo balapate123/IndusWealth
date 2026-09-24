@@ -9,23 +9,13 @@ const corrections = require('../services/category_corrections');
 const { CANONICAL_CATEGORIES } = require('../services/category_map');
 const { merchantLabelFor } = require('../services/merchant_identity');
 const { createLogger } = require('../services/logger');
+const { parseTransactionFilters, clampInt } = require('../services/transaction_filters');
 const { DATA_SOURCES, PLAID_STATUS, createMeta, successResponse } = require('../utils/responseHelper');
 
 const logger = createLogger('TRANSACTIONS');
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;   // one page; scroll further with offset
-// Matches the history Plaid is asked for at link time; a lower cap here would
-// make the deeper history unreachable through the API that serves the app.
-const MAX_DAYS = 730;
-
-/** Parse a query param as a bounded integer, falling back when absent or junk. */
-const clampInt = (value, fallback, min, max) => {
-    if (value === undefined || value === null || value === '') return fallback;
-    const parsed = Number.parseInt(value, 10);
-    if (Number.isNaN(parsed)) return fallback;
-    return Math.min(Math.max(parsed, min), max);
-};
 
 // GET /transactions
 // Fetches transactions from cache or Plaid (if stale)
@@ -37,20 +27,20 @@ router.get('/', authenticateToken, async (req, res, next) => {
     try {
         const userId = req.user.id;
         const forceRefresh = req.query.refresh === 'true';
-        const accountId = req.query.account_id;
 
-        // Paging and filtering. `limit` was previously accepted and ignored — the
-        // row count was hardcoded to 100 — so callers asking for ?limit=500 were
-        // quietly getting 100 and analysing a fifth of the data they thought.
+        // Every filter the list understands, parsed in one pure place so the
+        // rules are assertions rather than something you send a request to
+        // discover. Anything unrecognised comes back null and filters nothing —
+        // a typo must never narrow the query, or an empty list reads as
+        // missing data.
+        const filter = parseTransactionFilters(req.query);
+        const accountId = filter.accountId;
+
+        // Paging. `limit` was previously accepted and ignored — the row count
+        // was hardcoded to 100 — so callers asking for ?limit=500 were quietly
+        // getting 100 and analysing a fifth of the data they thought.
         const limit = clampInt(req.query.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
         const offset = clampInt(req.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
-        const days = clampInt(req.query.days, null, 1, MAX_DAYS);
-        const search = (req.query.search || '').trim() || null;
-        // 'none' is the untagged set — "what have I not sorted yet" — and is the
-        // one non-numeric value the filter accepts.
-        const flagId = req.query.flag_id === 'none'
-            ? 'none'
-            : clampInt(req.query.flag_id, null, 1, Number.MAX_SAFE_INTEGER);
 
         // Enforce 10-minute cooldown on manual Plaid refresh to limit Transactions Refresh API cost ($0.12/call)
         if (forceRefresh) {
@@ -105,7 +95,6 @@ router.get('/', authenticateToken, async (req, res, next) => {
         // Totals run through the same filter as the page, over every matching
         // row rather than the hundred on screen — summing the page on the device
         // would quietly report a fraction of what the user filtered to.
-        const filter = { accountId, days, search, flagId };
         const [page, total, totals] = await Promise.all([
             db.getTransactionsPage(userId, { ...filter, limit, offset }),
             db.countTransactions(userId, filter),
@@ -113,7 +102,22 @@ router.get('/', authenticateToken, async (req, res, next) => {
         ]);
         transactions = page;
 
-        logger.debug('Transaction page', { ...ctx, accountId, days, flagId, search: !!search, limit, offset, count: transactions.length, total });
+        logger.debug('Transaction page', {
+            ...ctx,
+            accountId,
+            days: filter.days,
+            flagId: filter.flagId,
+            search: !!filter.search,
+            minAmount: filter.minAmount,
+            maxAmount: filter.maxAmount,
+            startDate: filter.startDate,
+            endDate: filter.endDate,
+            direction: filter.direction,
+            limit,
+            offset,
+            count: transactions.length,
+            total,
+        });
 
         // Already ordered by date DESC, id DESC in SQL — re-sorting here would
         // only shuffle same-day rows out of the order the paging relies on.
@@ -202,8 +206,8 @@ router.get('/', authenticateToken, async (req, res, next) => {
                 limit,
                 offset,
                 hasMore: offset + categorizedTransactions.length < total,
-                days,
-                flagId,
+                days: filter.days,
+                flagId: filter.flagId,
             },
             // Money across the whole filtered set, not this page. `net` is spent
             // minus refunded, which is the number a shared-expense flag is for.

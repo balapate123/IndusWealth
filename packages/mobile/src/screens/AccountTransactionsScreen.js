@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SPACING, categoryColor } from '../constants/tokens';
@@ -18,11 +18,19 @@ import TransactionRow from '../components/TransactionRow';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import CategoryPickerSheet from '../components/CategoryPickerSheet';
 import TransactionSelectionBar from '../components/TransactionSelectionBar';
+import TransactionFilterSheet from '../components/TransactionFilterSheet';
+import TransactionFilterButton from '../components/TransactionFilterButton';
 import AccountBalanceCard from '../components/AccountBalanceCard';
 import useTransactionFlags from '../hooks/useTransactionFlags';
 import useTransactionSelection from '../hooks/useTransactionSelection';
 import api from '../services/api';
 import { categorizeTransaction } from '../utils/categorization';
+import {
+    EMPTY_FILTERS,
+    activeFilterCount,
+    describeFilters,
+    filterQueryParts,
+} from '../utils/transactionFilters';
 
 const formatDate = (dateStr) => {
     // Add T12:00:00 to prevent timezone shift
@@ -41,6 +49,9 @@ const UNFLAGGED = 'none';
 // returns whole-set totals, so the summary stays correct past this many rows —
 // unlike the previous client-side sum, which only added up the first 100.
 const PAGE_LIMIT = 500;
+// Matches the full list. Search runs on the server here too, so each keystroke
+// would otherwise be a round trip.
+const SEARCH_DEBOUNCE_MS = 350;
 
 const makeStyles = (t) => StyleSheet.create({
     summaryRow: { flexDirection: 'row' },
@@ -61,6 +72,12 @@ const makeStyles = (t) => StyleSheet.create({
         width: 1,
         backgroundColor: t.HAIRLINE,
         marginHorizontal: SPACING.MEDIUM,
+    },
+    totalsScope: {
+        marginTop: SPACING.SMALL + 2,
+        paddingTop: SPACING.SMALL,
+        borderTopWidth: 1,
+        borderTopColor: t.HAIRLINE,
     },
     headerRight: {
         flexDirection: 'row',
@@ -94,9 +111,13 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
     // summing the rows on screen — the device only holds one page.
     const [totals, setTotals] = useState({ income: 0, expenses: 0 });
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     // null = all; a flag id = that flag; 'none' = unflagged. Filtered server-side,
     // so it composes with the account filter and is correct past one page.
     const [flagFilter, setFlagFilter] = useState(ALL_FLAGS);
+    // Amount, date range and direction, applied together from the sheet.
+    const [filters, setFilters] = useState(EMPTY_FILTERS);
+    const [filterOpen, setFilterOpen] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState(null);
     const [showTransactionModal, setShowTransactionModal] = useState(false);
     const [editNotes, setEditNotes] = useState('');
@@ -135,6 +156,16 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
             };
         });
 
+    // Debounce typing so each keystroke is not a round trip. Search moved to the
+    // server when the amount and date filters arrived: the Income/Expenses card
+    // is computed by db.sumTransactions over everything that matches, so an
+    // in-memory search left that card describing the unsearched set — a total
+    // and a list that disagree, which is the one thing this screen must not do.
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), SEARCH_DEBOUNCE_MS);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
     const fetchTransactions = useCallback(async () => {
         // Set inside the fetcher rather than in the effect, so changing the flag
         // filter shows the loader without a synchronous setState in an effect body.
@@ -142,8 +173,16 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
         setLoading(true);
         try {
             // Same paginated endpoint the full list uses, scoped to this account.
-            // flag_id filters server-side; totals come back for the whole set.
-            const parts = [`account_id=${encodeURIComponent(account.id)}`, `limit=${PAGE_LIMIT}`];
+            // Every filter is server-side, so all of them compose with the
+            // account scope and all of them are reflected in the totals.
+            const parts = [
+                `account_id=${encodeURIComponent(account.id)}`,
+                `limit=${PAGE_LIMIT}`,
+                // No `days` on this screen: there is no preset range control
+                // here, so the default window is everything, as it always was.
+                ...filterQueryParts(filters),
+            ];
+            if (debouncedSearch) parts.push(`search=${encodeURIComponent(debouncedSearch)}`);
             if (flagFilter !== ALL_FLAGS) parts.push(`flag_id=${encodeURIComponent(flagFilter)}`);
             const data = await api.getTransactions(`?${parts.join('&')}`);
 
@@ -161,7 +200,7 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [account.id, flagFilter]);
+    }, [account.id, flagFilter, debouncedSearch, filters]);
 
     /** Pull this account's balances again, so the header is not a stale snapshot. */
     const refreshAccount = useCallback(async () => {
@@ -175,13 +214,42 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
         }
     }, [account.id]);
 
-    // One effect, matching the original: refetch when the account or the flag
-    // filter changes (fetchTransactions closes over both) and refresh the
-    // balance header alongside it.
+    // -----------------------------------------------------------------------
+    // Selection
+    // -----------------------------------------------------------------------
+
+    // `transactions` IS the visible list now. It was not while search ran in
+    // memory -- the hook had to be handed `filteredTransactions`, or the bar
+    // read "5 selected" over a total covering rows nobody could see. Moving
+    // search to the server removed the distinction rather than managing it.
+    //
+    // Declared above the effect below, which depends on `clearSelection`:
+    // the other order is a temporal dead zone, which is a crash on mount.
+    const selection = useTransactionSelection({
+        rows: transactions,
+        onChanged: fetchTransactions,
+        onFlagsChanged: flagState.reload,
+    });
+
+    // Stable (useCallback with no deps), so depending on the clear itself
+    // rather than on the whole selection object keeps the effect from firing
+    // on every tick and wiping the list mid-scroll.
+    const { clear: clearSelection } = selection;
+
+    // One effect: refetch when anything the query depends on changes
+    // (fetchTransactions closes over all of it) and refresh the balance header
+    // alongside it.
     useEffect(() => {
+        // The selection goes with it. Keeping it would leave a total counting
+        // rows that are no longer on screen. This used to need its own effect
+        // keyed on the search text, because the filtering never left the
+        // device; now it falls out of the refetch, exactly as on the full list.
+        // Selection mode itself stays on — filter, then select, is the useful
+        // order.
+        clearSelection();
         fetchTransactions();
         refreshAccount();
-    }, [fetchTransactions, refreshAccount]);
+    }, [fetchTransactions, refreshAccount, clearSelection]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -200,47 +268,13 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
         return !!tx.flags?.some((f) => f.id === flagFilter);
     }, [flagFilter]);
 
-    const filteredTransactions = useMemo(() => {
-        let result = [...transactions];
+    const applyFilters = (next) => {
+        setFilters(next);
+        setFilterOpen(false);
+    };
 
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase().trim();
-            result = result.filter((tx) =>
-                tx.merchant?.toLowerCase().includes(query) ||
-                tx.category?.toLowerCase().includes(query) ||
-                tx.notes?.toLowerCase().includes(query) ||
-                Math.abs(tx.amount).toFixed(2).includes(query)
-            );
-        }
-
-        result.sort((a, b) => new Date(b.date) - new Date(a.date));
-        return result;
-    }, [transactions, searchQuery]);
-
-    // -----------------------------------------------------------------------
-    // Selection
-    // -----------------------------------------------------------------------
-
-    // `filteredTransactions`, NOT `transactions`. Search on this screen runs in
-    // memory rather than on the server, so `transactions` holds rows that are
-    // not on screen -- and the count and the total are both computed by walking
-    // whatever is passed here. Handing it the unfiltered list is how a bar ends
-    // up reading "5 selected" over a total covering rows nobody can see.
-    const selection = useTransactionSelection({
-        rows: filteredTransactions,
-        onChanged: fetchTransactions,
-        onFlagsChanged: flagState.reload,
-    });
-
-    const { clear: clearSelection } = selection;
-
-    // Changing what is on screen drops the selection, the same rule the full
-    // list follows -- there it falls out of the refetch, here it has to be
-    // explicit because the filtering never leaves the device. Selection mode
-    // itself stays on: filtering and then selecting is the useful order.
-    useEffect(() => {
-        clearSelection();
-    }, [searchQuery, flagFilter, clearSelection]);
+    const filterSummary = describeFilters(filters);
+    const filterCount = activeFilterCount(filters);
 
     const onRowPress = (item) => {
         if (!selection.selectMode) {
@@ -348,6 +382,10 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                 ) : (
                     <View style={styles.headerRight}>
                         {account.mask ? <Text variant="meta" tone="muted">••{account.mask}</Text> : null}
+                        <TransactionFilterButton
+                            filters={filters}
+                            onPress={() => setFilterOpen(true)}
+                        />
                         <TouchableOpacity
                             onPress={selection.enter}
                             accessibilityRole="button"
@@ -401,6 +439,20 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                         </View>
                     </View>
                 </View>
+
+                {/* These figures come from the server over everything the
+                    filter matches, so when a filter is on they are about that
+                    subset -- and it has to say so. Two big numbers under an
+                    account's name, silently describing a slice of it, is a
+                    wrong answer with no visible working. */}
+                {filterCount || debouncedSearch ? (
+                    <Text variant="meta" tone="muted" style={styles.totalsScope} numberOfLines={2}>
+                        {[
+                            debouncedSearch ? `matching "${debouncedSearch}"` : null,
+                            filterSummary,
+                        ].filter(Boolean).join(' · ')}
+                    </Text>
+                ) : null}
             </Card>
 
             <Input
@@ -450,6 +502,7 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
     );
 
     const activeFlag = flagState.flags.find((f) => f.id === flagFilter);
+    const filterNote = filterCount ? ` Filtered to ${filterSummary}.` : '';
 
     return (
         <>
@@ -458,7 +511,7 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                     <LoadingState message="Loading transactions..." />
                 ) : (
                     <FlatList
-                        data={filteredTransactions}
+                        data={transactions}
                         renderItem={({ item, index }) => (
                             <TransactionRow
                                 transaction={item}
@@ -484,19 +537,24 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
                         }
                         ListEmptyComponent={
                             <EmptyState
-                                icon={searchQuery
+                                icon={debouncedSearch
                                     ? 'search-outline'
-                                    : flagFilter !== ALL_FLAGS ? 'pricetag-outline' : 'receipt-outline'}
-                                title={searchQuery
+                                    : filterCount ? 'filter-outline'
+                                        : flagFilter !== ALL_FLAGS ? 'pricetag-outline' : 'receipt-outline'}
+                                title={debouncedSearch
                                     ? 'No matches'
                                     : flagFilter !== ALL_FLAGS ? 'Nothing flagged' : 'No transactions yet'}
-                                message={searchQuery
-                                    ? `Nothing matched "${searchQuery}".`
+                                message={debouncedSearch
+                                    ? `Nothing matched "${debouncedSearch}".${filterNote}`
                                     : activeFlag
-                                        ? `Nothing here is flagged "${activeFlag.name}". Open a transaction to flag it.`
+                                        ? `Nothing here is flagged "${activeFlag.name}".${filterNote} Open a transaction to flag it.`
                                         : flagFilter === UNFLAGGED
-                                            ? 'Everything here carries a flag.'
-                                            : 'Transactions for this account will appear here.'}
+                                            ? `Everything here carries a flag.${filterNote}`
+                                            : filterCount
+                                                // Never "no transactions yet" while a filter is on: that
+                                                // says the account is empty when it is only narrowed.
+                                                ? `Nothing on this account matches ${filterSummary}.`
+                                                : 'Transactions for this account will appear here.'}
                             />
                         }
                     />
@@ -504,6 +562,13 @@ const AccountTransactionsScreen = ({ navigation, route }) => {
             </Screen>
 
             <TransactionSelectionBar selection={selection} flagOptions={flagState.options} />
+
+            <TransactionFilterSheet
+                visible={filterOpen}
+                filters={filters}
+                onApply={applyFilters}
+                onClose={() => setFilterOpen(false)}
+            />
 
             <CategoryPickerSheet
                 visible={singleCategoryOpen}

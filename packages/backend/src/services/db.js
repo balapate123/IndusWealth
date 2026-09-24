@@ -464,7 +464,10 @@ const TRANSACTION_COLUMNS = `
  *
  * `days` counts back inclusive of today: 7 means today plus the six days before.
  */
-const buildTransactionFilter = (userId, { accountId, days, search, flagId } = {}) => {
+const buildTransactionFilter = (userId, {
+    accountId, days, search, flagId,
+    minAmount, maxAmount, startDate, endDate, direction,
+} = {}) => {
     const clauses = ['t.user_id = $1'];
     const params = [userId];
 
@@ -492,6 +495,43 @@ const buildTransactionFilter = (userId, { accountId, days, search, flagId } = {}
         params.push(days);
         clauses.push(`t.date >= CURRENT_DATE - ($${params.length}::int - 1)`);
     }
+
+    // An explicit range, inclusive at both ends. These AND with `days` above,
+    // but the client never sends both: `days` is measured from CURRENT_DATE, so
+    // "last 30 days" AND a window in March is an empty list for a reason
+    // nothing on screen could explain. The device drops `days` whenever a range
+    // is set, and its test asserts that.
+    if (startDate) {
+        params.push(startDate);
+        clauses.push(`t.date >= $${params.length}::date`);
+    }
+
+    if (endDate) {
+        params.push(endDate);
+        clauses.push(`t.date <= $${params.length}::date`);
+    }
+
+    // Amount bounds are on the MAGNITUDE, matching what the row renders: the
+    // list shows $42.50 whichever way the money went, so "over $100" means a
+    // big transaction, not a big expense. Plaid's sign convention is the
+    // opposite of the one on screen (positive = money leaving), so a signed
+    // comparison would exclude every refund from `min_amount` without saying
+    // so. Direction below is the separate control that makes that unnecessary.
+    if (minAmount !== null && minAmount !== undefined) {
+        params.push(minAmount);
+        clauses.push(`ABS(t.amount) >= $${params.length}::numeric`);
+    }
+
+    if (maxAmount !== null && maxAmount !== undefined) {
+        params.push(maxAmount);
+        clauses.push(`ABS(t.amount) <= $${params.length}::numeric`);
+    }
+
+    // Strict inequalities, so a zero-amount row is in neither direction. It is
+    // money that neither arrived nor left, and `>= 0` would have filed it under
+    // "out" alongside real spending.
+    if (direction === 'out') clauses.push('t.amount > 0');
+    else if (direction === 'in') clauses.push('t.amount < 0');
 
     if (search) {
         params.push(`%${search}%`);
